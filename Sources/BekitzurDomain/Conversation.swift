@@ -10,7 +10,8 @@ public struct ConversationInfo: Codable, Identifiable, Sendable, Hashable {
     public var id: String
     public var startedAt: Date
     public var endedAt: Date?
-    public var language: ConversationLanguage
+    /// The language it's transcribed in; nil until it's detected from the first speech.
+    public var language: ConversationLanguage?
     /// How many people spoke, when the user said; otherwise speaker separation decides.
     public var people: Int?
     public var status: ConversationStatus
@@ -24,7 +25,7 @@ public struct ConversationInfo: Codable, Identifiable, Sendable, Hashable {
     /// recordings lined up while recording, measured once for earlier ones, nil until then.
     public var microphoneDelay: Double?
 
-    public init(id: String, startedAt: Date, language: ConversationLanguage, status: ConversationStatus) {
+    public init(id: String, startedAt: Date, language: ConversationLanguage? = nil, status: ConversationStatus) {
         self.id = id
         self.startedAt = startedAt
         self.language = language

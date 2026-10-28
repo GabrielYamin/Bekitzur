@@ -90,6 +90,25 @@ public final class Transcriber {
         }
     }
 
+    /// How likely each candidate language is, from the first 30 seconds of `samples` (whisper.cpp's language detection),
+    /// scaled to add up to 1, and the language whisper itself finds likeliest of all it knows.
+    public func detectLanguage(_ samples: [Float], among candidates: [ConversationLanguage] = ConversationLanguage.allCases) throws -> (probabilities: [ConversationLanguage: Float], likeliest: String) {
+        let threads = Int32(max(1, min(8, ProcessInfo.processInfo.activeProcessorCount - 2)))
+        let status = samples.withUnsafeBufferPointer { whisper_pcm_to_mel(context, $0.baseAddress, Int32($0.count), threads) }
+        guard status == 0 else { throw TranscriberError.transcriptionFailed(status) }
+        var all = [Float](repeating: 0, count: Int(whisper_lang_max_id()) + 1)
+        let likeliest = whisper_lang_auto_detect(context, 0, threads, &all)
+        guard likeliest >= 0 else { throw TranscriberError.transcriptionFailed(likeliest) }
+        var probabilities: [ConversationLanguage: Float] = [:]
+        for language in candidates {
+            let id = whisper_lang_id(language.rawValue)
+            if id >= 0 { probabilities[language] = all[Int(id)] }
+        }
+        let total = probabilities.values.reduce(0, +)
+        if total > 0 { probabilities = probabilities.mapValues { $0 / total } }
+        return (probabilities, String(cString: whisper_lang_str(likeliest)))
+    }
+
     /// A token that starts with a space starts a new word. Tokens are byte pieces that can split a Hebrew letter, so a
     /// word's bytes are decoded only once the word is complete.
     private func words(inSegment segment: Int32) -> [TranscriptWord] {

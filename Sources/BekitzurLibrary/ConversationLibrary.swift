@@ -20,7 +20,7 @@ public struct ConversationLibrary: Sendable {
             .sorted { $0.startedAt > $1.startedAt }
     }
 
-    public func create(language: ConversationLanguage, startedAt: Date = Date()) throws -> ConversationInfo {
+    public func create(language: ConversationLanguage? = nil, startedAt: Date = Date()) throws -> ConversationInfo {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HHmmss"
         let base = formatter.string(from: startedAt)

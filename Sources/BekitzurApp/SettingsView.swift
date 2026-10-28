@@ -54,11 +54,10 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Recording") {
-                Picker("Language", selection: $model.language) {
-                    Text("Hebrew").tag(ConversationLanguage.hebrew)
-                    Text("English").tag(ConversationLanguage.english)
-                }
                 Text("Bekitzur records your microphone and everything your Mac plays. On calls, use headphones so your microphone doesn't pick up the other side a second time.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Text("It tells Hebrew from English by the first half minute of speech. If it gets one wrong, choose Transcribe again as… in the Conversation's menu.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

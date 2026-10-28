@@ -8,8 +8,9 @@ import Foundation
 /// taking the recording with it.
 public protocol LiveChunkTranscriber: Sendable {
     /// Transcribes a chunk that starts `offset` seconds into the recording. `done` gets its segments, already placed in
-    /// the recording, or nil if transcription failed; chunks are answered in the order they were sent.
-    func transcribe(_ samples: [Float], at offset: Double, done: @escaping @Sendable ([TranscriptSegment]?) -> Void)
+    /// the recording, or nil if transcription failed, and their language once it's known. Chunks are answered in the
+    /// order they were sent; while the language is being detected, chunks with speech wait until it's decided.
+    func transcribe(_ samples: [Float], at offset: Double, done: @escaping @Sendable ([TranscriptSegment]?, ConversationLanguage?) -> Void)
     /// After the last chunk; `done` runs once every chunk has been answered.
     func finish(_ done: @escaping @Sendable () -> Void)
     /// Stops without waiting for answers, as when the app quits while recording.
@@ -18,18 +19,17 @@ public protocol LiveChunkTranscriber: Sendable {
 
 /// How a chunk is transcribed, wherever that happens.
 public enum LiveChunks {
-    /// Only where someone speaks: given room noise, ivrit.ai's model writes Knesset openings and "תודה רבה". Speech
-    /// less than 2 seconds apart is one piece, so a pause doesn't split a sentence; a chunk without speech gives nothing.
-    /// Without a detector, the whole chunk is one piece.
-    public static func transcribe(
+    /// Only where someone speaks, by the speech detector: given room noise, ivrit.ai's model writes Knesset openings
+    /// and "תודה רבה". Speech less than 2 seconds apart is one piece, so a pause doesn't split a sentence; a chunk without
+    /// speech gives nothing. Without a detector (`detected` nil), the whole chunk is one piece.
+    static func transcribe(
         _ samples: [Float],
         at offset: Double,
+        speech detected: [ClosedRange<Double>]?,
         with transcriber: Transcriber,
-        detector: SpeechDetector?,
         language: ConversationLanguage
     ) throws -> [TranscriptSegment] {
         let duration = Double(samples.count) / AudioLoader.sampleRate
-        let detected = try detector.map { detector in try blocking { try await detector.speech(in: samples) } }
         return try pieces(detected ?? [0...duration]).flatMap { piece -> [TranscriptSegment] in
             let start = Int(max(0, piece.lowerBound) * AudioLoader.sampleRate)
             let end = min(samples.count, Int(piece.upperBound * AudioLoader.sampleRate))
@@ -155,9 +155,159 @@ public enum LiveChunks {
         return (samples, offset)
     }
 
-    /// One line per chunk: its segments, or null if it couldn't be transcribed.
+    /// One line per chunk: its segments, or null if it couldn't be transcribed, and their language once it's known.
     struct Answer: Codable {
         let segments: [TranscriptSegment]?
+        var language: ConversationLanguage? = nil
+
+        static let failed = Answer(segments: nil)
+        static let nothing = Answer(segments: [])
+    }
+}
+
+/// Tells Hebrew from English by the first speech, with whisper.cpp's language detection on regular Whisper: ivrit.ai's
+/// model answers Hebrew, all but certain, even for English.
+///
+/// On the recordings whose language was known, 10 seconds of speech gave the right language with 85% or more, and 30
+/// seconds with 99% or more.
+enum LanguageDetection {
+    /// Speech heard before the first guess.
+    static let firstGuess = 10.0
+    /// Whisper detects from 30 seconds of audio at most.
+    static let longest = 30.0
+    static let sure: Float = 0.95
+
+    /// The likelier language once whisper is sure of it, has heard 30 seconds of speech, or will hear no more; nil to
+    /// wait for more speech.
+    static func decision(_ probabilities: [ConversationLanguage: Float], heard seconds: Double, ended: Bool) -> ConversationLanguage? {
+        guard let likeliest = probabilities.max(by: { $0.value < $1.value }) else { return nil }
+        return likeliest.value >= sure || seconds >= longest || ended ? likeliest.key : nil
+    }
+}
+
+/// Transcribes chunks in order, in the helper process or on a thread of this one. While the language isn't known,
+/// a chunk with speech waits, with every chunk after it, and its speech is gathered for `LanguageDetection`; once the
+/// language is decided they're all transcribed with its model. Without the speech detector (its model couldn't be
+/// loaded), chunks are transcribed whole.
+final class ChunkSession {
+    /// Where a chunk has speech, in seconds from its start; nil to transcribe it whole.
+    typealias SpeechFinder = ([Float]) throws -> [ClosedRange<Double>]?
+
+    private let findSpeech: SpeechFinder
+    private var language: ConversationLanguage?
+    /// The language's model, once it's known.
+    private var transcriber: Transcriber?
+    /// Regular Whisper, which is also the English model, until the language is known.
+    private var detecting: Transcriber?
+    private var waiting: [Chunk] = []
+    /// The waiting chunks' speech, up to what detection hears.
+    private var heard: [Float] = []
+    private var failed = false
+
+    /// `speech` nil means the whole chunk; a chunk without speech keeps no samples.
+    private struct Chunk {
+        let samples: [Float]
+        let offset: Double
+        let speech: [ClosedRange<Double>]?
+    }
+
+    /// - Parameters:
+    ///   - language: Nil to detect it.
+    ///   - model: A speech model to transcribe with instead of the language's; only with a language.
+    convenience init(language: ConversationLanguage?, model: URL? = nil, detectsSpeech: Bool) throws {
+        let detector = detectsSpeech ? try? LiveChunks.blocking { try await SpeechDetector() } : nil
+        try self.init(language: language, model: model) { samples in
+            try detector.map { detector in try LiveChunks.blocking { try await detector.speech(in: samples) } }
+        }
+    }
+
+    init(language: ConversationLanguage?, model: URL? = nil, findSpeech: @escaping SpeechFinder) throws {
+        self.language = language
+        self.findSpeech = findSpeech
+        if let language {
+            transcriber = try Transcriber(modelURL: model ?? BekitzurPaths.speechModel(for: language))
+        } else {
+            detecting = try Transcriber(modelURL: BekitzurPaths.speechModel(for: .english))
+        }
+    }
+
+    /// The answers this chunk lets out: its own, none while it waits for the language, or every waiting chunk's once
+    /// it's decided. After a failure, every chunk's answer is nil.
+    func answer(_ samples: [Float], at offset: Double) -> [LiveChunks.Answer] {
+        guard !failed else { return [.failed] }
+        let speech: [ClosedRange<Double>]?
+        do {
+            speech = try findSpeech(samples)
+        } catch {
+            waiting.append(Chunk(samples: [], offset: offset, speech: []))
+            return fail()
+        }
+        let silent = speech?.isEmpty == true
+        if language == nil {
+            if waiting.isEmpty, silent { return [.nothing] }
+            hear(samples, speech: speech)
+        }
+        waiting.append(Chunk(samples: silent ? [] : samples, offset: offset, speech: speech))
+        return answerWaiting(ended: false)
+    }
+
+    /// The waiting chunks' answers, once there are no more chunks.
+    func finish() -> [LiveChunks.Answer] {
+        failed ? [] : answerWaiting(ended: true)
+    }
+
+    private func answerWaiting(ended: Bool) -> [LiveChunks.Answer] {
+        do {
+            if language == nil, !waiting.isEmpty {
+                let seconds = Double(heard.count) / AudioLoader.sampleRate
+                guard let detecting, !heard.isEmpty, seconds >= LanguageDetection.firstGuess || ended else {
+                    return ended ? waitingAnswers { _ in .nothing } : []
+                }
+                let probabilities = try detecting.detectLanguage(heard).probabilities
+                guard let decided = LanguageDetection.decision(probabilities, heard: seconds, ended: ended) else { return [] }
+                try use(decided)
+            }
+            guard let language, let transcriber else { return waitingAnswers { _ in .nothing } }
+            return try waitingAnswers { chunk in
+                LiveChunks.Answer(
+                    segments: try LiveChunks.transcribe(chunk.samples, at: chunk.offset, speech: chunk.speech, with: transcriber, language: language),
+                    language: language
+                )
+            }
+        } catch {
+            return fail()
+        }
+    }
+
+    /// Switches from detecting to transcribing; regular Whisper is let go before ivrit.ai's model loads.
+    private func use(_ decided: ConversationLanguage) throws {
+        if decided == .english { transcriber = detecting }
+        detecting = nil
+        heard = []
+        if transcriber == nil { transcriber = try Transcriber(modelURL: BekitzurPaths.speechModel(for: decided)) }
+        language = decided
+    }
+
+    /// Adds a chunk's speech to what detection hears.
+    private func hear(_ samples: [Float], speech: [ClosedRange<Double>]?) {
+        let rate = AudioLoader.sampleRate
+        let most = Int(LanguageDetection.longest * rate)
+        for range in speech ?? [0...(Double(samples.count) / rate)] where heard.count < most {
+            let from = max(0, Int(range.lowerBound * rate))
+            let to = min(samples.count, Int(range.upperBound * rate), from + most - heard.count)
+            if from < to { heard += samples[from..<to] }
+        }
+    }
+
+    private func waitingAnswers(_ answer: (Chunk) throws -> LiveChunks.Answer) rethrows -> [LiveChunks.Answer] {
+        let answers = try waiting.map(answer)
+        waiting = []
+        return answers
+    }
+
+    private func fail() -> [LiveChunks.Answer] {
+        failed = true
+        return waitingAnswers { _ in .failed }
     }
 }
 
@@ -168,39 +318,47 @@ private final class Outcome<T>: @unchecked Sendable {
 
 /// Transcribes chunks on a low-priority thread of this process; used by tests and tools.
 public final class InProcessChunkTranscriber: LiveChunkTranscriber, @unchecked Sendable {
-    private let modelURL: URL
-    private let language: ConversationLanguage
+    private let language: ConversationLanguage?
+    private let model: URL?
     private let detectsSpeech: Bool
     private let queue = DispatchQueue(label: "bekitzur.live-chunks", qos: .utility)
-    private var transcriber: Transcriber?
-    private var detector: SpeechDetector?
+    private var session: ChunkSession?
+    private var waiting: [@Sendable ([TranscriptSegment]?, ConversationLanguage?) -> Void] = []
 
-    /// - Parameter detectsSpeech: Transcribe only where someone speaks; otherwise every chunk whole.
-    public init(modelURL: URL, language: ConversationLanguage, detectsSpeech: Bool = true) {
-        self.modelURL = modelURL
+    /// - Parameters:
+    ///   - language: Nil to detect it from the first speech.
+    ///   - model: A speech model to transcribe with instead of the language's; only with a language.
+    ///   - detectsSpeech: Transcribe only where someone speaks; otherwise every chunk whole.
+    public init(language: ConversationLanguage?, model: URL? = nil, detectsSpeech: Bool = true) {
         self.language = language
+        self.model = model
         self.detectsSpeech = detectsSpeech
     }
 
-    public func transcribe(_ samples: [Float], at offset: Double, done: @escaping @Sendable ([TranscriptSegment]?) -> Void) {
+    public func transcribe(_ samples: [Float], at offset: Double, done: @escaping @Sendable ([TranscriptSegment]?, ConversationLanguage?) -> Void) {
         queue.async {
-            do {
-                if self.transcriber == nil {
-                    self.transcriber = try Transcriber(modelURL: self.modelURL)
-                    if self.detectsSpeech { self.detector = try? LiveChunks.blocking { try await SpeechDetector() } }
-                }
-                done(try LiveChunks.transcribe(samples, at: offset, with: self.transcriber!, detector: self.detector, language: self.language))
-            } catch {
-                done(nil)
+            self.waiting.append(done)
+            if self.session == nil {
+                self.session = try? ChunkSession(language: self.language, model: self.model, detectsSpeech: self.detectsSpeech)
             }
+            self.deliver(self.session?.answer(samples, at: offset) ?? [.failed])
         }
     }
 
     public func finish(_ done: @escaping @Sendable () -> Void) {
-        queue.async(execute: done)
+        queue.async {
+            self.deliver(self.session?.finish() ?? [])
+            done()
+        }
     }
 
     public func cancel() {}
+
+    private func deliver(_ answers: [LiveChunks.Answer]) {
+        for answer in answers {
+            waiting.removeFirst()(answer.segments, answer.language)
+        }
+    }
 }
 
 /// Transcribes chunks in a helper process running `LiveTranscriptionHelper.serve`, so that a crash in whisper.cpp ends
@@ -211,7 +369,7 @@ public final class HelperChunkTranscriber: LiveChunkTranscriber, @unchecked Send
     private let output = Pipe()
     private let writes = DispatchQueue(label: "bekitzur.live-helper-input", qos: .utility)
     private let lock = NSLock()
-    private var waiting: [@Sendable ([TranscriptSegment]?) -> Void] = []
+    private var waiting: [@Sendable ([TranscriptSegment]?, ConversationLanguage?) -> Void] = []
     private var finished: (@Sendable () -> Void)?
     private var ended = false
 
@@ -235,12 +393,12 @@ public final class HelperChunkTranscriber: LiveChunkTranscriber, @unchecked Send
         Thread.detachNewThread { [self] in readAnswers() }
     }
 
-    public func transcribe(_ samples: [Float], at offset: Double, done: @escaping @Sendable ([TranscriptSegment]?) -> Void) {
+    public func transcribe(_ samples: [Float], at offset: Double, done: @escaping @Sendable ([TranscriptSegment]?, ConversationLanguage?) -> Void) {
         lock.lock()
         let alive = !ended
         if alive { waiting.append(done) }
         lock.unlock()
-        guard alive else { return done(nil) }
+        guard alive else { return done(nil, nil) }
         let message = LiveChunks.message(samples, at: offset)
         writes.async { [input] in
             try? input.fileHandleForWriting.write(contentsOf: message)
@@ -277,7 +435,7 @@ public final class HelperChunkTranscriber: LiveChunkTranscriber, @unchecked Send
                 lock.lock()
                 let done = waiting.isEmpty ? nil : waiting.removeFirst()
                 lock.unlock()
-                done?(answer?.segments)
+                done?(answer?.segments, answer?.language)
             }
         }
         process.waitUntilExit()
@@ -287,29 +445,39 @@ public final class HelperChunkTranscriber: LiveChunkTranscriber, @unchecked Send
         waiting = []
         let finished = self.finished
         lock.unlock()
-        unanswered.forEach { $0(nil) }
+        unanswered.forEach { $0(nil, nil) }
         finished?()
     }
 }
 
 /// The helper process's side: reads chunks on standard input until it ends, and answers each with one line of JSON on
-/// standard output. whisper.cpp logs to standard error. Without the speech detector (its model couldn't be loaded),
-/// chunks are transcribed whole.
+/// standard output; chunks waiting for the language are answered once it's decided, or when the input ends.
+/// whisper.cpp logs to standard error.
 public enum LiveTranscriptionHelper {
-    public static func serve(modelURL: URL, language: ConversationLanguage, detectsSpeech: Bool = true) -> Int32 {
-        guard let transcriber = try? Transcriber(modelURL: modelURL) else { return 1 }
-        let detector = detectsSpeech ? try? LiveChunks.blocking { try await SpeechDetector() } : nil
+    /// The language argument that says to detect it.
+    public static let detect = "auto"
+
+    /// - Parameters:
+    ///   - language: Nil to detect it from the first speech.
+    ///   - model: A speech model to transcribe with instead of the language's; only with a language.
+    public static func serve(language: ConversationLanguage?, model: URL? = nil, detectsSpeech: Bool = true) -> Int32 {
+        guard let session = try? ChunkSession(language: language, model: model, detectsSpeech: detectsSpeech) else { return 1 }
         let input = FileHandle.standardInput, output = FileHandle.standardOutput
-        while let chunk = LiveChunks.readMessage({ (try? input.read(upToCount: $0)) ?? Data() }) {
-            let segments = try? LiveChunks.transcribe(chunk.samples, at: chunk.offset, with: transcriber, detector: detector, language: language)
-            guard var line = try? JSONEncoder().encode(LiveChunks.Answer(segments: segments)) else { return 1 }
-            line.append(UInt8(ascii: "\n"))
-            do {
-                try output.write(contentsOf: line)
-            } catch {
-                return 1
+        func send(_ answers: [LiveChunks.Answer]) -> Bool {
+            for answer in answers {
+                guard var line = try? JSONEncoder().encode(answer) else { return false }
+                line.append(UInt8(ascii: "\n"))
+                do {
+                    try output.write(contentsOf: line)
+                } catch {
+                    return false
+                }
             }
+            return true
         }
-        return 0
+        while let chunk = LiveChunks.readMessage({ (try? input.read(upToCount: $0)) ?? Data() }) {
+            guard send(session.answer(chunk.samples, at: chunk.offset)) else { return 1 }
+        }
+        return send(session.finish()) ? 0 : 1
     }
 }

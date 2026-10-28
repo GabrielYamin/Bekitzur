@@ -50,7 +50,7 @@ struct LiveTranscriberTests {
     @Test(.enabled(if: canTranscribe))
     func aFifthOfASecondOfSpeechIsTranscribedWithoutAborting() async throws {
         let clip = Array(try AudioLoader.loadMono16k(Self.scriptedRead)[480_000..<483_200])
-        let chunks = InProcessChunkTranscriber(modelURL: BekitzurPaths.speechModel(for: .hebrew), language: .hebrew, detectsSpeech: false)
+        let chunks = InProcessChunkTranscriber(language: .hebrew, detectsSpeech: false)
         let live = LiveTranscriber(language: .hebrew, chunks: chunks, tracks: 1) { _ in }
 
         clip.withUnsafeBufferPointer { live.receive($0, sampleRate: 16_000, track: 0) }

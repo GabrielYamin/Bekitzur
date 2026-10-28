@@ -16,8 +16,10 @@ public enum AudioLoaderError: Error, CustomStringConvertible {
 public enum AudioLoader {
     public static let sampleRate: Double = 16_000
 
-    public static func loadMono16k(_ url: URL) throws -> [Float] {
+    /// - Parameter seconds: Reads only the start of the file, this long.
+    public static func loadMono16k(_ url: URL, upTo seconds: Double? = nil) throws -> [Float] {
         let file = try AVAudioFile(forReading: url)
+        let limit = seconds.map { Int($0 * sampleRate) } ?? .max
         guard
             let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false),
             let converter = AVAudioConverter(from: file.processingFormat, to: target)
@@ -31,10 +33,10 @@ public enum AudioLoader {
         }
         let ratio = sampleRate / file.processingFormat.sampleRate
         var samples: [Float] = []
-        samples.reserveCapacity(Int(Double(file.length) * ratio) + 1)
+        samples.reserveCapacity(min(limit, Int(Double(file.length) * ratio) + 1))
         var finished = false
 
-        while !finished {
+        while !finished, samples.count < limit {
             guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: AVAudioFrameCount(Double(chunk) * ratio) + 1024) else {
                 throw AudioLoaderError.conversionFailed(url, "can't allocate buffer")
             }
@@ -59,6 +61,6 @@ public enum AudioLoader {
             }
             finished = status == .endOfStream || status == .error
         }
-        return samples
+        return samples.count > limit ? Array(samples.prefix(limit)) : samples
     }
 }

@@ -34,7 +34,7 @@ struct AskCommand: AsyncParsableCommand {
             if startOver { await assistant.unload(ifIdleFor: 0) }
             let started = Date()
             let answer = try await assistant.ask(
-                question, about: info.id, transcript: result.transcript.applying(flags), date: info.startedAt, language: info.language, after: earlier
+                question, about: info.id, transcript: result.transcript.applying(flags), date: info.startedAt, language: result.transcript.language, after: earlier
             )
             earlier.append((question: question, answer: answer))
             print("Q: \(question)")

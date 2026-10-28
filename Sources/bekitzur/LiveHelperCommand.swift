@@ -10,17 +10,21 @@ struct LiveHelperCommand: ParsableCommand {
         shouldDisplay: false
     )
 
-    @Argument(help: "Speech model file.")
-    var model: String
+    @Argument(help: "Conversation language: he, en, or auto to detect it from the first speech.")
+    var language: LanguageChoice
 
-    @Argument(help: "Conversation language: he or en.")
-    var language: ConversationLanguage
+    @Option(help: "Speech model file, instead of the language's.")
+    var model: String?
 
     @Flag(help: "Transcribe every chunk whole, without detecting where people speak.")
     var wholeChunks = false
 
+    func validate() throws {
+        if model != nil, language.language == nil { throw ValidationError("--model needs a language") }
+    }
+
     func run() throws {
-        let status = LiveTranscriptionHelper.serve(modelURL: URL(filePath: model), language: language, detectsSpeech: !wholeChunks)
+        let status = LiveTranscriptionHelper.serve(language: language.language, model: model.map { URL(filePath: $0) }, detectsSpeech: !wholeChunks)
         if status != 0 { throw ExitCode(status) }
     }
 }

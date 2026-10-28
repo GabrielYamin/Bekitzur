@@ -5,8 +5,8 @@ import BekitzurPipeline
 import SwiftUI
 import UserNotifications
 
-/// The app, or with `--live-transcription <model> <language>` its helper process, which transcribes live chunks so a
-/// crash in whisper.cpp can't end a recording.
+/// The app, or with `--live-transcription <he|en|auto>` its helper process, which transcribes live chunks so a crash in
+/// whisper.cpp can't end a recording.
 @main
 enum Entry {
     static let liveTranscriptionArgument = "--live-transcription"
@@ -14,9 +14,12 @@ enum Entry {
     @MainActor
     static func main() {
         let arguments = CommandLine.arguments
-        if let index = arguments.firstIndex(of: liveTranscriptionArgument), arguments.count > index + 2,
-           let language = ConversationLanguage(rawValue: arguments[index + 2]) {
-            exit(LiveTranscriptionHelper.serve(modelURL: URL(filePath: arguments[index + 1]), language: language))
+        if let index = arguments.firstIndex(of: liveTranscriptionArgument) {
+            // Never a second app, even for arguments from another version of it.
+            let argument = arguments.dropFirst(index + 1).first ?? ""
+            let language = ConversationLanguage(rawValue: argument)
+            guard language != nil || argument == LiveTranscriptionHelper.detect else { exit(2) }
+            exit(LiveTranscriptionHelper.serve(language: language))
         }
         BekitzurApp.main()
     }

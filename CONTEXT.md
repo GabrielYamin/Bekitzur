@@ -7,7 +7,7 @@ A Mac app that records Conversations, transcribes them in Hebrew or English, rec
 ### Conversations and audio
 
 **Conversation**:
-One stretch of talk the app processes as a unit: a Teams call, a Slack huddle, a phone call through the Mac, or an in-person discussion, with or without a calendar invite. Each Conversation has one language, Hebrew or English.
+One stretch of talk the app processes as a unit: a Teams call, a Slack huddle, a phone call through the Mac, or an in-person discussion, with or without a calendar invite. Each Conversation has one language, Hebrew or English, detected from its first speech.
 _Avoid_: Meeting, session, discussion
 
 **Recording**:

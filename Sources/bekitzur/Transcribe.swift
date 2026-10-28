@@ -12,8 +12,8 @@ struct Transcribe: AsyncParsableCommand {
     @Argument(help: "Audio file (any format macOS can read).")
     var audio: String
 
-    @Option(help: "Conversation language: he or en.")
-    var language: ConversationLanguage = .hebrew
+    @Option(help: "Conversation language: he, en, or auto to detect it from the first speech (with --live).")
+    var language = LanguageChoice(.hebrew)
 
     @Option(help: "Speech model file. Defaults to the model for the language.")
     var model: String?
@@ -39,17 +39,25 @@ struct Transcribe: AsyncParsableCommand {
     @Flag(help: "With --live: transcribe every chunk whole, without detecting where people speak.")
     var wholeChunks = false
 
+    func validate() throws {
+        guard language.language == nil else { return }
+        if !live { throw ValidationError("--language auto works with --live") }
+        if model != nil { throw ValidationError("--model needs a language") }
+    }
+
     func run() async throws {
         let started = Date()
         let samples = try AudioLoader.loadMono16k(URL(filePath: audio))
-        let modelURL = model.map { URL(filePath: $0) } ?? BekitzurPaths.speechModel(for: language)
         var transcript: Transcript
-        if live {
+        if let known = language.language, !live {
+            let transcriber = try Transcriber(modelURL: model.map { URL(filePath: $0) } ?? BekitzurPaths.speechModel(for: known))
+            transcript = Transcript(language: known, segments: try transcriber.transcribe(samples, language: known, prompt: prompt))
+        } else {
             let helper = HelperChunkTranscriber(
                 executable: Bundle.main.executableURL ?? URL(filePath: CommandLine.arguments[0]),
-                arguments: ["live-helper", modelURL.path, language.rawValue] + (wholeChunks ? ["--whole-chunks"] : [])
+                arguments: ["live-helper", language.argument] + (model.map { ["--model", $0] } ?? []) + (wholeChunks ? ["--whole-chunks"] : [])
             )
-            let transcriber = LiveTranscriber(language: language, chunks: helper, tracks: 1) { _ in }
+            let transcriber = LiveTranscriber(language: language.language ?? .hebrew, chunks: helper, tracks: 1) { _ in }
             samples.withUnsafeBufferPointer { buffer in
                 for start in stride(from: 0, to: buffer.count, by: 4_096) {
                     transcriber.receive(UnsafeBufferPointer(rebasing: buffer[start..<min(start + 4_096, buffer.count)]), sampleRate: AudioLoader.sampleRate, track: 0)
@@ -57,11 +65,8 @@ struct Transcribe: AsyncParsableCommand {
             }
             guard let finished = await transcriber.finish() else { throw ValidationError("Live transcription failed") }
             transcript = finished
-        } else {
-            let transcriber = try Transcriber(modelURL: modelURL)
-            transcript = Transcript(language: language, segments: try transcriber.transcribe(samples, language: language, prompt: prompt))
         }
-        log(String(format: "Transcribed in %.1f s", Date().timeIntervalSince(started)))
+        log(String(format: "Transcribed in %.1f s, in %@", Date().timeIntervalSince(started), transcript.language.rawValue))
 
         if speakers {
             let separated = Date()

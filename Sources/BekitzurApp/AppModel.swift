@@ -69,8 +69,9 @@ final class AppModel {
     var selection: String?
     var alert: String?
 
-    var language: ConversationLanguage {
-        didSet { UserDefaults.standard.set(language.rawValue, forKey: "language") }
+    /// The language last detected, assumed for a Recording without speech to detect it from.
+    @ObservationIgnored private var lastLanguage: ConversationLanguage {
+        didSet { UserDefaults.standard.set(lastLanguage.rawValue, forKey: "language") }
     }
 
     var userName: String {
@@ -93,7 +94,7 @@ final class AppModel {
     }
 
     private init() {
-        language = UserDefaults.standard.string(forKey: "language").flatMap(ConversationLanguage.init(rawValue:)) ?? .hebrew
+        lastLanguage = UserDefaults.standard.string(forKey: "language").flatMap(ConversationLanguage.init(rawValue:)) ?? .hebrew
         userName = UserDefaults.standard.string(forKey: "userName") ?? NSFullUserName()
         vocabulary = VocabularyStore(url: BekitzurPaths.vocabulary).load()
         try? FileManager.default.createDirectory(at: BekitzurPaths.conversations, withIntermediateDirectories: true)
@@ -332,18 +333,15 @@ final class AppModel {
             return
         }
         do {
-            var info = try library.create(language: language)
+            var info = try library.create()
             info.microphoneDelay = 0
             try library.save(info)
             let id = info.id
             var live: LiveTranscriber?
             if Self.transcribesLive, let app = Bundle.main.executableURL {
-                let helper = HelperChunkTranscriber(
-                    executable: app,
-                    arguments: [Entry.liveTranscriptionArgument, BekitzurPaths.speechModel(for: info.language).path, info.language.rawValue]
-                )
+                let helper = HelperChunkTranscriber(executable: app, arguments: [Entry.liveTranscriptionArgument, LiveTranscriptionHelper.detect])
                 live = LiveTranscriber(
-                    language: info.language,
+                    language: lastLanguage,
                     chunks: helper,
                     tracks: ConversationRecorder.Track.allCases.count,
                     onUpdate: { transcript in Task { @MainActor in AppModel.shared.transcribedLive(transcript, for: id) } },
@@ -368,7 +366,7 @@ final class AppModel {
             recordingStartedAt = info.startedAt
             conversations = library.all()
             selection = info.id
-            AppLog.write("\(info.id): recording started (\(info.language.name))")
+            AppLog.write("\(info.id): recording started")
         } catch {
             AppLog.write("Recording not started: \(error)")
             alert = "Couldn't start recording: \(error)"
@@ -405,10 +403,15 @@ final class AppModel {
         liveStopped.insert(id)
     }
 
-    /// Updates the live Transcript while recording; later updates are covered by `finishLive`.
+    /// Updates the live Transcript while recording; later updates are covered by `finishLive`. The first one has the
+    /// language detected from the first speech.
     private func transcribedLive(_ transcript: Transcript, for id: String) {
         guard id == recordingID else { return }
-        if liveTranscripts[id] == nil { AppLog.write("\(id): live Transcript started") }
+        if liveTranscripts[id] == nil {
+            AppLog.write("\(id): live Transcript started, in \(transcript.language.name)")
+            update(id) { $0.language = transcript.language }
+            lastLanguage = transcript.language
+        }
         liveTranscripts[id] = transcript
         try? library.save(LiveTranscript(transcript: transcript, complete: false), for: id)
     }
@@ -458,8 +461,9 @@ final class AppModel {
         return (flags[id]?.fixes ?? []) != (result.notesFixes ?? [])
     }
 
-    /// Transcribes the Recording again. Marks on the old Transcript's words are dropped, since its words are gone.
-    func transcribeAgain(_ id: String, language: ConversationLanguage) {
+    /// Transcribes the Recording again, in `language`, or detecting it when nil. Marks on the old Transcript's words are
+    /// dropped, since its words are gone.
+    func transcribeAgain(_ id: String, language: ConversationLanguage?) {
         library.deleteFlags(for: id)
         flags[id] = nil
         liveTranscripts[id] = nil
@@ -510,7 +514,7 @@ final class AppModel {
         let existing = results[id] ?? library.result(for: id)
         let notesOnly = self.notesOnly.remove(id) != nil ? existing : nil
         let kept = keepTranscript.remove(id) != nil ? existing?.transcript : nil
-        let saved = library.liveTranscript(for: id).flatMap { $0.transcript.language == info.language ? $0 : nil }
+        let saved = library.liveTranscript(for: id).flatMap { info.language == nil || $0.transcript.language == info.language ? $0 : nil }
         // A live Transcript finished after the recording stopped saves transcribing the files; an unfinished one is only
         // used if the files can't be read.
         let live = kept == nil && notesOnly == nil && saved?.complete == true ? saved?.transcript : nil
@@ -518,14 +522,14 @@ final class AppModel {
         let transcript = kept ?? live
         let flags = self.flags[id] ?? library.flags(for: id)
         let how = notesOnly != nil ? "Notes only" : kept != nil ? "same Transcript" : live != nil ? "live Transcript" : "new Transcript"
-        AppLog.write("\(id): processing (\(info.language.name)\(info.people.map { ", \($0) people" } ?? ""), \(how), \(flags.fixes.count) fixes)")
+        AppLog.write("\(id): processing (\(info.language?.name ?? "language to detect")\(info.people.map { ", \($0) people" } ?? ""), \(how), \(flags.fixes.count) fixes)")
         Task {
             do {
                 let result: ProcessedConversation
                 let warning: String?
                 let measuredDelay: Double?
                 if let notesOnly {
-                    result = try await Self.rewrite(notesOnly, flags: flags, date: info.startedAt, language: info.language) { step in
+                    result = try await Self.rewrite(notesOnly, flags: flags, date: info.startedAt, language: notesOnly.transcript.language) { step in
                         Task { @MainActor in
                             AppModel.shared.update(id) { if $0.status == .processing { $0.step = step.rawValue } }
                         }
@@ -537,6 +541,7 @@ final class AppModel {
                         folder: folder,
                         date: info.startedAt,
                         language: info.language,
+                        assumed: lastLanguage,
                         people: info.people,
                         microphoneDelay: info.microphoneDelay,
                         transcript: transcript,
@@ -554,18 +559,21 @@ final class AppModel {
                 liveTranscripts[id] = nil
                 liveStopped.remove(id)
                 results[id] = result
+                let language = result.transcript.language
                 update(id) {
                     $0.status = .unreviewed
                     $0.step = nil
                     $0.title = result.notes.title
                     $0.warning = warning
+                    $0.language = language
                     if let measuredDelay { $0.microphoneDelay = measuredDelay }
                 }
+                if info.language == nil { lastLanguage = language }
                 if let measuredDelay { AppLog.write(String(format: "%@: microphone track lined up, played %.0f ms later", id, measuredDelay * 1000)) }
                 let notes = result.notes
                 AppLog.write(String(
-                    format: "%@: Notes ready after %.0f s: %d Speakers, %d Decisions, %d Action Items, %d Open Questions",
-                    id, Date().timeIntervalSince(started), result.speakers.count, notes.decisions.count, notes.actionItems.count, notes.openQuestions.count
+                    format: "%@: Notes ready after %.0f s: %@, %d Speakers, %d Decisions, %d Action Items, %d Open Questions",
+                    id, Date().timeIntervalSince(started), language.name, result.speakers.count, notes.decisions.count, notes.actionItems.count, notes.openQuestions.count
                 ))
                 if let warning { AppLog.write("\(id): warning: \(warning)") }
                 notifyNotesReady(id: id, title: result.notes.title)
@@ -602,17 +610,21 @@ final class AppModel {
 
     /// Processes every audio file in the Conversation's folder: the two recorded tracks, or an imported recording.
     /// - Parameters:
+    ///   - language: Nil to detect it.
+    ///   - assumed: The language for a Recording without speech to detect it from.
     ///   - microphoneDelay: How much later to play the microphone track; measured here when nil, and returned.
+    ///   - transcript: A Transcript already made, used if it's in `language`.
     ///   - salvage: A live Transcript to write the Notes from if the audio can't be read, as when the app quit before it
     ///     finished the files.
     @concurrent
     private nonisolated static func run(
         folder: URL,
         date: Date,
-        language: ConversationLanguage,
+        language: ConversationLanguage?,
+        assumed: ConversationLanguage,
         people: Int?,
         microphoneDelay: Double?,
-        transcript: Transcript?,
+        transcript given: Transcript?,
         salvage: Transcript?,
         flags: TranscriptFlags,
         progress: @escaping @Sendable (ProcessingStep) -> Void
@@ -637,7 +649,7 @@ final class AppModel {
                 flags: flags,
                 vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load(),
                 date: date,
-                language: language,
+                language: salvage.language,
                 progress: progress
             )
             let minutes = Int(((salvage.segments.last?.end ?? 0) / 60).rounded(.up))
@@ -663,16 +675,18 @@ final class AppModel {
                 samples = lined.mixed
             }
         }
-        var transcript = transcript
-        if transcript?.language != language {
+        let transcript: Transcript
+        if let given, language == nil || given.language == language {
+            transcript = given
+        } else {
             progress(.transcribing)
-            transcript = try await transcribeInHelper(samples, language: language)
+            transcript = try await transcribeInHelper(samples, language: language, assumed: assumed)
         }
         let voiceprints = (try? VoiceprintStore(url: BekitzurPaths.voiceprints).load()) ?? []
         let result = try await ConversationProcessor.process(
             samples,
             date: date,
-            language: language,
+            language: transcript.language,
             voiceprints: voiceprints,
             people: people,
             call: call,
@@ -694,13 +708,16 @@ final class AppModel {
 
     /// Transcribes a whole Recording as live transcription does, in the helper process: a crash in whisper.cpp then fails
     /// this Conversation instead of the app, and the app's every launch after it, since unfinished Conversations resume.
-    private nonisolated static func transcribeInHelper(_ samples: [Float], language: ConversationLanguage) async throws -> Transcript {
+    /// - Parameters:
+    ///   - language: Nil to detect it.
+    ///   - assumed: The language for a Recording without speech to detect it from.
+    private nonisolated static func transcribeInHelper(_ samples: [Float], language: ConversationLanguage?, assumed: ConversationLanguage) async throws -> Transcript {
         guard let app = Bundle.main.executableURL else { throw ProcessingError.transcriptionStopped }
         let helper = HelperChunkTranscriber(
             executable: app,
-            arguments: [Entry.liveTranscriptionArgument, BekitzurPaths.speechModel(for: language).path, language.rawValue]
+            arguments: [Entry.liveTranscriptionArgument, language?.rawValue ?? LiveTranscriptionHelper.detect]
         )
-        let live = LiveTranscriber(language: language, chunks: helper, tracks: 1) { _ in }
+        let live = LiveTranscriber(language: language ?? assumed, chunks: helper, tracks: 1) { _ in }
         samples.withUnsafeBufferPointer { buffer in
             let minute = 60 * 16_000
             for start in stride(from: 0, to: buffer.count, by: minute) {
@@ -713,32 +730,22 @@ final class AppModel {
 
     // MARK: Importing
 
-    /// Asks for recordings to import, with the language they're in.
+    /// Asks for recordings to import, with how many people spoke in them.
     func chooseRecordingsToImport() async {
         let panel = NSOpenPanel()
         panel.title = "Import recordings"
         panel.prompt = "Import"
         panel.allowedContentTypes = [.audio]
         panel.allowsMultipleSelection = true
-        let languages = NSPopUpButton()
-        languages.addItems(withTitles: ConversationLanguage.allCases.map(\.name))
-        languages.selectItem(at: ConversationLanguage.allCases.firstIndex(of: language) ?? 0)
         let people = NSPopUpButton()
         people.addItems(withTitles: Self.peopleChoices.map(Self.peopleTitle))
-        let accessory = NSStackView(views: [
-            NSTextField(labelWithString: "Language:"), languages,
-            NSTextField(labelWithString: "People who spoke:"), people,
-        ])
+        let accessory = NSStackView(views: [NSTextField(labelWithString: "People who spoke:"), people])
         accessory.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
         panel.accessoryView = accessory
         panel.isAccessoryViewDisclosed = true
         NSApp.activate()
         guard await panel.begin() == .OK else { return }
-        await importRecordings(
-            panel.urls,
-            language: ConversationLanguage.allCases[languages.indexOfSelectedItem],
-            people: Self.peopleChoices[people.indexOfSelectedItem]
-        )
+        await importRecordings(panel.urls, people: Self.peopleChoices[people.indexOfSelectedItem])
     }
 
     /// "Let Bekitzur decide", then 2 to 8 people.
@@ -750,8 +757,7 @@ final class AppModel {
 
     /// Copies recordings into new Conversations and processes them. A Conversation is dated from the recording's
     /// metadata when it has a date, since due dates like "tomorrow" are counted from it, and from the file otherwise.
-    func importRecordings(_ urls: [URL], language: ConversationLanguage? = nil, people: Int? = nil) async {
-        let language = language ?? self.language
+    func importRecordings(_ urls: [URL], people: Int? = nil) async {
         for url in urls {
             do {
                 let asset = AVURLAsset(url: url)
@@ -759,7 +765,7 @@ final class AppModel {
                 let recorded = try? await asset.load(.creationDate)?.load(.dateValue)
                 let fileDate = try? url.resourceValues(forKeys: [.creationDateKey]).creationDate
                 let startedAt = recorded ?? fileDate ?? Date()
-                var info = try library.create(language: language, startedAt: startedAt)
+                var info = try library.create(startedAt: startedAt)
                 let copy = library.folder(for: info.id).appending(path: "recording.\(url.pathExtension.lowercased())")
                 do {
                     try FileManager.default.copyItem(at: url, to: copy)
@@ -775,7 +781,7 @@ final class AppModel {
                 try library.save(info)
                 conversations = library.all()
                 selection = info.id
-                AppLog.write("\(info.id): imported \(url.lastPathComponent) (\(Int(duration)) s, \(language.name), dated \(recorded == nil ? "from the file" : "from its metadata"))")
+                AppLog.write("\(info.id): imported \(url.lastPathComponent) (\(Int(duration)) s, dated \(recorded == nil ? "from the file" : "from its metadata"))")
                 enqueue(info.id)
             } catch {
                 AppLog.write("Import of \(url.lastPathComponent) failed: \(error)")
@@ -878,7 +884,7 @@ final class AppModel {
             var failure: String?
             do {
                 answer = try await assistant.ask(
-                    question, about: id, transcript: transcript, date: info.startedAt, language: info.language, after: earlier
+                    question, about: id, transcript: transcript, date: info.startedAt, language: result.transcript.language, after: earlier
                 )
             } catch {
                 failure = String(describing: error)

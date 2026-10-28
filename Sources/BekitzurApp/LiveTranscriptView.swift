@@ -9,7 +9,8 @@ struct LiveTranscriptView: View {
     @ViewState private var follow = true
 
     var body: some View {
-        let segments = model.liveTranscripts[info.id]?.segments ?? []
+        let live = model.liveTranscripts[info.id]
+        let segments = live?.segments ?? []
         let stopped = info.status == .recording && model.liveStopped.contains(info.id)
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -61,7 +62,7 @@ struct LiveTranscriptView: View {
                                         .font(.caption.monospacedDigit())
                                         .foregroundStyle(.secondary)
                                         .frame(width: 44, alignment: .leading)
-                                    DirectionalText(segment.text, rightToLeft: info.language == .hebrew)
+                                    DirectionalText(segment.text, rightToLeft: live?.language == .hebrew)
                                         .textSelection(.enabled)
                                 }
                                 .id(index)

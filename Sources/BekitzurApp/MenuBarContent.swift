@@ -2,7 +2,7 @@ import BekitzurDomain
 import SwiftUI
 
 struct MenuBarContent: View {
-    @Bindable var model: AppModel
+    let model: AppModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -32,11 +32,6 @@ struct MenuBarContent: View {
                 .tint(.red)
                 .controlSize(.large)
             } else {
-                Picker("Language", selection: $model.language) {
-                    Text("Hebrew").tag(ConversationLanguage.hebrew)
-                    Text("English").tag(ConversationLanguage.english)
-                }
-                .pickerStyle(.segmented)
                 Button {
                     Task { await model.startRecording() }
                 } label: {

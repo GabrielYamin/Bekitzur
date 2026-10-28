@@ -14,7 +14,6 @@ public final class LiveTranscriber: @unchecked Sendable {
     static let shortestChunk = 20 * 16_000
     static let longestChunk = 30 * 16_000
 
-    private let language: ConversationLanguage
     private let chunks: LiveChunkTranscriber
     private let onUpdate: @Sendable (Transcript) -> Void
     private let onFailure: @Sendable () -> Void
@@ -26,6 +25,7 @@ public final class LiveTranscriber: @unchecked Sendable {
     private var sampleRates: [Double?]
 
     // Only used on `queue`.
+    private var language: ConversationLanguage
     private var converters: [AVAudioConverter?]
     private var converted: [Int]
     /// The mix from `mixStart` on, in samples from the start of the recording.
@@ -35,7 +35,8 @@ public final class LiveTranscriber: @unchecked Sendable {
     private var failed = false
 
     /// - Parameters:
-    ///   - onUpdate: The Transcript so far, after each chunk, on the transcription thread.
+    ///   - language: The Conversation's language, or the one to assume until the chunks' answers say which it is.
+    ///   - onUpdate: The Transcript so far, whenever a chunk adds to it, on the transcription thread.
     ///   - onFailure: Live transcription has stopped, as when the helper process ended.
     public init(
         language: ConversationLanguage,
@@ -166,20 +167,22 @@ public final class LiveTranscriber: @unchecked Sendable {
         let offset = Double(mixStart) / AudioLoader.sampleRate
         mix.removeFirst(count)
         mixStart += count
-        chunks.transcribe(chunk, at: offset) { [self] found in
-            queue.async { self.received(found) }
+        chunks.transcribe(chunk, at: offset) { [self] found, language in
+            queue.async { self.received(found, in: language) }
         }
     }
 
-    private func received(_ found: [TranscriptSegment]?) {
+    private func received(_ found: [TranscriptSegment]?, in language: ConversationLanguage?) {
         guard !failed else { return }
         guard let found else {
             failed = true
             onFailure()
             return
         }
+        if let language { self.language = language }
+        guard !found.isEmpty else { return }
         segments += found
-        onUpdate(Transcript(language: language, segments: segments))
+        onUpdate(Transcript(language: self.language, segments: segments))
     }
 
     /// Where to end a chunk that starts at the beginning of `samples` (16 kHz): in the middle of the quietest 0.4 seconds

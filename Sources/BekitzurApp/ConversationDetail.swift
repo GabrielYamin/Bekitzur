@@ -68,8 +68,9 @@ struct ConversationDetail: View {
                 if info.status == .unreviewed || info.status == .reviewed || info.status == .failed {
                     Button("Write Notes again") { model.writeNotesAgain(info.id) }
                     Button("Transcribe again") { model.transcribeAgain(info.id, language: info.language) }
-                    let other: ConversationLanguage = info.language == .hebrew ? .english : .hebrew
-                    Button("Transcribe again as \(other.name)") { model.transcribeAgain(info.id, language: other) }
+                    ForEach(ConversationLanguage.allCases.filter { $0 != info.language }, id: \.self) { language in
+                        Button("Transcribe again as \(language.name)") { model.transcribeAgain(info.id, language: language) }
+                    }
                 }
                 Button("Show in Finder") { model.showInFinder(info.id) }
                 Divider()
@@ -88,7 +89,11 @@ struct ConversationDetail: View {
     private var subtitle: String {
         var parts = [info.startedAt.formatted(.dateTime.weekday(.wide).day().month(.wide).year().hour().minute())]
         if let minutes = info.minutes { parts.append("\(minutes) min") }
-        parts.append(info.language.name)
+        if let language = info.language {
+            parts.append(language.name)
+        } else if info.status == .recording {
+            parts.append("Detecting the language")
+        }
         return parts.joined(separator: " · ")
     }
 
