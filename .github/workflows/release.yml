@@ -50,6 +50,8 @@ jobs:
           build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" build/Bekitzur.app/Contents/Info.plist)
           sha=$(shasum -a 256 build/Bekitzur.zip | cut -d' ' -f1)
           signature=$(swift scripts/sign-update.swift "$version" "$build" "$sha")
+          # Checkout leaves the tag without its message, which would turn the notes into the commit's message.
+          git fetch --quiet --force origin "refs/tags/$TAG:refs/tags/$TAG"
           git tag -l --format='%(contents)' "$TAG" > build/notes.md
           python3 - "$version" "$build" "$sha" "$signature" "$RELEASES_REPO" "$TAG" <<'EOF'
           import json, sys

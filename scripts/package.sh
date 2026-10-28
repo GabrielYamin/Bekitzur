@@ -20,7 +20,8 @@ nice -n 10 swift build -c release --product BekitzurApp 2>&1 | grep -v "ld: warn
 bin=.build/release
 app="$out/Bekitzur.app"
 bundle_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" App/Info.plist)
-version=$(date +%Y%m%d%H%M)
+# In UTC, so builds compare in the order they were made wherever they're made; the updater installs only a later build.
+version=$(date -u +%Y%m%d%H%M)
 commit=$(git rev-parse --short HEAD 2>/dev/null || echo "an unknown commit")
 git diff --quiet HEAD 2>/dev/null || commit="$commit plus uncommitted changes"
 
