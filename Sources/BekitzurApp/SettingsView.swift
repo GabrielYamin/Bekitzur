@@ -1,4 +1,5 @@
 import BekitzurDomain
+import BekitzurModels
 import BekitzurPipeline
 import BekitzurVocabulary
 import SwiftUI
@@ -81,6 +82,19 @@ struct SettingsView: View {
             }
 
             VocabularySection(model: model)
+
+            Section("Models") {
+                ForEach(ModelFile.all) { file in
+                    LabeledContent(file.name) {
+                        let size = file.bytes.formatted(.byteCount(style: .file))
+                        Text(model.missingModels.contains(file) ? "Not downloaded, \(size)" : "Downloaded, \(size)").foregroundStyle(.secondary)
+                    }
+                }
+                ModelsNote(model: model)
+                Text("Bekitzur downloads its models once, from their publishers on Hugging Face.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
 
             Section("Storage") {
                 LabeledContent("Conversations") {

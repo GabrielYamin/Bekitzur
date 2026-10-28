@@ -12,7 +12,7 @@ This repository is the source. People download the app from [Bekitzur-releases](
 - Separates Speakers with FluidAudio (pyannote community-1 and NVIDIA's Sortformer), and names people it has heard before from their Voiceprints.
 - Writes the Notes with Gemma 4 26B-A4B through llama.cpp. Quotes are checked against the Transcript, and due dates are worked out in code.
 - For review: listen back along the Transcript, fix words and Speakers, update the Notes, and ask questions that are answered only from the Transcript.
-- Imports recordings made elsewhere, and updates itself from signed releases after asking.
+- Downloads its own models with their progress, imports recordings made elsewhere, and updates itself from signed releases after asking.
 
 [docs/plan.md](docs/plan.md) has the design and a log of what was built and how it measured. [CONTEXT.md](CONTEXT.md) defines the terms, like Conversation, Speaker, and Voiceprint.
 
@@ -31,8 +31,8 @@ Recordings and personal data stay out of git: `eval/recordings/` and `eval/priva
 ## Working on a new Mac
 
 1. Install the Command Line Tools: `xcode-select --install`.
-2. Download the models, about 18 GB at pinned revisions with checksums: `scripts/install.sh`. If it's interrupted, run it again and it picks up where it left off. FluidAudio downloads the speaker models on the first Conversation.
-3. Build the app, install it in `~/Applications`, and open it: `scripts/build-app.sh`.
+2. Build the app, install it in `~/Applications`, and open it: `scripts/build-app.sh`.
+3. Choose Download in its window to get the models, about 18 GB at pinned revisions with checksums; an interrupted download picks up where it left off. `bekitzur models --download` does the same from Terminal.
 4. Run the tests: `scripts/test.sh`. Tests that need the models or the scripted read (`eval/recordings/meeting-1.m4a`, which isn't in git) are skipped without them.
 5. Record once to grant the microphone, system audio, and notification permissions.
 
@@ -57,7 +57,7 @@ swift build -c release --product bekitzur
 .build/release/bekitzur transcribe --live --language auto recording.m4a
 ```
 
-Its commands are `process` (Transcript, Speakers, and Notes for one recording), `transcribe`, `language`, `speakers`, `enroll`, `align`, `notes`, `vocabulary`, `ask`, and two experiments, `audio-check` and `english-terms`. `bekitzur help <command>` explains each one.
+Its commands are `process` (Transcript, Speakers, and Notes for one recording), `transcribe`, `language`, `speakers`, `enroll`, `align`, `notes`, `vocabulary`, `ask`, `models`, and two experiments, `audio-check` and `english-terms`. `bekitzur help <command>` explains each one.
 
 ## How the code is organized
 
@@ -74,6 +74,7 @@ Its commands are `process` (Transcript, Speakers, and Notes for one recording), 
 | `Sources/BekitzurDomain` | Shared types, like Conversation, Transcript, and Notes |
 | `Sources/BekitzurLibrary` | Conversations on disk |
 | `Sources/BekitzurUpdates` | Checking, verifying, and installing updates |
+| `Sources/BekitzurModels` | The models the app needs, and downloading them |
 | `Sources/bekitzur` | The command-line tool |
 | `App` | Info.plist, the icon, and the acknowledgements, which go into the app |
 | `Tests` | Unit tests |
@@ -108,7 +109,7 @@ Bekitzur is built on these projects:
 | [FluidAudio](https://github.com/FluidInference/FluidAudio) | Speaker separation and speech detection | Apache 2.0 |
 | [Swift Argument Parser](https://github.com/apple/swift-argument-parser) | The command-line tool | Apache 2.0 |
 
-And these models, which download on install or first use and aren't part of the app:
+And these models, which the app downloads and which aren't part of it:
 
 | Model | Used for | License |
 |---|---|---|

@@ -7,6 +7,7 @@ struct MenuBarContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             PermissionsNote(model: model)
+            ModelsNote(model: model)
             UpdateNote(model: model)
             if let startedAt = model.recordingStartedAt {
                 Button {

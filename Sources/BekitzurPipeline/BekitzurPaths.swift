@@ -1,4 +1,5 @@
 import BekitzurDomain
+import BekitzurModels
 import Foundation
 
 public enum BekitzurPaths {
@@ -7,12 +8,19 @@ public enum BekitzurPaths {
     public static let conversations = appSupport.appending(path: "Conversations")
     public static let voiceprints = appSupport.appending(path: "voiceprints.json")
     public static let vocabulary = appSupport.appending(path: "vocabulary.json")
-    public static let languageModel = models.appending(path: "gemma-4-26b-a4b-it-qat/model.gguf")
+    public static let modelStore = ModelStore(folder: models)
+
+    public static var languageModel: URL { model(.languageModel) }
 
     public static func speechModel(for language: ConversationLanguage) -> URL {
         switch language {
-        case .hebrew: models.appending(path: "ivrit-ai-whisper-large-v3-turbo-ggml/ggml-model.bin")
-        case .english: models.appending(path: "whisper-large-v3-turbo-ggml/ggml-large-v3-turbo.bin")
+        case .hebrew: model(.hebrewSpeech)
+        case .english: model(.englishSpeech)
         }
+    }
+
+    /// The file the app reads a model from, or where it goes when there's none yet.
+    static func model(_ file: ModelFile) -> URL {
+        modelStore.installed(file) ?? modelStore.url(of: file)
     }
 }

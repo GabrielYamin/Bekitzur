@@ -32,11 +32,12 @@ let package = Package(
         .target(name: "BekitzurVocabulary", dependencies: ["BekitzurDomain", "BekitzurNotes"]),
         .target(
             name: "BekitzurPipeline",
-            dependencies: ["BekitzurDomain", "BekitzurAudio", "BekitzurTranscription", "BekitzurSpeakers", "BekitzurNotes", "BekitzurVocabulary"]
+            dependencies: ["BekitzurDomain", "BekitzurAudio", "BekitzurTranscription", "BekitzurSpeakers", "BekitzurNotes", "BekitzurVocabulary", "BekitzurModels"]
         ),
         .target(name: "BekitzurCapture"),
         .target(name: "BekitzurLibrary", dependencies: ["BekitzurDomain"]),
         .target(name: "BekitzurUpdates"),
+        .target(name: "BekitzurModels"),
         .executableTarget(
             name: "bekitzur",
             dependencies: [
@@ -47,18 +48,22 @@ let package = Package(
                 "BekitzurNotes",
                 "BekitzurPipeline",
                 "BekitzurVocabulary",
+                "BekitzurModels",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
         .executableTarget(
             name: "BekitzurApp",
-            dependencies: ["BekitzurDomain", "BekitzurSpeakers", "BekitzurPipeline", "BekitzurCapture", "BekitzurLibrary", "BekitzurVocabulary", "BekitzurUpdates"]
+            dependencies: [
+                "BekitzurDomain", "BekitzurSpeakers", "BekitzurPipeline", "BekitzurCapture", "BekitzurLibrary", "BekitzurVocabulary", "BekitzurUpdates",
+                "BekitzurModels",
+            ]
         ),
         .testTarget(
             name: "BekitzurTests",
             dependencies: [
                 "BekitzurDomain", "BekitzurAudio", "BekitzurNotes", "BekitzurPipeline", "BekitzurCapture", "BekitzurLibrary", "BekitzurVocabulary",
-                "BekitzurUpdates",
+                "BekitzurUpdates", "BekitzurModels",
             ]
         ),
     ]

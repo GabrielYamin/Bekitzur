@@ -34,6 +34,7 @@ struct MainWindow: View {
             .safeAreaInset(edge: .top) {
                 VStack(spacing: 6) {
                     PermissionsNote(model: model)
+                    ModelsNote(model: model)
                     UpdateNote(model: model)
                 }
                 .padding(.horizontal, 10)

@@ -1,4 +1,6 @@
 import BekitzurDomain
+import BekitzurModels
+import BekitzurPipeline
 import SwiftUI
 
 /// What's been said so far, while recording and until the Notes are written. It's transcribed in chunks of about half
@@ -38,7 +40,12 @@ struct LiveTranscriptView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             if stopped {
-                Label("Live transcription stopped. The recording goes on, and its Transcript will be made from the recording when you stop.", systemImage: "exclamationmark.triangle.fill")
+                Label(
+                    BekitzurPaths.modelStore.usable([.hebrewSpeech, .englishSpeech])
+                        ? "Live transcription stopped. The recording goes on, and its Transcript will be made from the recording when you stop."
+                        : "There's no live Transcript until Bekitzur's models are downloaded. The recording goes on, and it's transcribed once they're in.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
                     .font(.callout)
                     .foregroundStyle(.orange)
                     .padding(.horizontal, 16)

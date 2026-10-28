@@ -3,6 +3,7 @@ import AVFoundation
 import BekitzurCapture
 import BekitzurDomain
 import BekitzurLibrary
+import BekitzurModels
 import BekitzurPipeline
 import BekitzurSpeakers
 import BekitzurUpdates
@@ -56,6 +57,21 @@ final class AppModel {
     private(set) var voiceSample: VoiceSample = .idle
     /// What macOS hasn't allowed Bekitzur yet.
     private(set) var missingPermissions: [MissingPermission] = []
+    /// Models whose own file isn't downloaded yet, and the bytes left to download for them.
+    private(set) var missingModels: [ModelFile] = []
+    private(set) var modelBytesLeft: Int64 = 0
+    /// The models' download while it runs, or why it stopped.
+    private(set) var modelDownload: ModelDownload?
+    @ObservationIgnored private var modelTask: Task<Void, Never>?
+
+    struct ModelDownload {
+        /// What's happening, like "Downloading the language model".
+        var step: String
+        /// Bytes downloaded so far, of what was left when it started.
+        var received: Int64 = 0
+        let total: Int64
+        var failure: String?
+    }
     /// A newer version, once a check found one.
     private(set) var availableUpdate: UpdateManifest?
     /// What the updater is doing, while it checks or downloads.
@@ -100,13 +116,17 @@ final class AppModel {
         try? FileManager.default.createDirectory(at: BekitzurPaths.conversations, withIntermediateDirectories: true)
         conversations = library.all()
         reloadPeople()
+        refreshModels()
         // The app quit while these were recording or processing; their audio is on disk, so process it now.
         for info in conversations.reversed() where info.status == .recording || info.status == .processing {
             enqueue(info.id)
         }
         // Coming back from System Settings makes the app active.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in await self?.refreshPermissions() }
+            Task { @MainActor in
+                await self?.refreshPermissions()
+                self?.refreshModels()
+            }
         }
         Task { await refreshPermissions() }
         Task(priority: .utility) { await lineUpEarlierCalls() }
@@ -299,6 +319,95 @@ final class AppModel {
         }
     }
 
+    // MARK: Models
+
+    func refreshModels() {
+        let store = BekitzurPaths.modelStore
+        let missing = store.missing()
+        if missing != missingModels {
+            AppLog.write(missing.isEmpty ? "Every model downloaded" : "Models to download: " + missing.map(\.name).joined(separator: ", "))
+        }
+        missingModels = missing
+        modelBytesLeft = store.remainingBytes(missing)
+    }
+
+    /// What the models note says before a download starts.
+    var modelsMessage: String {
+        let size = modelBytesLeft.formatted(.byteCount(style: .file))
+        if missingModels.allSatisfy({ BekitzurPaths.modelStore.installed($0) != nil }) {
+            return missingModels.count == 1
+                ? "A new \(missingModels[0].name.lowercased()) is ready to download (\(size))."
+                : "New models are ready to download (\(size))."
+        }
+        return "Bekitzur needs its speech and language models to transcribe and write Notes: \(size) to download."
+    }
+
+    /// Downloads the missing models, then the speaker models, and processes the Conversations that waited for them.
+    func downloadModels() {
+        guard modelTask == nil else { return }
+        let store = BekitzurPaths.modelStore
+        let files = store.missing()
+        let total = store.remainingBytes(files)
+        // The speaker models take another 250 MB or so.
+        let needed = total + 500_000_000
+        if let free = store.freeSpace(), free < needed {
+            let failure = "Bekitzur needs \(needed.formatted(.byteCount(style: .file))) free for its models, and this Mac has \(free.formatted(.byteCount(style: .file)))."
+            modelDownload = ModelDownload(step: "", total: total, failure: failure)
+            AppLog.write("Models not downloaded: \(failure)")
+            return
+        }
+        AppLog.write("Downloading the models: \(files.map(\.name).joined(separator: ", ")), \(total.formatted(.byteCount(style: .file))) to go")
+        modelDownload = ModelDownload(step: "Starting the download", total: total)
+        modelTask = Task { await runModelDownload(files, into: store) }
+    }
+
+    /// Stops the download; what arrived stays, and the next download continues from it.
+    func stopModelDownload() {
+        modelTask?.cancel()
+    }
+
+    private func runModelDownload(_ files: [ModelFile], into store: ModelStore) async {
+        let downloader = ModelDownloader(log: { AppLog.write("Model download: \($0)") })
+        var finished: Int64 = 0
+        do {
+            for file in files {
+                let started = Date()
+                let had = file.bytes - store.remainingBytes([file])
+                let before = finished
+                modelDownload?.step = "Downloading the \(file.name.lowercased())"
+                try await downloader.download(file, into: store) { progress in
+                    Task { @MainActor in AppModel.shared.modelDownloadProgressed(progress, file: file, had: had, before: before) }
+                }
+                finished += file.bytes - had
+                store.removeReplaced(by: file)
+                AppLog.write(String(format: "Downloaded the %@ in %.0f s", file.name.lowercased(), Date().timeIntervalSince(started)))
+            }
+            modelDownload?.step = "Downloading the speaker models"
+            try await SpeakerModels.download()
+            modelDownload = nil
+            AppLog.write("Models ready")
+        } catch is CancellationError {
+            modelDownload = nil
+            AppLog.write("Model download stopped; the next one continues from here")
+        } catch {
+            var reason = (error as? ModelDownloadError)?.description ?? error.localizedDescription
+            if !reason.hasSuffix(".") { reason += "." }
+            modelDownload?.failure = "The download stopped: \(reason) Trying again continues from where it stopped."
+            AppLog.write("Model download failed: \(error)")
+        }
+        modelTask = nil
+        refreshModels()
+        processNext()
+    }
+
+    private func modelDownloadProgressed(_ progress: DownloadProgress, file: ModelFile, had: Int64, before: Int64) {
+        guard modelTask != nil, modelDownload?.failure == nil else { return }
+        switch progress {
+        case .received(let bytes): modelDownload?.received = before + max(0, bytes - had)
+        case .checking: modelDownload?.step = "Checking the \(file.name.lowercased())"
+        }
+    }
+
     // MARK: State for the menu bar
 
     var isRecording: Bool { recordingID != nil }
@@ -315,6 +424,7 @@ final class AppModel {
     var menuBarSymbol: String? {
         if isRecording { return "record.circle.fill" }
         if processingID != nil { return "hourglass" }
+        if let modelDownload, modelDownload.failure == nil { return "arrow.down.circle" }
         return nil
     }
 
@@ -338,7 +448,8 @@ final class AppModel {
             try library.save(info)
             let id = info.id
             var live: LiveTranscriber?
-            if Self.transcribesLive, let app = Bundle.main.executableURL {
+            let speechModels = BekitzurPaths.modelStore.usable([.hebrewSpeech, .englishSpeech])
+            if Self.transcribesLive, speechModels, let app = Bundle.main.executableURL {
                 let helper = HelperChunkTranscriber(executable: app, arguments: [Entry.liveTranscriptionArgument, LiveTranscriptionHelper.detect])
                 live = LiveTranscriber(
                     language: lastLanguage,
@@ -367,6 +478,10 @@ final class AppModel {
             conversations = library.all()
             selection = info.id
             AppLog.write("\(info.id): recording started")
+            if !speechModels {
+                liveStopped.insert(info.id)
+                AppLog.write("\(info.id): no live Transcript, since the speech models aren't downloaded")
+            }
         } catch {
             AppLog.write("Recording not started: \(error)")
             alert = "Couldn't start recording: \(error)"
@@ -500,6 +615,10 @@ final class AppModel {
 
     private func processNext() {
         guard processingID == nil, !waiting.isEmpty else { return }
+        guard BekitzurPaths.modelStore.usable() else {
+            for id in waiting { update(id) { $0.step = "Waiting for the models" } }
+            return
+        }
         let id = waiting.removeFirst()
         guard let info = conversations.first(where: { $0.id == id }) else { return processNext() }
         processingID = id
