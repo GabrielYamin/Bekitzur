@@ -93,7 +93,7 @@ Its commands are `process` (Transcript, Speakers, and Notes for one recording), 
    git push origin v0.3.1
    ```
 
-3. The Release workflow ([.github/workflows/release.yml](.github/workflows/release.yml)) tests and packages the app on GitHub's macOS 26 runner, signs `update.json`, and publishes it with `Bekitzur.zip` as a release of Bekitzur-releases, along with `release/README.md`. Installed copies find it within six hours, or right away with Check for Updates….
+3. The Release workflow ([.github/workflows/release.yml](.github/workflows/release.yml)) tests and packages the app on GitHub's macOS 26 runner, signs `update.json`, and publishes it with `Bekitzur.zip` as a release of Bekitzur-releases, along with `release/README.md` and `LICENSE`. Installed copies find it within six hours, or right away with Check for Updates….
 
 The app installs only releases signed with the key whose public half is `BekitzurUpdatePublicKey` in `App/Info.plist`.
 

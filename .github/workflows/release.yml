@@ -77,17 +77,28 @@ jobs:
           gh release create "$TAG" build/Bekitzur.zip build/update.json \
             --repo "$RELEASES_REPO" --title "Bekitzur ${TAG#v}" --notes-file build/notes.md
 
-      - name: Publish the README
+      - name: Publish the README and license
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           RELEASES_REPO: ${{ vars.RELEASES_REPO }}
         run: |
-          published=$(gh api "repos/$RELEASES_REPO/contents/README.md" --jq '.content' 2>/dev/null | base64 --decode 2>/dev/null || true)
-          if [ "$published" != "$(cat release/README.md)" ]; then
-            sha=$(gh api "repos/$RELEASES_REPO/contents/README.md" --jq '.sha' 2>/dev/null || true)
-            gh api --method PUT "repos/$RELEASES_REPO/contents/README.md" -f message="Update the README" \
-              -f content="$(base64 < release/README.md | tr -d '\n')" ${sha:+-f sha="$sha"} > /dev/null
-            echo "README updated"
-          else
-            echo "README already current"
-          fi
+          # publish <path in the releases repository> <file here>
+          publish() {
+            local sha published=""
+            # For a file that isn't there yet, gh api prints the error instead of applying --jq, so only its exit
+            # status says whether there's a sha.
+            if sha=$(gh api "repos/$RELEASES_REPO/contents/$1" --jq '.sha' 2>/dev/null); then
+              published=$(gh api "repos/$RELEASES_REPO/contents/$1" --jq '.content' | base64 --decode)
+            else
+              sha=""
+            fi
+            if [ "$published" = "$(cat "$2")" ]; then
+              echo "$1 already current"
+              return
+            fi
+            gh api --method PUT "repos/$RELEASES_REPO/contents/$1" -f message="Update $1" \
+              -f content="$(base64 < "$2" | tr -d '\n')" ${sha:+-f sha="$sha"} > /dev/null
+            echo "$1 updated"
+          }
+          publish README.md release/README.md
+          publish LICENSE LICENSE
