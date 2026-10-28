@@ -23,14 +23,20 @@ struct NotesCommand: AsyncParsableCommand {
     @Option(help: "Write the Notes as JSON to this file.")
     var json: String?
 
+    @Option(help: "Write the draft, before the model checked it item by item, as JSON to this file.")
+    var draft: String?
+
     func run() async throws {
         let (turns, header) = try loadTurns(URL(filePath: input))
         guard let day = (date ?? header.date).flatMap(parseDay) else {
             throw ValidationError("Give the Conversation date with --date YYYY-MM-DD")
         }
         let model = try LanguageModel(modelURL: URL(filePath: model))
-        let (notes, completion) = try NotesWriter(model: model).write(turns: turns, date: day, language: header.language)
+        let started = Date()
+        let (notes, draftNotes, completion) = try NotesWriter(model: model).write(turns: turns, date: day, language: header.language)
         try output(notes, completion: completion, json: json)
+        if let draft { try writeJSON(draftNotes, to: draft) }
+        log(String(format: "Draft and check: %.1f s", Date().timeIntervalSince(started)))
     }
 }
 
@@ -81,13 +87,15 @@ func output(_ notes: Notes, completion: Completion?, json: String?) throws {
         print("Open Questions:")
         notes.openQuestions.forEach { print("- \($0.text) [\($0.sourceTurns.joined(separator: ", "))]") }
     }
-    if let json {
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
-        try encoder.encode(notes).write(to: URL(filePath: json))
-    }
+    if let json { try writeJSON(notes, to: json) }
     if let completion {
         log(String(format: "Notes: %d prompt tokens, %d output tokens, %.1f s", completion.promptTokens, completion.outputTokens, completion.seconds))
     }
+}
+
+func writeJSON(_ notes: Notes, to path: String) throws {
+    let encoder = JSONEncoder()
+    encoder.keyEncodingStrategy = .convertToSnakeCase
+    encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
+    try encoder.encode(notes).write(to: URL(filePath: path))
 }

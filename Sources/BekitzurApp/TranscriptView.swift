@@ -213,6 +213,16 @@ private struct TranscriptLines: View {
                 guard follow, playback.isPlaying, let line else { return }
                 withAnimation { proxy.scrollTo(line, anchor: .center) }
             }
+            // A Source in the Notes or a quote in an answer opens the Transcript already playing, on a line that won't
+            // change again for a while.
+            .onAppear {
+                guard follow, playback.isPlaying else { return }
+                Task { @MainActor in
+                    if let word = TranscriptLine.word(at: playback.time, starts: starts) {
+                        proxy.scrollTo(lineOfWord[word], anchor: .center)
+                    }
+                }
+            }
             .onChange(of: Int(playback.time / 5)) {
                 if playback.isPlaying { actions.listened(playback.time) }
             }
