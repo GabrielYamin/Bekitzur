@@ -1,0 +1,24 @@
+{
+  "decisions": [
+    {"id": "D1", "label": "Mike joins the platform team in January", "turns": [17], "also_turns": []},
+    {"id": "D2", "label": "Build Parquet only for now; add CSV only if product asks", "turns": [9], "also_turns": []}
+  ],
+  "action_items": [
+    {"id": "B1", "label": "Omer pings the data team lead today to unblock warehouse API access", "turns": [5], "also_turns": [4], "owner": ["omer"], "due": {"date": "2026-10-14"}},
+    {"id": "B2", "label": "Mike finishes the billing export by the end of the month (soft estimate)", "turns": [6], "also_turns": [], "owner": ["mike"], "due": {"date": "2026-10-31"}, "optional": true},
+    {"id": "B3", "label": "Mike writes a short doc on what he'd own on platform by next Monday", "turns": [20], "also_turns": [19], "owner": ["mike"], "due": {"date": "2026-10-19"}},
+    {"id": "B4", "label": "Omer sends Mike the promotion criteria doc", "turns": [21], "also_turns": [], "owner": ["omer"], "due": {"null": true}},
+    {"id": "B5", "label": "Omer asks finance about KubeCon budget and replies by Friday", "turns": [23], "also_turns": [22], "owner": ["omer"], "due": {"date": "2026-10-16"}}
+  ],
+  "open_questions": [
+    {"id": "Q1", "label": "Does product want CSV in addition to Parquet?", "turns": [8], "also_turns": [7, 9]},
+    {"id": "Q2", "label": "Will there be a team offsite this quarter?", "turns": [26, 27], "also_turns": []}
+  ],
+  "borderline": [
+    {"kind": "open_question", "label": "Is there budget for KubeCon? (Omer is checking)", "turns": [22, 23]}
+  ],
+  "traps": [
+    {"kind": "action_item", "label": "On-call shadowing (offered, then cancelled)", "turns": [12, 13]},
+    {"kind": "action_item", "label": "Rewrite the billing pipeline (wishful)", "turns": [10, 11]}
+  ]
+}

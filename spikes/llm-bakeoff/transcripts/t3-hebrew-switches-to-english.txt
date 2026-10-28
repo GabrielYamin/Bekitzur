@@ -1,0 +1,36 @@
+# date: 2026-10-15
+# weekday: Thursday
+# language: Hebrew, switching to English when Mike joins
+[T001] Omer: טוב, בואו נתחיל, מייק יצטרף עוד כמה דקות. דנה, מה מצאתם על ה-502 מיום שישי?
+[T002] Dana: אז יוסי ואני ישבנו על זה אתמול. ה-root cause זה connection pool exhaustion ב-gateway. ה-pool מוגדר ל-50 connections וזה פשוט לא מספיק בשעות עומס.
+[T003] Speaker 2: למה זה קרה דווקא ביום שישי?
+[T004] Dana: היה job של reports שרץ במקביל אצל לקוח גדול ופתח המון requests. זה מילא את ה-pool.
+[T005] Omer: מה ההצעה?
+[T006] Dana: להגדיל את ה-pool ל-200, ולהוסיף alert כשה-pool מגיע לשמונים אחוז.
+[T007] Omer: נשמע הגיוני. מישהו נגד?
+[T008] Speaker 2: לא, רק שזה לא ישפיע על ה-DB.
+[T009] Dana: בדקנו, ה-DB מחזיק את זה בלי בעיה.
+[T010] Omer: אוקיי, אז החלטנו: מגדילים את ה-pool ל-200 ומוסיפים alert על ה-saturation.
+[T011] Dana: אני אעלה PR שמגדיל את ה-pool היום.
+[T012] Omer: ואת ה-alert אני אגדיר בעצמי, יש לי כבר את ה-template.
+[T013] Speaker 2: צריך גם postmortem מסודר, כי זה השפיע על לקוחות.
+[T014] Omer: נכון. מי כותב?
+[T015] Speaker 2: אני אכתוב את ה-postmortem ואשלח לכולם עד ראשון.
+[T016] Dana: אולי כדאי שמישהו יבדוק גם את ה-staging, אולי יש שם אותה בעיה.
+[T017] Omer: אולי.
+[T018] Mike: Hey everyone, sorry I'm late. My previous meeting ran over.
+[T019] Omer: No worries Mike, let's switch to English. Quick recap: Friday's 502s were connection pool exhaustion in the gateway. We're raising the pool to 200 and adding a saturation alert.
+[T020] Mike: Got it. On my side, three of our US customers opened tickets about the outage. One of them is pretty upset.
+[T021] Speaker 2: Did they lose data, or just availability?
+[T022] Mike: Just availability. About twenty minutes of errors.
+[T023] Omer: Okay. I think we should offer them something.
+[T024] Mike: A service credit would go a long way with the upset one.
+[T025] Omer: Yes, let's offer the affected customers a one-month service credit.
+[T026] Speaker 2: Fine by me, I'll make sure finance knows.
+[T027] Mike: Great. I'll email the affected US customers tomorrow with the incident summary and the credit offer.
+[T028] Dana: רגע, איפה ה-dashboard של ה-pool? אה, מצאתי. Sorry. Mike, I can send you the graphs if you want them for the email.
+[T029] Mike: Yes please, that would help.
+[T030] Speaker 2: One question we haven't answered: do we need to notify the compliance team about this incident?
+[T031] Omer: Good question. I genuinely don't know if this counts as a reportable incident. Let's leave it open for now.
+[T032] Mike: Makes sense.
+[T033] Omer: Okay, I think we're done. Thanks everyone.

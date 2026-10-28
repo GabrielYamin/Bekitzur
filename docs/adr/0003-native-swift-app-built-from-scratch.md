@@ -1,0 +1,3 @@
+# Native Swift app, built from scratch
+
+Bekitzur is a native Swift app (SwiftUI, Core Audio, WhisperKit or whisper.cpp, FluidAudio, llama.cpp), written from scratch and borrowing pieces from Muesli (MIT) where useful rather than forking it. Every on-device component we need exists as an Apple Silicon Swift package, and macOS grants system-audio permission most reliably to a signed app bundle; a Tauri/Rust app had weaker on-device speaker separation, and a bundled Python engine is heavy to sign and ship. We didn't fork Muesli despite its near-identical stack because Bekitzur's model (Conversations, Review, Voiceprints, Sources) differs from it, and learning Swift is one of the project's goals.

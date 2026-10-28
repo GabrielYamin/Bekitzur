@@ -1,0 +1,33 @@
+{
+  "decisions": [
+    {"id": "D1", "label": "redis 2.3 release moves from Tuesday to Thursday because of the SSO login regression", "turns": [15], "also_turns": [14, 60]},
+    {"id": "D2", "label": "Stay on Postgres with Aurora PostgreSQL, not DynamoDB", "turns": [43], "also_turns": [39, 42, 44]}
+  ],
+  "action_items": [
+    {"id": "A1", "label": "Dana uploads the SSO login fix today", "turns": [12], "also_turns": [10, 60], "owner": ["dana", "דנה"], "due": {"date": "2026-10-11"}},
+    {"id": "A2", "label": "Noa runs a full regression on the fix by Wednesday evening", "turns": [13], "also_turns": [60], "owner": ["noa", "נועה"], "due": {"date": "2026-10-14"}},
+    {"id": "A3", "label": "Amir updates the release calendar", "turns": [16], "also_turns": [], "owner": ["amir", "אמיר"], "due": {"null": true}},
+    {"id": "A4", "label": "Dana opens a ticket for the flaky CI test and checks the retry logic by tomorrow", "turns": [21], "also_turns": [17, 19, 60], "owner": ["dana", "דנה"], "due": {"date": "2026-10-12"}},
+    {"id": "A5", "label": "Yossi (absent) checks Friday's gateway logs by Thursday", "turns": [29], "also_turns": [27, 28, 60], "owner": ["yossi", "יוסי"], "due": {"date": "2026-10-15"}},
+    {"id": "A6", "label": "Speaker 5 updates the on-call runbook", "turns": [32], "also_turns": [30, 31, 60], "owner": ["speaker 5", "speaker5", "דובר 5"], "due": {"null": true}},
+    {"id": "A7", "label": "Amir writes the Aurora migration design doc with a cutover plan, next week", "turns": [44], "also_turns": [60], "owner": ["amir", "אמיר"], "due": {"range": ["2026-10-18", "2026-10-22"], "null_ok": true}},
+    {"id": "A8", "label": "Omer talks to the PM about the customer escalation tomorrow morning", "turns": [52], "also_turns": [50, 60], "owner": ["omer", "עומר"], "due": {"date": "2026-10-12"}}
+  ],
+  "open_questions": [
+    {"id": "Q1", "label": "Does the DB migration need a security review?", "turns": [45, 46, 47], "also_turns": [48]},
+    {"id": "Q2", "label": "Who covers on-call the week of November 2 while Dana is away?", "turns": [55, 56, 57], "also_turns": []}
+  ],
+  "borderline": [
+    {"kind": "action_item", "label": "Omer will message Yossi", "turns": [29]},
+    {"kind": "action_item", "label": "Omer will tell Dana after talking to the PM", "turns": [54]},
+    {"kind": "action_item", "label": "Decide on-call coverage next week", "turns": [57]}
+  ],
+  "traps": [
+    {"kind": "decision", "label": "Release on Tuesday (later reversed)", "turns": [6]},
+    {"kind": "action_item", "label": "Add more gateway alerts (deferred, nobody took it)", "turns": [34, 35]},
+    {"kind": "action_item", "label": "Rewrite the gateway in Rust (wishful joke)", "turns": [36, 37]},
+    {"kind": "action_item", "label": "QA dashboard (already fixed last Thursday)", "turns": [23]},
+    {"kind": "action_item", "label": "Fix the coffee machine (joke)", "turns": [58, 59]},
+    {"kind": "action_item", "label": "Dana's conditional offer of query data", "turns": [53]}
+  ]
+}

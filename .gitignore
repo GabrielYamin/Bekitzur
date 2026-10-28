@@ -1,0 +1,13 @@
+!CONTEXT.md
+!docs/adr/
+eval/recordings/
+.build/
+build/
+.swiftpm/
+.DS_Store
+__pycache__/
+spikes/llm-bakeoff/results/
+spikes/llm-bakeoff/transcripts/generated/
+
+# Local only: the scripted read and the team's own terms.
+eval/private/

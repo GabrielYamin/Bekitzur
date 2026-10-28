@@ -1,0 +1,72 @@
+# Builds a release when a version tag like v0.2.0 is pushed, and publishes it to the public releases repository.
+#
+# Needs, in this repository's Settings → Secrets and variables → Actions:
+#   - variable RELEASES_REPO: the public repository, like account/bekitzur-releases
+#   - secret RELEASES_TOKEN: a fine-grained token that can write contents of that repository and nothing else
+#
+# The release notes are the tag's message (git tag -a v0.2.0 -m "…"), so only what you write there is public.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reuse downloaded packages and frameworks
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Test
+        run: swift test
+
+      - name: Package
+        env:
+          BEKITZUR_VERSION: ${{ github.ref_name }}
+        run: |
+          export BEKITZUR_VERSION="${BEKITZUR_VERSION#v}"
+          scripts/package.sh
+
+      - name: Describe the release
+        env:
+          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" build/Bekitzur.app/Contents/Info.plist)
+          sha=$(shasum -a 256 build/Bekitzur.zip | cut -d' ' -f1)
+          git tag -l --format='%(contents)' "$TAG" > build/notes.md
+          python3 - "$TAG" "$build" "$sha" "$RELEASES_REPO" <<'EOF'
+          import json, sys
+          tag, build, sha, repo = sys.argv[1:]
+          notes = open("build/notes.md", encoding="utf-8").read().strip()
+          json.dump({
+              "version": tag.removeprefix("v"),
+              "build": build,
+              "url": f"https://github.com/{repo}/releases/download/{tag}/Bekitzur.zip",
+              "sha256": sha,
+              "notes": notes,
+          }, open("build/update.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+          EOF
+          cat build/update.json
+
+      - name: Publish to the releases repository
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" build/Bekitzur.zip build/update.json \
+            --repo "$RELEASES_REPO" --title "Bekitzur ${TAG#v}" --notes-file build/notes.md

@@ -1,0 +1,26 @@
+import Foundation
+
+/// A plain-text log in ~/Library/Logs/Bekitzur. Unlike the system log, it can be read without admin rights.
+enum AppLog {
+    static let url = URL.libraryDirectory.appending(path: "Logs/Bekitzur/Bekitzur.log")
+    private static let queue = DispatchQueue(label: "bekitzur.log")
+
+    static func write(_ message: String) {
+        let line = "\(Date.ISO8601FormatStyle(timeZone: .current).format(Date())) \(message)\n"
+        queue.async {
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            guard let handle = try? FileHandle(forWritingTo: url) else {
+                try? Data(line.utf8).write(to: url)
+                return
+            }
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data(line.utf8))
+        }
+    }
+
+    /// Waits for pending lines, for when the process is about to exit.
+    static func flush() {
+        queue.sync {}
+    }
+}

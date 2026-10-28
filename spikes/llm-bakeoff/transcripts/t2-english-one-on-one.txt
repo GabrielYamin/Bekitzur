@@ -1,0 +1,33 @@
+# date: 2026-10-14
+# weekday: Wednesday
+# language: English
+[T001] Omer: Hey Mike, how's it going? How's the weather in Austin?
+[T002] Mike: Still way too hot for October. I'm good though. Busy week.
+[T003] Omer: I bet. Let's start with billing export. Where are you at?
+[T004] Mike: The Parquet writer is done and tested. The thing blocking me is API access to the data warehouse. I requested it from the data team last week and haven't heard back.
+[T005] Omer: That's been sitting for a week? Okay, I'll ping the data team lead today and get that unblocked.
+[T006] Mike: That would be great. Once I have access, I think I should have the export feature done by the end of the month.
+[T007] Omer: Sounds right. Is product still asking for CSV as well?
+[T008] Mike: That's the thing, nobody knows. Product hasn't decided if they want CSV in addition to Parquet. I asked twice.
+[T009] Omer: Okay. Let's not block on it. Build Parquet only for now, and we'll add CSV if they ask for it.
+[T010] Mike: Works for me. In an ideal world we'd rewrite the whole billing pipeline anyway, it's a mess.
+[T011] Omer: Ha, one day. Not this year.
+[T012] Mike: Also, I saw the on-call schedule. I can take the on-call shadowing next week if you need someone.
+[T013] Omer: Actually, no, skip it this rotation. You're busy enough with billing, I don't want to pile on.
+[T014] Mike: Fair enough.
+[T015] Omer: So, career stuff. Last time you said you wanted to move toward platform work. Still true?
+[T016] Mike: Yeah, definitely. I've been enjoying the infra side a lot more than product features.
+[T017] Omer: Good. I talked to the platform lead and they'd love to have you. So let's do it. You'll join the platform team in January.
+[T018] Mike: Oh wow, that's great. Thank you.
+[T019] Omer: Before that, it would help if you wrote down what you'd want to own there. Just a short doc.
+[T020] Mike: Sure. I'll write up a short doc on what I'd want to own on platform by next Monday.
+[T021] Omer: Perfect. And I'll send you the promotion criteria doc so you can see what senior looks like on that team.
+[T022] Mike: Thanks. One more thing. I'd really like to go to KubeCon in November. Is there budget for that?
+[T023] Omer: I'm not sure. Let me ask finance, I'll get back to you by Friday.
+[T024] Mike: Cool, thanks.
+[T025] Omer: Anything else on your mind?
+[T026] Mike: No, I think that's it. Oh, actually, the team offsite. Are we doing one this quarter?
+[T027] Omer: Honestly, no idea yet. It depends on next year's budget, and nobody's told us anything.
+[T028] Mike: Got it.
+[T029] Omer: Alright, great chat. Talk next week.
+[T030] Mike: See you.

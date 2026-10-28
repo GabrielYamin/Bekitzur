@@ -1,0 +1,3 @@
+# All processing happens on the Mac
+
+Bekitzur transcribes, separates and recognizes Speakers, and writes Notes entirely on the user's Mac: no cloud speech service, no cloud LLM, no server, and no syncing between copies of the app. Meeting audio carries the full content of a conversation plus colleagues' voices, and privacy is a main reason to build this instead of using an existing tool. We accept lower accuracy than cloud speech services (Tamlil, an open-source Hebrew transcriber, chose a cloud provider after benchmarking) and a hardware floor of Apple Silicon with 32 GB of memory. Data leaves the Mac only when the user explicitly shares reviewed Notes.

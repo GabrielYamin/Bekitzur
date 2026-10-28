@@ -1,0 +1,21 @@
+{
+  "decisions": [
+    {"id": "D1", "label": "Raise the gateway connection pool to 200 and add a saturation alert", "turns": [10], "also_turns": [6, 19]},
+    {"id": "D2", "label": "Offer affected customers a one-month service credit", "turns": [25], "also_turns": [24]}
+  ],
+  "action_items": [
+    {"id": "C1", "label": "Dana opens a PR raising the pool to 200 today", "turns": [11], "also_turns": [], "owner": ["dana", "דנה"], "due": {"date": "2026-10-15"}},
+    {"id": "C2", "label": "Omer sets up the pool saturation alert", "turns": [12], "also_turns": [], "owner": ["omer", "עומר"], "due": {"null": true}},
+    {"id": "C3", "label": "Speaker 2 writes the postmortem and sends it by Sunday", "turns": [15], "also_turns": [13, 14], "owner": ["speaker 2", "speaker2", "דובר 2"], "due": {"date": "2026-10-18"}},
+    {"id": "C4", "label": "Mike emails the affected US customers tomorrow with the summary and credit offer", "turns": [27], "also_turns": [], "owner": ["mike", "מייק"], "due": {"date": "2026-10-16"}},
+    {"id": "C5", "label": "Speaker 2 makes sure finance knows about the credits", "turns": [26], "also_turns": [], "owner": ["speaker 2", "speaker2", "דובר 2"], "due": {"null": true}},
+    {"id": "C6", "label": "Dana sends Mike the pool graphs for the customer email", "turns": [28], "also_turns": [29], "owner": ["dana", "דנה"], "due": {"range": ["2026-10-15", "2026-10-16"], "null_ok": true}}
+  ],
+  "open_questions": [
+    {"id": "Q1", "label": "Do we need to notify the compliance team about the incident?", "turns": [30, 31], "also_turns": []}
+  ],
+  "borderline": [],
+  "traps": [
+    {"kind": "action_item", "label": "Check staging for the same problem (vague, nobody took it)", "turns": [16, 17]}
+  ]
+}

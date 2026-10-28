@@ -1,0 +1,323 @@
+# Bekitzur v1 plan
+
+Bekitzur is a native Mac app that records Conversations, transcribes them in Hebrew or English, recognizes who spoke, and writes English Notes for the user to review and share. Everything runs on the user's Mac. Vocabulary is defined in [CONTEXT.md](../CONTEXT.md); the hard-to-reverse decisions are in [docs/adr](adr/).
+
+## Decisions
+
+### Product
+- For the user's team first, installable by anyone on other teams. Each copy is independent; copies never sync or share anything.
+- Reasons to build: privacy, Hebrew accuracy, one tool for every kind of Conversation, and learning (Swift, on-device speech models, local LLMs).
+- v1 is the core only, and it has to work flawlessly before extras are added.
+
+### Platform
+- Native Swift app ([ADR-0003](adr/0003-native-swift-app-built-from-scratch.md)) for Apple Silicon Macs with 32 GB of memory or more, on macOS 26 and later. Test on macOS 27 too.
+- All processing on the Mac: no cloud speech, no cloud LLM, no server ([ADR-0001](adr/0001-all-processing-on-the-mac.md)). Models download once on first run; after that the app works offline.
+- English UI. No telemetry.
+
+### Capture
+- The app records the microphone and the Mac's system audio as two tracks ([ADR-0002](adr/0002-capture-audio-on-the-mac.md)). This covers Teams, Slack huddles, phone calls relayed to the Mac through Continuity, and in-person Conversations.
+- It must work with headphones, laptop speakers, and hybrid rooms, so speaker echo is removed from the microphone track and the microphone is never assumed to be only the user.
+- Recording starts by hand (menu bar or keyboard shortcut) or when the user accepts the app's offer as a call starts. It stops when the call ends. It never records without a click.
+
+### Transcription
+- Runs in chunks during the Conversation, at low priority, with whisper.cpp and ivrit.ai's official GGML files. WhisperKit with the community Core ML conversion was less accurate on the [scripted read](#scripted-read-test).
+- Each Conversation has one language, detected automatically. Hebrew uses ivrit.ai's Whisper large-v3-turbo fine-tune; English uses regular Whisper large-v3-turbo. Review offers "re-transcribe as Hebrew/English".
+- English words inside Hebrew speech are written in English letters.
+- A Vocabulary (a built-in list of common tech terms plus the team's own terms, editable in Settings) fixes English terms after transcription: a Hebrew-letter word whose sounds match a Vocabulary term is proposed for rewriting in English letters, and Gemma confirms each proposal from its sentence. Nothing outside the Vocabulary is ever substituted. Pulled into v1 by the [scripted read test](#scripted-read-test), where English terms were the top error source; the same test showed a style prompt isn't needed.
+- The Transcript is read-only.
+
+### Speakers
+- Speaker separation runs after the Conversation, on both tracks.
+- Speakers are matched against stored Voiceprints: named automatically when the match is confident, offered as "Is this Dana?" when it isn't, and left as "Speaker N" otherwise. Naming a Speaker during Review creates or improves that Participant's Voiceprint.
+- The user's own Voiceprint is enrolled at setup.
+- No consent step: storing colleagues' Voiceprints is the user's responsibility. The People screen renames, merges, and deletes Voiceprints.
+- Participants are not linked to Slack or Jira accounts.
+
+### Notes
+- Written in English by Gemma 4 26B-A4B through llama.cpp, after the Conversation and at low priority.
+- Default sections: summary, Decisions, Action Items, Open Questions. Optional sections in shared Notes, each toggled in Settings: topic outline, Transcript, source links. Review always shows the Transcript and Sources.
+- An Action Item has what, Owner, and due date. The Owner is whoever is named as doing the work, present or not, or an unnamed Speaker who said "I'll take it". Due dates are resolved against the Conversation's date.
+- Due dates are resolved in code from the phrase the model quotes, and a second pass checks each Owner (both from the [LLM bake-off](#llm-bake-off-results)).
+
+### Review
+- Opt-out: everything is kept unless the user removes or edits it, then one "Done reviewing".
+- A Conversation stays Unreviewed, and is flagged in the menu bar and the Conversations list, until its Review is done.
+- Words the Vocabulary rewrote into English letters are marked in the Transcript, showing what was originally transcribed.
+
+### Sharing
+- Clipboard (rich text and Markdown), Markdown file with an optional default folder, macOS Share menu, Jira, and Slack, all in v1 and each switchable in Settings.
+- Jira signs in through Atlassian's MCP server (OAuth 2.1 with PKCE, no secret in the app). What becomes a Jira issue is designed later.
+- Slack is designed later.
+
+### Retention and privacy
+- A Recordings screen lists stored audio and allows deleting it.
+- A Recording is deleted 3 days after its Conversation's Review (configurable).
+- Unreviewed Conversations get reminders; their Recording is deleted after 30 days, with a warning first.
+- Data relies on FileVault and is readable only by the user. No app-level encryption in v1.
+
+### Distribution
+- A zip file. Colleagues click "Open Anyway" once per version. No certificate, since none can be used on this Mac: builds are signed ad-hoc, with a designated requirement that names the bundle identifier instead of the build's hash, so microphone and system-audio permissions can survive updates.
+
+### Later
+Audio file import, search across Conversations, calendar titles and attendees, Apple Reminders, linking Participants to Slack and Jira accounts, the Jira issue design, and the Slack design.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph during [During the Conversation]
+    mic["Microphone track (echo removed)"] --> chunks[Two-track chunks on disk]
+    sys["System audio track (process tap)"] --> chunks
+    chunks --> lid[Language check]
+    lid --> asr["Transcription: ivrit.ai Whisper or Whisper"]
+  end
+  subgraph after [After the Conversation]
+    asr --> diar["Speaker separation (FluidAudio)"]
+    diar --> ident["Speaker recognition (Voiceprints)"]
+    ident --> notes["Notes: Gemma 4 via llama.cpp"]
+    notes --> checks["Date resolver and Owner check"]
+  end
+  checks --> review[Review]
+  review --> share["Share targets"]
+```
+
+```mermaid
+stateDiagram-v2
+  [*] --> Recording
+  Recording --> Processing: call ends or Stop
+  Processing --> Unreviewed: Notes ready
+  Processing --> Failed: error
+  Failed --> Processing: retry
+  Unreviewed --> Reviewed: Done reviewing
+  Reviewed --> [*]
+```
+
+Transcription happens while the Conversation is Recording. Processing covers speaker separation, speaker recognition, and Notes.
+
+### Components
+
+| Module | Responsibility | Built on |
+|---|---|---|
+| `BekitzurDomain` | Domain types: Transcript, Turn, Notes, Voiceprint | Swift |
+| `BekitzurAudio` | Decoding audio files to 16 kHz mono samples | AVFoundation |
+| `BekitzurCapture` | Two-track recording, chunk writer, call detection, Continuity calls | Core Audio process taps, AVAudioEngine voice processing |
+| `BekitzurTranscription` | Language check, chunked transcription, silence filtering, word timestamps, Vocabulary rewrite | whisper.cpp, ivrit.ai GGML |
+| `BekitzurSpeakers` | Speaker separation per track, Voiceprint store and matching, own-voice enrollment | FluidAudio: Sortformer for who spoke when, pyannote community-1 for embeddings |
+| `BekitzurNotes` | Notes extraction, long-Transcript chunking, date resolver, Owner check, quote check | llama.cpp XCFramework, Gemma 4 26B-A4B QAT GGUF |
+| `BekitzurPipeline` | Runs the engine on a Recording, one model at a time; shared by the app and the CLI | the modules above |
+| `BekitzurLibrary` | Conversations, lifecycle, storage, retention jobs | A folder per Conversation with JSON files |
+| `BekitzurModels` | First-run model download, pinned revisions, SHA-256 checks | Hugging Face Hub |
+| `BekitzurShare` | Clipboard, Markdown file, Share menu, Jira, Slack | AppKit, Atlassian MCP |
+| `bekitzur` CLI | Runs the engine on audio files, for development and evaluation | the modules above |
+| App | Menu bar control and windows: Conversations, Review, Recordings, People, Settings, first-run setup | SwiftUI `MenuBarExtra` |
+
+Models and data live in `~/Library/Application Support/Bekitzur/`. Peak memory comes from one model at a time: Whisper during the Conversation, then FluidAudio, then Gemma 4.
+
+### Repository layout
+
+```text
+bekitzur/
+├── CONTEXT.md
+├── docs/            plan, ADRs
+├── Package.swift    Bekitzur modules and the bekitzur CLI
+├── Sources/
+├── Tests/
+├── App/             Info.plist for the app bundle
+├── scripts/         build-app.sh (build, sign, install), test.sh
+├── eval/            scoring scripts for public datasets (no private audio)
+└── spikes/llm-bakeoff/
+```
+
+## LLM bake-off results
+
+From [spikes/llm-bakeoff](../spikes/llm-bakeoff): five synthetic Conversations with answer keys (a Hebrew team sync, an English 1:1, a Hebrew meeting that switches to English, a copy of the Hebrew sync with speech-recognition errors, and a 30-minute padded version of it). Model: Gemma 4 26B-A4B, quantization-aware 4-bit, served by Ollama's llama.cpp runner on an M4 Pro.
+
+- Found every required Action Item (34/34), Decision (10/10), and Open Question (9/9). It didn't mistake any trap for an Action Item: jokes, wishful ideas, finished work, a reversed decision, and a cancelled offer were all left out.
+- Owners: 31/34. All three misses are the same case: "let's ask Yossi to check the logs" was assigned to the person passing on the request.
+- Due dates: 30/34. Weekday arithmetic is inconsistent even with a calendar in the prompt.
+- Speed: reading 640 to 930 tokens per second, writing about 66 per second. A 16,000-token Transcript took 45 seconds, so an hour of Hebrew (about 35,000 tokens) should take about 1.5 minutes.
+- Memory: 14.4 GB of weights plus several GB of working memory at a 32K-token context.
+- Thinking mode is unusable for this task: it looped until the context was full (about 30,000 tokens) without answering.
+
+## First recording test
+
+A 23-second free-form memo (one speaker, Hebrew with English terms), transcribed with whisper.cpp on the M4 Pro:
+
+- ivrit.ai turbo: no word errors and correct punctuation. "deployment" and "CI" came out in English letters, but "staging", the one term with an attached Hebrew prefix, came out as לסטייג'ינג.
+- Regular Whisper turbo: one word error, no punctuation, and both "deployment" and "staging" in Hebrew letters. This confirms ivrit.ai for Hebrew.
+- A prompt listing English words changed nothing. A style prompt (an example Hebrew sentence written with English terms in English letters, such as "אתמול עשינו deploy ל-staging, הרצנו CI ובדקנו את ה-pipeline לפני ה-release.") produced "ל-staging", exactly the target format.
+- Side effects of the style prompt to check on the full scripted read: a stray comma at the start, and one 30-second segment instead of sentence-level timestamps.
+
+## Scripted read test
+
+Lines 1 to 39 of the script (4¼ minutes, 487 words, 69 English terms read), two readers around the Mac's built-in microphone, recorded as a compressed voice memo. Scored with [eval/score_asr.py](../eval/score_asr.py) and [eval/score_speakers.py](../eval/score_speakers.py).
+
+| Setup | Word error rate | Hebrew words right | English terms in English letters |
+|---|---|---|---|
+| ivrit.ai turbo | 16.0% | 97.3% | 13 |
+| ivrit.ai turbo + style prompt | 13.6% | 96.1% | 27 |
+| ivrit.ai turbo + [Gemma post-processing](../eval/latinize.py) | 10.1% | 95.3% | 50 |
+| ivrit.ai turbo + [Vocabulary sound match](../eval/match_vocab.py) | 12.5% | 93.9% | 44 |
+| ivrit.ai turbo + Vocabulary sound match + Gemma verifier | 7.4% | 97.1% | 56 |
+| Same, with looser matching (`--loose`) | 6.2% | 97.1% | 61 (63 counting image/images and alert/alerts) |
+| Regular Whisper turbo | 19.7% | 92.9% | 15 |
+
+- Hebrew is excellent; the remaining errors are almost all English terms, written in Hebrew letters or garbled (registry, routing layer, Rust).
+- The style prompt helps only while whisper.cpp keeps earlier text as context; `-mc 0` drops the prompt, even with `--carry-initial-prompt`.
+- Gemma post-processing without context invents wrong words for garbled terms (קרברוס became "kubernetes", הרנבוק became "remock"), so it isn't usable as is.
+- Vocabulary sound match (consonant sounds against [a 250-term built-in list](../eval/vocabulary/built-in.txt) plus the team list) proposes substitutions; alone it also hits ordinary Hebrew words (תיקון as "token", אתמול as "html"). With Gemma as a verifier that sees the sentence and can only pick one of the proposed terms or reject, all 9 false matches were rejected, all ties were resolved (gateway or github, retry or retro, spike or spec), and no wrong substitution remained. Best setup: plain ivrit.ai with `-mc 0` (no style prompt) plus match and verify.
+- Looser matching (one-sound differences for 4-sound terms, 2-sound terms, hyphenated word pairs such as שהטיים-אאוט) reached 61 of 69, or 63 counting singular-for-plural, with Hebrew untouched. What's left is garbled in the audio (registry, service, Rust, on-call, a mangled release).
+- whisper.cpp vs WhisperKit, same ivrit.ai turbo model (official GGML vs community Core ML conversion): whisper.cpp 16.0% word error rate and 97.3% Hebrew words right in about 10 seconds on the GPU; WhisperKit 20.9% and 95.1% in about 15 seconds on the Neural Engine, after a one-time 4-minute model preparation. Against what was actually said, WhisperKit misheard 7 of the colleague's Hebrew words and whisper.cpp 1. WhisperKit also wrote out the reader's repetitions, which whisper.cpp smoothed over. Chosen: whisper.cpp. If transcription during calls competes with Teams for the GPU, try whisper.cpp's Core ML encoder, which moves only the encoder to the Neural Engine.
+- Verifier lessons (from a bug in the test script): WhisperKit returns one long line, so every item carried the whole transcript, the request overflowed the model's context, Ollama silently cut it, and wrong terms were applied. The verifier now sends about 60 characters around each word, in batches of 20, requires each answer to echo its word, and fails loudly on truncation. Even then, loose matching turned one garbled fragment into a plausible wrong term (סטרי, actually registry, became "stream"), so Review should mark rewritten words and show what was originally transcribed.
+- Safety rule learned: a substitution must never absorb a real word. A space-separated pair העונקו לא matched on-call, swallowed the negation לא, flipped the sentence's meaning, and got past the verifier. Pairs are now matched only when hyphenated, and ties keep the longest prefix so ו and ה survive.
+- Reader effect ([eval/reader_errors.py](../eval/reader_errors.py), comparing where ivrit.ai and regular Whisper agree): reading slips were about 1.5% of Hebrew words for each reader, and against what was actually said ivrit.ai got 390 of 392 Hebrew words right. A few English terms were likely unclear in the audio (both models garbled registry, service, and on-call). Writing recognized English terms in Hebrew letters happened for both readers alike (2 of 17 and 10 of 50 in English letters), so it's model behavior, not reading.
+- Transcription speed: 4¼ minutes of audio in about 10 seconds.
+- Speakers: FluidAudio's offline pipeline found exactly 2 speakers, in about 7 seconds (plus a one-time 82-second model compile). Voiceprints from 30-second voice samples named both correctly for 99.4% of speech time, with wide margins (0.93 vs 0.12 and 0.78 vs 0.07). Two clearly different voices is the easy case; meetings with more and similar voices still need testing.
+
+## English terms from the speech recognition itself
+
+Can recognition get English terms right, rather than a rewrite against a term list afterwards? Three tests on the scripted read (72 terms) and the team meeting, October 20. Today's baseline: ivrit.ai alone 17.0% word errors and 15 of 72 terms in English letters; with the Vocabulary, 8.8% and 56.
+
+- **A prompt** (`bekitzur transcribe --prompt`). whisper.cpp puts a carried prompt first in each 30-second window and fills the rest of the text budget with earlier transcription, so a budget of the prompt's tokens plus one carries the prompt alone (with `-mc 0` there was no prompt at all). A style sentence naming the team's term and no term from the script ("אתמול עשינו deploy ל-staging, פתחנו PR ב-GitHub ועשינו merge ל-branch של [project] לפני ה-demo.") took ivrit.ai from 16 to 31 terms in English letters and from 18.1% to 13.6% word errors, with Hebrew unharmed (scored with whisper-cli). With the Vocabulary after it the gain is gone (8.8% against 9.7%, 55 terms against 57): the prompt writes some terms in misspelled English letters ("flacky", "Gatway", "Rottinglyer"), which the Vocabulary can't repair since it reads only Hebrew letters; it also dropped one word, and the style sentence without the project's name turned gateway into "GitWay" twice. In the team meeting, with two of the team's project names in the sentence, words in English letters went from 43 to 80, among them flag where it had no prefix, but elastic also came out as "lastic", one PubSub disappeared, and expect, tests, and skill stayed in Hebrew letters.
+- **Scoring against the audio** (`bekitzur audio-check`, [eval/audio_check.py](../eval/audio_check.py)). Whisper scores each candidate word's sentence as transcribed and with each matched term, by feeding the text through its decoder. Choosing between terms works: 8 of 8 on the scripted read (gateway or github, spike or spec), and flag above plugin at all 8 places in the team meeting. Choosing between a term and the Hebrew-letter word doesn't: both Whisper models prefer Hebrew letters for these words, so right terms scored from 36 below to 24 above the transcribed word and wrong ones overlapped. Deciding by audio alone reached 40 to 48 terms at the cost of Hebrew words, and as a veto on the verifier it dropped right terms (45 at best). Plugin, alone, can't be rejected for פלאג either: it scores like the right terms tests, pubsub, and expect. About 2 minutes for the team meeting's 16 minutes, unoptimized.
+- **A second run forced to English** ([eval/english_run.py](../eval/english_run.py)). Plain Whisper turbo ignores the translate task, but forced to English it writes a rough translation that keeps English terms in English. Its words within 3 seconds of a Hebrew-letter word, matched by sound, are candidates with no list behind them. In the team meeting they included flag, skills (where the Vocabulary had scale), emulator (master), offboarding (routing), business (license), Microsoft, extension, dependencies, and three internal product names; they missed handler, Parser, tenant, and PubSub. On the scripted read, whose terms the built-in list was built from, they found fewer right terms than the Vocabulary (27 against 33) but gave ordinary Hebrew words far fewer wrong candidates (13 against 78). Ordinary words still get some (אבל as "able", ליצור as "sure"), and the English text falls into repetition loops, so these candidates need the verifier too. About a minute for 16 minutes of audio.
+- **Both sources, the verifier deciding** (`bekitzur english-terms`). On the team meeting with the list as it was before that day (no flag, inventory, elastic, pubsub, or expect), rewritten words went from 44 to 86: flag instead of plugin in all four spellings, inventory, elastic, expect, emulator, skill, business, adoption, and instruction. New errors came with them: names (Dina, Gavri), the English run's misspellings (Pubsa, Bandler, GOLOMO), and Hebrew words (מהצד as "side", הסינכרוני as "asynchronous", דוקומנטציה as "document"). On the scripted read, terms went from 54 to 56 and word errors from 9.2% to 9.0%; with no list at all, the English run alone reached 46 of 72 (the recognizer alone: 15). Letting the audio choose between competing terms made it worse (scale over skill, master over emulator, policy over flaky). Keeping only English-run words that are lowercase entries in the system dictionary (/usr/share/dict/words) or Vocabulary terms removed the names and misspellings, and also Microsoft and offboarding.
+- The verifier is the weak point: a borderline word's answer changes with whatever else is in its batch of 20. With the dictionary filter, it rejected flag for three of the four spellings of פלאג, offered next to plugin exactly as before. Next: show the verifier what the English run heard around each word, and make each answer independent of its batch.
+
+## Phases
+
+Each phase ends with acceptance criteria that are checked before moving on.
+
+### Phase 0: Setup
+- Swift package with the modules above and the `bekitzur` CLI. Swift 6.4 from Command Line Tools builds everything, including the app; Xcode isn't needed.
+  - SwiftUI's `@State` is a macro whose plugin ships only with Xcode, so the app uses `@ViewState`, an alias for the property wrapper underneath.
+  - SwiftPM doesn't pass Swift Testing's macro plugin to the compiler with Command Line Tools alone; `scripts/test.sh` adds it.
+- Signing: ad-hoc, with the designated requirement `identifier "app.bekitzur.mac"` (see `scripts/build-app.sh`). An ad-hoc signature normally identifies the app by the build's hash, which makes macOS ask for permissions again after every build. Whether macOS honors the identifier requirement is checked at the first rebuild after you approve the permissions: the app writes its microphone permission to `~/Library/Logs/Bekitzur/Bekitzur.log` at launch.
+
+### Phase 1: Engine on audio files
+The CLI takes a microphone track and a system-audio track (or one mixed file) plus a Conversation date, and writes the Transcript and Notes as JSON.
+
+1. **Transcription.** Run ivrit.ai Whisper turbo two ways, WhisperKit with a Core ML conversion (ours, via whisperkittools, or the community build) and whisper.cpp with ivrit.ai's official GGML files, and keep the more accurate one. Force the language, filter silence, and don't carry text between windows, which prevents Whisper's hallucination loops. Add the language check with regular Whisper. Then rewrite Hebrew-letter words that match a Vocabulary term by sound into English letters, keeping the Hebrew prefix (ה-gateway), with Gemma verifying each proposal in context (see [scripted read test](#scripted-read-test)).
+2. **Speakers.** FluidAudio offline separation per track; Voiceprints from its speaker embeddings; matching thresholds for named, "Is this…?", and unknown; own-voice enrollment.
+3. **Notes.** Port the bake-off prompt and schema to llama.cpp with a JSON-schema grammar. Add the date resolver, the Owner check pass, and the quote check. Single pass up to about 24,000 tokens, chunked extraction with merging above that. Extend the bake-off harness to run against the CLI, and add an hour-long (about 35,000-token) Hebrew test.
+4. **Scripted read.** You (ideally with a colleague) read the Hebrew test Transcript aloud; the result tests English terms and speaker naming on real voices.
+
+Status (October 19):
+- Built: the `bekitzur` CLI, a Swift package that builds with Command Line Tools alone.
+  - `transcribe`: whisper.cpp with ivrit.ai's GGML; on the same audio its output is identical to whisper-cli's.
+  - `enroll` and `speakers`: FluidAudio separation and Voiceprints; named both readers of the scripted read with the same similarities as the evaluation (0.93 and 0.78), 99% of speech attributed correctly.
+  - Speaker attribution, after the two-person call (a 9-minute voice memo of an English Teams call): pyannote put the user's quick replies at the start (a greeting, "I'm good, thank you") in the other person's voice, and none of its settings for short speech changed that. Now Sortformer gives the timeline and pyannote the embeddings, matched by overlap, with pyannote's timeline above four voices (Sortformer's limit). Whisper's segments are split at Speaker changes using word times from DTW alignment; Whisper's own token times were up to a second off. The call's opening is now right, and the scripted read went from 99% to 100% of speech attributed correctly. DTW needs flash attention off, which makes transcription about 15% slower.
+  - The voice-memo meeting (32 minutes, Hebrew, three people, recorded as a voice memo near the user): the two colleagues were faint, and every voice scored 0.75 to 0.83 against the user's Voiceprint, so embeddings couldn't tell them apart. pyannote heard two voices and Sortformer four, three of them mixtures; evening out the loudness first didn't help either. When the user says how many people spoke and pyannote hears a different number, pyannote is now held to that number and its timeline is used; held to three, it matched the user's account of who spoke at 3:30 and 3:50. A confident Voiceprint match must now also beat every other Speaker's similarity to that Participant by the margin, so a recording like this one gets "Is this Dana?" instead of a wrong name. Both separators label voices "S1", "S2", …, which had merged Sortformer's unmatched voices into matched ones; fixed.
+  - The first marks from listening back (the allocation discussion, 41 seconds): all four were a new Speaker's first words given to the one before. Where Sortformer's turns overlap because one runs on as the next starts, a word now goes to the speaker who started last (a short reply inside a long turn keeps the old rule), and no word counts as longer than 0.6 seconds, since a word's last token can be timed seconds late. All four moved to the user and nothing else changed; the call, the scripted read, and the voice-memo meeting kept their results.
+  - The team meeting marks (16½ minutes, Hebrew, three people, imported): a fourth voice that only Sortformer heard, for 4 seconds at the end, became "Speaker 4". A voice without a pyannote match is now kept only if it speaks at least 5% of the Conversation's speech, between 3 and 10 seconds; otherwise its words go to the Speakers around it, and the same threshold applies when counting pyannote's voices. A 0.4-second Sortformer turn inside another Speaker's turn ("אז" at 0:53) still wins: dropping such turns would have moved about 22 words the user listened to and left unmarked. The call, the scripted read, the allocation discussion, and the voice-memo meeting kept their results.
+  - Recording setup matters more than any setting: calls recorded by Bekitzur put the other side on its own full-level track, and in a room the microphone belongs in the middle of the table.
+  - A call's Speakers are separated per side. The first long call recorded in the app (52 minutes, English, on laptop speakers) came out unusable: the microphone heard the other side as loud as the system audio did (within a decibel or two, second by second), about 10 dB louder than the user, and separating the summed tracks put a third of the speech with a voice from the other side, measured against the tracks themselves (system-audio speech is the other side, microphone-only speech the user's). Silencing the microphone while the system audio had speech didn't change that (32%), so it wasn't the echo alone, and the other side had only two or three voices. Separated on its own, the system audio gave the other side's voices, and the microphone with the other side's speech silenced (Silero, padded 0.3 seconds) gave exactly one voice, the user. Recordings with less than 10 seconds of speech in the system audio, like meetings in a room, are separated as before. On that call, speech with a voice from the other side went from 32% to 0.7%. Words the user says while someone on the other side speaks go to that person.
+  - Naming a Speaker averages its voice into that person's Voiceprint, so naming that call's mixed Speakers broke three Voiceprints: the user's matched a voice from the other side and none of the user's earlier Speakers (0.19 to 0.27), and a colleague's was mostly the user. The user's was rebuilt from their Speakers in seven earlier Conversations (0.68 to 0.96 against each), and the other two were removed to be named again.
+  - `notes`: Gemma 4 through llama.cpp with a JSON grammar, and due dates resolved in code from the quoted phrase.
+  - `process`: all three in one process, one model loaded at a time; the 4¼-minute scripted read went from audio to Notes in 43 seconds.
+- Notes on the five bake-off Conversations: 34/34 Action Items, no traps, Decisions 10/10, Open Questions 9/9, Owners 31/34, due dates 33/34 (Ollama: 30/34).
+  - Gemma's 25 sliding-window layers see only the last 1,024 tokens, but llama.cpp keeps a full-size cache for them by default (6.4 GB at 32,768 tokens), which only rewinding the context needs. Nothing rewinds it, so the cache now holds the window: each loaded model takes about 1.5 GB beyond the model file instead of 7.5 GB. The bake-off scores came out the same, and four of the five Notes were identical; the long one differed in three borderline phrases, as likely right as before. Questions gave the same answers.
+- The Vocabulary rewrite, ported from [eval/match_vocab.py](../eval/match_vocab.py) into `BekitzurVocabulary` and run in the pipeline for Hebrew between Speakers and Notes, with the same language model load. On the scripted read it finds the same 97 candidate words as the prototype; with the verifier, the word error rate went from 17.0% to 8.8–9.0% and English letters from 15 to 55–56 of 72, every rewrite correct. On the voice-memo meeting it rewrote 205 of 4,007 words (Kafka, topic, partitions, consumer, SQS…); missing terms showed up as near-misses (topic as traffic, Confluent as confluence), so messaging terms joined the built-in list (then 309, generated from eval/vocabulary/built-in.txt by scripts/generate-built-in-vocabulary.py). Plural Hebrew words keep the plural (פרטישנים → partitions).
+  - The verifier answers every word, keyed by its id, and the grammar allows each answer only "none" or that word's own candidates. Repeating each Hebrew word (the prototype's safeguard) made answers four times longer; with no key, answers slid onto neighbors; asked to list only the terms, it missed clear terms (43 of 72 instead of 56). It now takes about 20 seconds for the scripted read and 80 for the voice-memo meeting's 32 minutes. Borderline words (one or two per Conversation) can come out differently between runs.
+  - Grammar-constrained generation checks only the likeliest token against the grammar, and the whole vocabulary only when that token doesn't fit; greedy output is identical (checked on two bake-off Conversations) and twice as fast, which is most of the old gap to Ollama.
+  - The team meeting marks showed learning gone wrong. A correction of a project's name after the prefix "ב-" saved "ב", only a prefix, as a spelling of that name, and Update Notes then rewrote the ב in front of other English words ("ב-GRPC" became the project's name followed by "-GRPC"). A spelling now needs at least two sounds, and older ones are dropped when the Vocabulary loads. Corrections that keep the prefix glued to the term ("הInventory", "בPubSub") now teach the spelling too. A term that's already plural isn't pluralized again ("testses"). Missing terms joined the built-in list (now 317): without flag, פלאג became plugin. Update Notes ran the Vocabulary over the stored Transcript, where a word rewritten earlier is no longer in Hebrew letters, so a spelling taught later reached only the corrected word and a removed spelling kept its rewrites; the Vocabulary now always starts from what was transcribed. Run again on the reprocessed team meeting, 81 of its 85 rewritten words came out the same; the other four were borderline (סקיל as scale, where the context suggests skill, which isn't in the Vocabulary).
+- Remaining: the user's words spoken over the other side of a call, which need echo cancellation against the system audio; the Owner check pass (the relayed request is the only Owner error left); an English check and duplicate removal, since Decisions have come back as the Hebrew quote instead of English text, once twice in the same Notes; the language check; a faster Vocabulary check for long Conversations, and near-misses when the right term isn't in the Vocabulary (הדר as header); an hour-long Hebrew test.
+
+Acceptance:
+- Hebrew word error rate on a sample of ivrit.ai's eval-d1 set is within 1 point of ivrit.ai's published 5.3%.
+- In the scripted read, at least 90% of English terms come out in English letters, and every Speaker is either named correctly or left unnamed. A confident wrong name counts as a failure.
+- On the five bake-off Conversations: every required item found, no traps, all Owners and due dates correct, valid JSON every time.
+- One hour of audio: transcription within 8 minutes, speaker separation within 1 minute, and Notes within 3 minutes on the M4 Pro; peak memory under 22 GB.
+
+### V1 for daily testing
+Pulled forward from Phases 2 and 3 so you can test on real Conversations: a menu bar app that records and then writes Notes after the call. Opening the app shows its main window, and it has a Dock icon while a window is open; on a notched MacBook with a full menu bar, the menu bar icon can end up hidden, and the window's toolbar starts and stops recordings too. `scripts/build-app.sh` builds `Bekitzur.app` and installs it in `~/Applications`. `scripts/package.sh` builds it the same way and packs it with `scripts/install.sh` into `build/Bekitzur.zip`, the file to hand someone, without installing it. The icon, a speech bubble holding a waveform, and the menu bar's matching template images (with a dot while a Conversation waits for review) are drawn by `scripts/make-icon.swift` into `App/Resources`, which both scripts copy into the app; it's a classic .icns, since macOS 26's layered icons need Xcode to compile, and macOS shows it without the gray frame it puts around icons that don't fill the rounded square.
+
+Status (October 19):
+- Recording: the microphone (AVAudioEngine, mixed down to mono) and everything the Mac plays (a Core Audio process tap, which needs only the system audio permission), as two AAC tracks in the Conversation's folder.
+- Processing after Stop, one Conversation at a time: the two tracks are mixed, then transcription, Speakers, and Notes run as in the CLI. Conversations interrupted by quitting are processed on the next launch. A "Notes ready" notification opens the Conversation.
+- Review: Notes with Owners, due dates, quotes, and Sources (hover a Source to see the turn); Transcript laid out right to left for Hebrew; Speakers, where naming one updates the Transcript, Owners, and Notes text and remembers the voice; "Is this Dana?" for possible matches; "Done reviewing"; Copy Notes as Markdown; write Notes again, or transcribe again in the other language.
+- Settings: default language, your name and a 30-second voice sample, the People list with Forget.
+- Listening back with the Transcript: a player under the Transcript (space bar, scrubber, 0.75× to 2×) highlights the word being said and scrolls with it, and Sources in the Notes play from their turn. Clicking a word marks it wrong, F marks the word just played, right-clicking a word takes what was said or marks it as said by someone else, and right-clicking a Speaker marks the line's Speaker wrong. Marks and how far the user has listened are saved in the Conversation's flags.json, so accuracy can be measured on real Conversations (unmarked words before that point count as right). "Write Notes again" keeps the Transcript and its marks; transcribing again drops them.
+- Marks fix the Transcript: a word given what was said shows it (green underline, what was transcribed on hover), and a word or line marked "Said by …" another Speaker moves to that Speaker's line (orange). The stored Transcript stays as transcribed, so accuracy can still be measured. When the Notes predate the fixes, the Notes tab offers Update Notes, which checks the English terms and writes the Notes again from the fixed Transcript without the audio. Naming a Speaker carries over to the marks.
+- The Vocabulary learns from fixes: an English term typed for a word transcribed in Hebrew letters saves that spelling (without its prefix) and the term, so later Transcripts get it right without asking the language model. Settings lists the team's terms and the learned spellings, to add or remove. Words the Vocabulary rewrote have a dotted underline, with what was transcribed on hover.
+- Import of recordings made elsewhere, like voice memos: the toolbar's Import button (with the language), dropping files on the Conversation list, or Finder's Open With. A Conversation is dated from the recording's metadata when it has a date, so due dates count from the day it was recorded. The 32-minute Hebrew voice-memo meeting took 2½ minutes, and the user was named from the Voiceprint saved in the English call.
+- A warning on the Conversation when the system audio track is silent and the permission isn't granted. With the permission, silence means nothing played, as in a room: a 3-minute conversation in a room had been warned about.
+- The main window (above the Conversation list) and the menu bar say which permissions macOS hasn't given, microphone, system audio, or notifications, each with a button that asks for it or, once denied, opens its page in System Settings. They're checked at launch, when either shows, and when the app becomes active, as it does coming back from System Settings. System audio has no public status and a tap without it records silence, so it's read from TCC's private interface: in one process it answered 1 and 2 where the microphone's public status said denied and not asked, and 0 for Bekitzur, whose recordings have system audio. The first check found notifications denied, so "Notes ready" had never shown.
+- A live Transcript while recording, about half a minute behind, without Speakers or English terms; it stays on screen while the Notes are written. Starting a recording selects its Conversation, and a timer in the same form as the Transcript's times shows how long it has been going (in the live view, the Conversation list, and the menu bar, whose recording line opens the live view). Both tracks are copied as they're recorded, mixed at 16 kHz, cut into chunks of 20 to 30 seconds at pauses, and transcribed on a low-priority thread, so the recording never waits on it. When the recording stops, the last chunk is transcribed and processing starts from the live Transcript; if it didn't finish (the app quit, the model failed to load), the files are transcribed as before. Checked by running both recordings through the same code (`bekitzur transcribe --live`): on the scripted read, chunks misheard fewer words than one pass over the file (24 against 30) but wrote out more of the reader's repetitions (22 extra words against 9), so after the Vocabulary the error rate against the script went from 9.0% to 10.9%, with English terms at 57 against 55 and Hebrew words at 96.3% against 95.6%. Chunks take as long as one pass (46 against 44 seconds for the 16-minute team meeting), but nearly all of it now happens during the Conversation.
+  - The first live recording crashed after 7½ minutes. whisper.cpp's word timing aborts when a window holds a segment that ends within 0.15 seconds of the window's start (its 7-step median filter is wider than the audio), and the end of every chunk invites that; any 0.13 to 0.2 seconds of speech reproduced it. The app died mid-recording and its unfinished .m4a files couldn't be read, so that Conversation's Notes were written from its live Transcript, which is now the fallback whenever the audio can't be read. Chunks are now decoded as one segment per window, which leaves no remainder window, padded to a second when shorter, and split into sentences afterwards: the same words on both recordings.
+  - Live chunks are transcribed by a helper process, the app itself started with `--live-transcription`, which reads chunks on standard input and answers each with a line of JSON. If it dies, live transcription stops for that recording and says so, and the recording goes on. Through the helper (`bekitzur transcribe --live`), the scripted read came out word for word the same, and the team meeting 1,959 of 1,977 words the same: two runs through the helper agree exactly, so that's whisper.cpp decoding borderline words slightly differently in another process.
+  - The second live test (13½ minutes, mostly a quiet room) wrote Knesset openings ("שלום, אדוני היושב-ראש, חברי הכנסת") and "תודה רבה" over room noise at -51 to -56 dBFS, with speech at -40; ivrit.ai's model learned largely from Knesset recordings. One pass over the same file did the same and then hit the word-timing abort too. Chunks now go through Silero voice activity detection (FluidAudio's) in the helper and only speech is transcribed, stretches less than 2 seconds apart joined. A one-segment decode can end early (over a sound effect in the voice-memo meeting, losing 25 words), so when at least 2 seconds of uninterrupted speech follow its last word, it resumes from that word. On the quiet test, 13 invented lines became one short Knesset line and a few one-word "תודה" on clicks; the scripted read and the team meeting came out the same (19.7%, 1,981 words), and the voice-memo meeting kept its faint colleagues (3,995 words against 4,007 in one pass). Processing without a finished live Transcript also transcribes through the helper now, so whisper.cpp never runs in the app.
+- Recordings survive a crash: tracks are written as ADTS AAC, where every frame carries its own header, so whatever reached the disk can be read (all but about the last second); an .m4a can't be opened until it's finished. Processing turns each track into an .m4a holding the same frames, without re-encoding, including on the next launch after a crash.
+- A call's two tracks are lined up. Each file used to start at its own device's first sound, and the microphone, started second, ran 9 to 212 ms ahead of the system audio in three calls; on laptop speakers, the copy of the call in the microphone then played before the call itself, an echo in playback and in what was transcribed. Both files now start when recording starts, each with silence until its device's first sound by the buffers' capture times, and the live Transcript hears the same silence. Earlier calls are measured once, from the speakers' copy of the call in the microphone (cross-correlation in the speech band over the system audio's loudest 10-second stretches; `bekitzur align` prints it), and playback and processing start their microphone that much later: on the October 28 call, the copy went from 59.3 ms early to 0.1 ms.
+- Ask: questions about a Conversation (its Ask tab, or `bekitzur ask <folder> <questions…>`), answered from its Transcript with the user's fixes and nothing else. Gemma answers quotes first: each must be at least two words and appear in the turn it cites (ignoring punctuation and case), quotes that don't are dropped, and an answer left with none becomes "This isn't in the Conversation", whatever the model wrote. Each quote plays from its turn. Follow-up questions continue the same chat instead of reading the Transcript again; the sliding-window layers keep only the last 1,024 tokens, so the context can't be rewound and starts over when it fills. A chat that starts over (after five idle minutes, a question about another Conversation, a fix to the Transcript, or a full context) is given the last ten questions with the answers the user saw: after a reset, "What did he say about it?" was answered about the right colleague, where without them it came back as not in the Conversation, and a follow-up to a question the meeting doesn't answer ("Who approved it?" after the budget) still came back as not in the Conversation. On the 16-minute team meeting the first answer took 14 seconds (loading the model and reading the meeting) and follow-ups 0.2 to 5.6. The two answerable test questions came back right, in English and in Hebrew; two the meeting never discussed (moving to Kafka, next quarter's budget) came back as not in the Conversation; and "And who will write the tests for it?" got the nearest lines (a colleague on CI), quoted correctly but answering a nearby question. Some answerable questions come back as not in the Conversation because Gemma gives no evidence at all, not because a quote fails the check: "What was decided?" on a 52-minute English meeting whose Notes have a Decision, and the flag question asked in English, which in Hebrew got three quotes. Questions and answers are kept only while the app runs and aren't logged; the model is unloaded after five idle minutes.
+- A log at `~/Library/Logs/Bekitzur/Bekitzur.log`: launches with the microphone permission, recordings, processing steps with timings, item counts, and errors. Reading the system log needs admin rights, which this Mac's account doesn't have.
+- Verified without the UI: the app processed a Conversation staged from the scripted read (4¼ minutes, 32 seconds in the app); unit tests cover Speaker renaming, Markdown, due dates, writing both tracks, mixing, and the library.
+- Not yet: echo removal (use headphones on calls), the language check, call detection, retention, and sharing beyond the clipboard. Notes run in a single pass with a 32,000-token context, enough for about two hours of dense Hebrew speech (about 235 tokens a minute); longer Conversations fail with a clear message.
+- Needs your first real recording: the permission prompts, and capture from Teams, Slack, and the microphone.
+
+### Phase 2: Capture and transcription during the call
+- Core Audio process tap for system audio, and AVAudioEngine with voice processing for the microphone, written as chunked tracks.
+- Call detection for Teams, Slack, and FaceTime, plus Continuity calls by tapping `com.apple.avconferenced`.
+- Chunked transcription during the call at low priority (built for V1, see the live Transcript above; still to measure: the effect on a Teams call). The language is decided from the first minute of speech; if a later chunk disagrees, the Conversation is re-transcribed at the end.
+
+Acceptance:
+- A 60-minute Teams call records both tracks without gaps, with no noticeable effect on call quality.
+- On laptop speakers, remote voices don't appear a second time in the microphone track's Transcript.
+- The Transcript is complete within 2 minutes of hanging up, and Notes within 5.
+- A Slack huddle, a Continuity phone call, and an in-person Conversation each produce a correct two-track Recording.
+
+### Phase 3: The app
+- Menu bar control: record and stop, status, and the Unreviewed badge.
+- Conversations list; Review window with Speaker naming (play a sample, "Is this Dana?"), Notes editing, Sources that jump to the Transcript and audio, "Done reviewing", and re-transcribe in the other language.
+- Recordings screen (expiry, delete), People screen (rename, merge, delete Voiceprints), and Settings (share targets, optional sections, retention, shortcut, models, Vocabulary).
+- First-run setup: permissions, model download of about 18 GB with resume, own-voice enrollment.
+- Retention jobs and notifications.
+
+Acceptance:
+- A week of daily use on your Mac with no lost Conversation.
+- Retention verified with shifted clocks: Recording deleted 3 days after Review; warning before day 30 for Unreviewed Conversations.
+
+### Phase 4: Sharing
+- Clipboard, Markdown file, and the Share menu.
+- Jira through Atlassian's MCP server, after designing what becomes an issue.
+- Slack, after designing it.
+
+Acceptance: a reviewed Conversation shares correctly to every enabled target.
+
+### Phase 5: Distribution
+- Release zip, signed ad-hoc like development builds, with install steps ("Open Anyway" once per version).
+- Test on a colleague's 32 GB Mac and on macOS 27.
+
+Acceptance: a colleague installs and records a Conversation without help, and an update keeps their permissions.
+
+## Testing
+- **Bake-off harness** (synthetic Conversations with answer keys): the regression suite for every prompt or model change.
+- **Public datasets:** ivrit.ai's Hebrew test sets for word error rate; an English set for the English path; a public meeting set for speaker separation.
+- **Scripted read:** English terms and speaker naming on real voices.
+- **Daily use:** your own Conversations stay on your Mac and never go into git.
+- No LLM-graded scoring: research found LLM judges unreliable on long meetings.
+
+## Risks
+
+| Risk | Mitigation |
+|---|---|
+| ivrit.ai's model writes most English terms in Hebrew letters (scripted read: 13 of 69 in English letters) | Vocabulary-driven style prompt plus rewriting by sound against the Vocabulary only; an unconstrained LLM rewrite invented words in testing |
+| Transcribing during calls competes with Teams for the GPU (whisper.cpp runs on the GPU) | Low priority; whisper.cpp's Core ML encoder to move the encoder to the Neural Engine; measured in Phase 2 |
+| The Vocabulary rewrite turns a garbled fragment into a plausible wrong term | Mark rewritten words in Review with the original transcription; keep matching strict where the verifier is unsure |
+| ivrit.ai's models can't detect language | Separate language check with regular Whisper; re-transcribe option in Review |
+| Gemma 4 gets dates and relayed Owners wrong | Date resolver in code, Owner check pass, bake-off regression suite |
+| Memory on 32 GB Macs with Teams and Chrome open | One model at a time, capped context, no image component loaded |
+| Speaker echo isn't removed by Apple's voice processing, since Teams plays the audio, not Bekitzur | Echo cancellation using the system track as the reference, or dropping duplicated text |
+| The MacBook's microphones pick up people further down the table faintly | Put the Mac, or a USB conference microphone, in the middle of the table. Cleaning the audio before processing made it worse: on the voice-memo meeting, DeepFilterNet 3 (applied to a copy, with and without a 15 dB limit on noise removal) dropped 6 to 27% of the presenter's words and 15 to 37% of the second colleague's, lowered Whisper's confidence on both, turned "exactly once" into nonsense, and didn't help speaker separation. The user's own, near voice was unaffected. Only raising quiet speech (up to 12 or 24 dB, no noise removal) made Whisper slightly more confident on the far voices (the second colleague's unsure tokens went from 12% to 9 to 10%) but slightly worse on the scripted read (word error rate 16.0% to 16.8 to 17.0%), and didn't help separation either. Not adopted; deciding properly needs a far-away scripted read, so accuracy can be measured against a known text instead of confidence. |
+| Call detection: macOS doesn't say which app holds the microphone | Heuristics per app; manual start always available |
+| Continuity capture relies on an undocumented process (`avconferenced`) | Verify early in Phase 2; fall back to speakerphone through the microphone |
+| Voiceprints count as "information of special sensitivity" under Israel's 2025 privacy amendment | Decided: no consent step; the People screen supports deletion; revisit if legal or security asks |
+| CrowdStrike or Defender flags a self-built app that records audio | Check with IT before sharing; Jamf Self Service as a fallback |
+| Atlassian and Slack need one-time admin approval | Request early; clipboard and Markdown work meanwhile |
+| An 18 GB first-run download on the company network | Resumable downloads; an internal mirror if needed |
+
+## What only you can do
+- Allow the microphone and system audio permissions on the first recording, and again after updates if macOS doesn't carry them over.
+- Record the scripted read in Phase 1.
+- Ask the Atlassian admin to allow Bekitzur on the Rovo MCP server before Phase 4.
+- Check with IT or security that a self-built recording app is acceptable before Phase 5.
