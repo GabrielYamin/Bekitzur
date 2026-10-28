@@ -31,21 +31,10 @@ Recordings and personal data stay out of git: `eval/recordings/` and `eval/priva
 ## Working on a new Mac
 
 1. Install the Command Line Tools: `xcode-select --install`.
-2. Clone with the GitHub account's own key, and give the clone that account's identity:
-
-   ```bash
-   git clone -c core.sshCommand="ssh -F /dev/null -i ~/.ssh/private -o IdentitiesOnly=yes -o UseKeychain=yes -o AddKeysToAgent=yes" \
-       git@github.com:GabrielYamin/Bekitzur.git
-   cd Bekitzur
-   git config user.name "Gabriel"
-   git config user.email "43830000+GabrielYamin@users.noreply.github.com"
-   ```
-
-   `-F /dev/null` keeps `~/.ssh/config` from offering GitHub another account's key.
-3. Download the models, about 18 GB at pinned revisions with checksums: `scripts/install.sh`. If it's interrupted, run it again and it picks up where it left off. FluidAudio downloads the speaker models on the first Conversation.
-4. Build the app, install it in `~/Applications`, and open it: `scripts/build-app.sh`.
-5. Run the tests: `scripts/test.sh`. Tests that need the models or the scripted read (`eval/recordings/meeting-1.m4a`, which isn't in git) are skipped without them.
-6. Record once to grant the microphone, system audio, and notification permissions.
+2. Download the models, about 18 GB at pinned revisions with checksums: `scripts/install.sh`. If it's interrupted, run it again and it picks up where it left off. FluidAudio downloads the speaker models on the first Conversation.
+3. Build the app, install it in `~/Applications`, and open it: `scripts/build-app.sh`.
+4. Run the tests: `scripts/test.sh`. Tests that need the models or the scripted read (`eval/recordings/meeting-1.m4a`, which isn't in git) are skipped without them.
+5. Record once to grant the microphone, system audio, and notification permissions.
 
 To bring your data along, copy `~/Library/Application Support/Bekitzur` (its Models folder can download again instead), and `eval/private/` and `eval/recordings/` if you need them.
 
@@ -106,13 +95,7 @@ Its commands are `process` (Transcript, Speakers, and Notes for one recording), 
 
 3. The Release workflow ([.github/workflows/release.yml](.github/workflows/release.yml)) tests and packages the app on GitHub's macOS 26 runner, signs `update.json`, and publishes it with `Bekitzur.zip` as a release of Bekitzur-releases, along with `release/README.md`. Installed copies find it within six hours, or right away with Check for Updates….
 
-The workflow needs these in this repository's settings:
-
-- The variable `RELEASES_REPO`, set to `GabrielYamin/Bekitzur-releases`
-- The secret `RELEASES_TOKEN`, a token that can create releases and edit files in that repository
-- The secret `UPDATE_SIGNING_KEY`, the private key made by `scripts/make-update-key.swift`
-
-The matching public key is `BekitzurUpdatePublicKey` in `App/Info.plist`, and the app installs only releases signed with its private half. That key stays out of git (on this Mac, in `~/.config/bekitzur/update-signing-key`). Keep a copy somewhere safe: apps already installed won't accept releases signed with a new key until they're reinstalled by hand.
+The app installs only releases signed with the key whose public half is `BekitzurUpdatePublicKey` in `App/Info.plist`.
 
 ## Credits
 
