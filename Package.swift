@@ -36,6 +36,7 @@ let package = Package(
         ),
         .target(name: "BekitzurCapture"),
         .target(name: "BekitzurLibrary", dependencies: ["BekitzurDomain"]),
+        .target(name: "BekitzurUpdates"),
         .executableTarget(
             name: "bekitzur",
             dependencies: [
@@ -51,11 +52,14 @@ let package = Package(
         ),
         .executableTarget(
             name: "BekitzurApp",
-            dependencies: ["BekitzurDomain", "BekitzurSpeakers", "BekitzurPipeline", "BekitzurCapture", "BekitzurLibrary", "BekitzurVocabulary"]
+            dependencies: ["BekitzurDomain", "BekitzurSpeakers", "BekitzurPipeline", "BekitzurCapture", "BekitzurLibrary", "BekitzurVocabulary", "BekitzurUpdates"]
         ),
         .testTarget(
             name: "BekitzurTests",
-            dependencies: ["BekitzurDomain", "BekitzurAudio", "BekitzurNotes", "BekitzurPipeline", "BekitzurCapture", "BekitzurLibrary", "BekitzurVocabulary"]
+            dependencies: [
+                "BekitzurDomain", "BekitzurAudio", "BekitzurNotes", "BekitzurPipeline", "BekitzurCapture", "BekitzurLibrary", "BekitzurVocabulary",
+                "BekitzurUpdates",
+            ]
         ),
     ]
 )

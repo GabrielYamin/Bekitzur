@@ -5,6 +5,7 @@ import BekitzurDomain
 import BekitzurLibrary
 import BekitzurPipeline
 import BekitzurSpeakers
+import BekitzurUpdates
 import BekitzurVocabulary
 import Observation
 import SwiftUI
@@ -55,6 +56,16 @@ final class AppModel {
     private(set) var voiceSample: VoiceSample = .idle
     /// What macOS hasn't allowed Bekitzur yet.
     private(set) var missingPermissions: [MissingPermission] = []
+    /// A newer version, once a check found one.
+    private(set) var availableUpdate: UpdateManifest?
+    /// What the updater is doing, while it checks or downloads.
+    private(set) var updateStep: String?
+    @ObservationIgnored private let updater = Updater(
+        feed: Bundle.main.object(forInfoDictionaryKey: "BekitzurUpdateFeed") as? String,
+        publicKey: Bundle.main.object(forInfoDictionaryKey: "BekitzurUpdatePublicKey") as? String,
+        build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+    )
+    @ObservationIgnored private var notifiedUpdate: String?
     var selection: String?
     var alert: String?
 
@@ -98,6 +109,136 @@ final class AppModel {
         }
         Task { await refreshPermissions() }
         Task(priority: .utility) { await lineUpEarlierCalls() }
+        Updater.removeLeftovers(beside: Bundle.main.bundleURL)
+        Task { await checkForUpdatesRegularly() }
+    }
+
+    // MARK: Updates
+
+    var canUpdate: Bool { updater != nil }
+
+    var versionDescription: String {
+        let info = Bundle.main.infoDictionary
+        return "\(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))"
+    }
+
+    /// A minute after launch and every six hours; a new version waits for the user, who's told once.
+    private func checkForUpdatesRegularly() async {
+        guard updater != nil else { return }
+        try? await Task.sleep(for: .seconds(60))
+        while true {
+            await checkForUpdates(manually: false)
+            try? await Task.sleep(for: .seconds(6 * 3_600))
+        }
+    }
+
+    func checkForUpdates(manually: Bool) async {
+        guard let updater, updateStep == nil else { return }
+        if manually { updateStep = "Checking for updates…" }
+        defer { if manually { updateStep = nil } }
+        do {
+            guard let manifest = try await updater.check() else {
+                availableUpdate = nil
+                if manually { inform("Bekitzur is up to date", "This is the newest version, \(versionDescription).") }
+                return
+            }
+            if availableUpdate != manifest { AppLog.write("Update \(manifest.version) (build \(manifest.build)) is available") }
+            availableUpdate = manifest
+            if manually {
+                updateStep = nil
+                installUpdate(manifest)
+            } else {
+                notifyUpdate(manifest)
+            }
+        } catch {
+            AppLog.write("Update check failed: \(error)")
+            if manually { inform("Couldn't check for updates", String(describing: error)) }
+        }
+    }
+
+    /// Asks before installing, and first warns when a recording or processing would be cut short.
+    func installUpdate(_ manifest: UpdateManifest) {
+        guard let updater, updateStep == nil else { return }
+        let notes = manifest.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = (notes.isEmpty ? "" : "\(notes.prefix(800))\n\n") + "Bekitzur restarts to finish. Your Conversations and settings stay."
+        guard ask("Install Bekitzur \(manifest.version)?", message, confirm: "Install", cancel: "Later"), allowInterruption() else { return }
+        let wasBusy = isRecording || processingID != nil
+        updateStep = "Downloading Bekitzur \(manifest.version)…"
+        AppLog.write("Downloading update \(manifest.version)")
+        Task {
+            do {
+                let app = try await updater.download(manifest)
+                updateStep = nil
+                // A recording may have started during the download.
+                if !wasBusy, isRecording || processingID != nil, !allowInterruption() { return }
+                try Updater.replace(Bundle.main.bundleURL, with: app)
+                AppLog.write("Installed update \(manifest.version); restarting")
+                relaunch()
+            } catch {
+                updateStep = nil
+                AppLog.write("Update \(manifest.version) failed: \(error)")
+                inform("Couldn't install Bekitzur \(manifest.version)", String(describing: error))
+            }
+        }
+    }
+
+    /// True when installing cuts nothing short, or the user agrees that it may.
+    private func allowInterruption() -> Bool {
+        if isRecording {
+            return ask(
+                "Bekitzur is recording",
+                "Installing the update stops the recording and restarts Bekitzur. The recording is kept and processed after the restart.",
+                confirm: "Stop Recording and Install", cancel: "Cancel"
+            )
+        }
+        if processingID != nil {
+            return ask(
+                "Bekitzur is processing a Conversation",
+                "Installing the update restarts Bekitzur, and the Conversation is processed again from the start after the restart.",
+                confirm: "Install Now", cancel: "Cancel"
+            )
+        }
+        return true
+    }
+
+    /// Opens the new app once this one has quit; quitting finishes a recording's files first.
+    private func relaunch() {
+        let waiter = Process()
+        waiter.executableURL = URL(filePath: "/bin/sh")
+        waiter.arguments = ["-c", "while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done; /usr/bin/open \"$0\"", Bundle.main.bundleURL.path]
+        try? waiter.run()
+        NSApp.terminate(nil)
+    }
+
+    private func notifyUpdate(_ manifest: UpdateManifest) {
+        guard notifiedUpdate != manifest.build else { return }
+        notifiedUpdate = manifest.build
+        Task {
+            let content = UNMutableNotificationContent()
+            content.title = "Bekitzur \(manifest.version) is available"
+            content.body = "Open Bekitzur to install it."
+            try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: Self.updateNotification, content: content, trigger: nil))
+        }
+    }
+
+    static let updateNotification = "update"
+
+    private func ask(_ title: String, _ message: String, confirm: String, cancel: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: confirm)
+        alert.addButton(withTitle: cancel)
+        NSApp.activate()
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func inform(_ title: String, _ message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        NSApp.activate()
+        alert.runModal()
     }
 
     /// Calls recorded before tracks were lined up while recording: measures once how much later each one's microphone

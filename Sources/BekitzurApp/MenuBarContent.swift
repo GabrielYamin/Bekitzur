@@ -7,6 +7,7 @@ struct MenuBarContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             PermissionsNote(model: model)
+            UpdateNote(model: model)
             if let startedAt = model.recordingStartedAt {
                 Button {
                     model.showMainWindow(selecting: model.recordingID)
@@ -82,6 +83,11 @@ struct MenuBarContent: View {
                 Task { await model.chooseRecordingsToImport() }
             }
             .buttonStyle(.plain)
+            if model.canUpdate {
+                Button(model.updateStep ?? "Check for Updates…") { Task { await model.checkForUpdates(manually: true) } }
+                    .buttonStyle(.plain)
+                    .disabled(model.updateStep != nil)
+            }
             HStack {
                 Button("Open Bekitzur") { model.showMainWindow() }
                 Button("Settings…") { model.showSettings() }

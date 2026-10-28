@@ -2,8 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BekitzurUpdateFeed</key>
+	<string>https://github.com/GabrielYamin/Bekitzur-releases/releases/latest/download/update.json</string>
+	<key>BekitzurUpdatePublicKey</key>
+	<string>PaZJpCM6cc7tu/mfUgTv4DG1AZft4ZHF5bTo0Kgsh/Q=</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Bekitzur</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -19,8 +25,6 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleDisplayName</key>
-	<string>Bekitzur</string>
 	<key>CFBundleExecutable</key>
 	<string>Bekitzur</string>
 	<key>CFBundleIconFile</key>
@@ -41,11 +45,11 @@
 	<string>26.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Bekitzur records the other side of your calls during the Conversations you choose to record. The audio stays on this Mac.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Bekitzur records your microphone during the Conversations you choose to record. The audio stays on this Mac.</string>
-	<key>NSAudioCaptureUsageDescription</key>
-	<string>Bekitzur records the other side of your calls during the Conversations you choose to record. The audio stays on this Mac.</string>
 </dict>
 </plist>

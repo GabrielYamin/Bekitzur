@@ -1,8 +1,10 @@
-# Builds a release when a version tag like v0.2.0 is pushed, and publishes it to the public releases repository.
+# Builds a release when a version tag like v0.2.0 is pushed, and publishes it to the public releases repository,
+# together with release/README.md as that repository's README.
 #
 # Needs, in this repository's Settings → Secrets and variables → Actions:
-#   - variable RELEASES_REPO: the public repository, like account/bekitzur-releases
+#   - variable RELEASES_REPO: the public repository, like account/Bekitzur-releases
 #   - secret RELEASES_TOKEN: a fine-grained token that can write contents of that repository and nothing else
+#   - secret UPDATE_SIGNING_KEY: the private key from scripts/make-update-key.swift, whose public half is in App/Info.plist
 #
 # The release notes are the tag's message (git tag -a v0.2.0 -m "…"), so only what you write there is public.
 name: Release
@@ -35,29 +37,31 @@ jobs:
 
       - name: Package
         env:
-          BEKITZUR_VERSION: ${{ github.ref_name }}
-        run: |
-          export BEKITZUR_VERSION="${BEKITZUR_VERSION#v}"
-          scripts/package.sh
+          TAG: ${{ github.ref_name }}
+        run: BEKITZUR_VERSION="${TAG#v}" scripts/package.sh
 
-      - name: Describe the release
+      - name: Describe and sign the release
         env:
           RELEASES_REPO: ${{ vars.RELEASES_REPO }}
           TAG: ${{ github.ref_name }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
+          version="${TAG#v}"
           build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" build/Bekitzur.app/Contents/Info.plist)
           sha=$(shasum -a 256 build/Bekitzur.zip | cut -d' ' -f1)
+          signature=$(swift scripts/sign-update.swift "$version" "$build" "$sha")
           git tag -l --format='%(contents)' "$TAG" > build/notes.md
-          python3 - "$TAG" "$build" "$sha" "$RELEASES_REPO" <<'EOF'
+          python3 - "$version" "$build" "$sha" "$signature" "$RELEASES_REPO" "$TAG" <<'EOF'
           import json, sys
-          tag, build, sha, repo = sys.argv[1:]
+          version, build, sha, signature, repo, tag = sys.argv[1:]
           notes = open("build/notes.md", encoding="utf-8").read().strip()
           json.dump({
-              "version": tag.removeprefix("v"),
+              "version": version,
               "build": build,
               "url": f"https://github.com/{repo}/releases/download/{tag}/Bekitzur.zip",
               "sha256": sha,
               "notes": notes,
+              "signature": signature,
           }, open("build/update.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
           EOF
           cat build/update.json
@@ -70,3 +74,18 @@ jobs:
         run: |
           gh release create "$TAG" build/Bekitzur.zip build/update.json \
             --repo "$RELEASES_REPO" --title "Bekitzur ${TAG#v}" --notes-file build/notes.md
+
+      - name: Publish the README
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
+        run: |
+          published=$(gh api "repos/$RELEASES_REPO/contents/README.md" --jq '.content' 2>/dev/null | base64 --decode 2>/dev/null || true)
+          if [ "$published" != "$(cat release/README.md)" ]; then
+            sha=$(gh api "repos/$RELEASES_REPO/contents/README.md" --jq '.sha' 2>/dev/null || true)
+            gh api --method PUT "repos/$RELEASES_REPO/contents/README.md" -f message="Update the README" \
+              -f content="$(base64 < release/README.md | tr -d '\n')" ${sha:+-f sha="$sha"} > /dev/null
+            echo "README updated"
+          else
+            echo "README already current"
+          fi

@@ -32,7 +32,12 @@ struct MainWindow: View {
                 return !urls.isEmpty
             }
             .safeAreaInset(edge: .top) {
-                PermissionsNote(model: model).padding(.horizontal, 10).padding(.top, 6)
+                VStack(spacing: 6) {
+                    PermissionsNote(model: model)
+                    UpdateNote(model: model)
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
             }
             .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
         } detail: {

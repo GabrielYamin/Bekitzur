@@ -96,7 +96,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let id = response.notification.request.identifier
-        await MainActor.run { AppModel.shared.showMainWindow(selecting: id) }
+        await MainActor.run {
+            if id == AppModel.updateNotification {
+                AppModel.shared.showMainWindow()
+            } else {
+                AppModel.shared.showMainWindow(selecting: id)
+            }
+        }
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {

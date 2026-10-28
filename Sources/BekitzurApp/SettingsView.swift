@@ -89,6 +89,23 @@ struct SettingsView: View {
                 }
                 Text("Recordings, Transcripts, Notes, and voices stay on this Mac.").font(.callout).foregroundStyle(.secondary)
             }
+
+            Section("Updates") {
+                LabeledContent("Version", value: model.versionDescription)
+                if model.canUpdate {
+                    HStack {
+                        Button("Check for Updates…") { Task { await model.checkForUpdates(manually: true) } }
+                            .disabled(model.updateStep != nil)
+                        if let step = model.updateStep {
+                            ProgressView().controlSize(.small)
+                            Text(step).foregroundStyle(.secondary)
+                        }
+                    }
+                    Text("Bekitzur checks for a new version when it opens and every few hours, and asks before installing it.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
     }
