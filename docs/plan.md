@@ -60,7 +60,7 @@ Bekitzur is a native Mac app that records Conversations, transcribes them in Heb
 - A zip file. Colleagues click "Open Anyway" once per version. No certificate, since none can be used on this Mac: builds are signed ad-hoc, with a designated requirement that names the bundle identifier instead of the build's hash, so microphone and system-audio permissions can survive updates.
 
 ### Later
-Audio file import, search across Conversations, calendar titles and attendees, Apple Reminders, linking Participants to Slack and Jira accounts, the Jira issue design, and the Slack design.
+Audio file import, search across Conversations, calendar titles and attendees, Apple Reminders, linking Participants to Slack and Jira accounts, the Jira issue design, and the Slack design. Newer models to test, checked in October 2026 with a test order for each: [speech and speakers](research/speech-models-2026-10.md), led by NVIDIA's Nemotron 3 Diarization, which FluidAudio already ships, and [Notes](research/notes-models-2026-10.md), led by a longer context for the current Gemma.
 
 ## Architecture
 
