@@ -55,6 +55,10 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Recording") {
+                Toggle("Suggest recording calls", isOn: $model.suggestsCalls)
+                Text("When Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, Bekitzur offers to record, and once it stops, to stop recording. A call can't be seen while it rings, so the offer comes when you answer or join.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 Text("Bekitzur records your microphone and everything your Mac plays. On calls, use headphones so your microphone doesn't pick up the other side a second time.")
                     .font(.callout)
                     .foregroundStyle(.secondary)

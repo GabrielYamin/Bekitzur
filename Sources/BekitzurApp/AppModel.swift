@@ -38,6 +38,20 @@ final class AppModel {
     @ObservationIgnored let vocabularyStore = VocabularyStore(url: BekitzurPaths.vocabulary)
     private(set) var recordingID: String?
     private(set) var recordingStartedAt: Date?
+    /// A call app or browser that took the microphone while nothing was recording, offered in the menu bar and a
+    /// notification until recording starts or the call is over.
+    private(set) var callToRecord: String?
+    /// The app of a call that ended during the recording, with an offer to stop, until recording stops or a call starts.
+    private(set) var endedCall: String?
+    var suggestsCalls: Bool {
+        didSet {
+            UserDefaults.standard.set(suggestsCalls, forKey: "suggestCalls")
+            watchCalls()
+        }
+    }
+    @ObservationIgnored private var callWatch = CallWatch()
+    @ObservationIgnored private var microphoneUsers: MicrophoneUsers?
+    @ObservationIgnored private var callCheck: Task<Void, Never>?
     /// What's been transcribed of a Conversation while it was recorded, until its Notes are written.
     private(set) var liveTranscripts: [String: Transcript] = [:]
     /// Conversations whose live transcription stopped while they were recorded.
@@ -112,6 +126,7 @@ final class AppModel {
     private init() {
         lastLanguage = UserDefaults.standard.string(forKey: "language").flatMap(ConversationLanguage.init(rawValue:)) ?? .hebrew
         userName = UserDefaults.standard.string(forKey: "userName") ?? NSFullUserName()
+        suggestsCalls = UserDefaults.standard.object(forKey: "suggestCalls") as? Bool ?? true
         vocabulary = VocabularyStore(url: BekitzurPaths.vocabulary).load()
         try? FileManager.default.createDirectory(at: BekitzurPaths.conversations, withIntermediateDirectories: true)
         conversations = library.all()
@@ -132,6 +147,7 @@ final class AppModel {
         Task(priority: .utility) { await lineUpEarlierCalls() }
         Updater.removeLeftovers(beside: Bundle.main.bundleURL)
         Task { await checkForUpdatesRegularly() }
+        watchCalls()
     }
 
     // MARK: Updates
@@ -423,6 +439,7 @@ final class AppModel {
     /// What's happening, while recording or processing; otherwise nil, for the app's own bubble.
     var menuBarSymbol: String? {
         if isRecording { return "record.circle.fill" }
+        if callToRecord != nil { return "record.circle" }
         if processingID != nil { return "hourglass" }
         if let modelDownload, modelDownload.failure == nil { return "arrow.down.circle" }
         return nil
@@ -482,6 +499,7 @@ final class AppModel {
                 liveStopped.insert(info.id)
                 AppLog.write("\(info.id): no live Transcript, since the speech models aren't downloaded")
             }
+            checkCall()
         } catch {
             AppLog.write("Recording not started: \(error)")
             alert = "Couldn't start recording: \(error)"
@@ -498,6 +516,7 @@ final class AppModel {
         self.recorder = nil
         recordingID = nil
         recordingStartedAt = nil
+        checkCall()
         let live = liveTranscriber
         liveTranscriber = nil
         update(id) {
@@ -541,6 +560,80 @@ final class AppModel {
         liveTranscripts[id] = transcript
         try? library.save(LiveTranscript(transcript: transcript, complete: true), for: id)
         AppLog.write(String(format: "%@: live Transcript finished %.1f s after stopping, %d segments", id, Date().timeIntervalSince(started), transcript.segments.count))
+    }
+
+    // MARK: Call suggestions
+
+    static let callNotification = "call"
+    static let callEndedNotification = "call ended"
+
+    private func watchCalls() {
+        if suggestsCalls {
+            if microphoneUsers == nil {
+                microphoneUsers = MicrophoneUsers { [weak self] users in self?.microphoneUsersChanged(users) }
+            }
+            microphoneUsers?.start()
+        } else {
+            microphoneUsers?.stop()
+            callCheck?.cancel()
+            callWatch = CallWatch()
+            offerRecording(nil)
+            offerStopping(nil)
+        }
+    }
+
+    private func microphoneUsersChanged(_ users: [String]) {
+        AppLog.write(users.isEmpty ? "No other app is using the microphone" : "Using the microphone: \(users.joined(separator: ", "))")
+        checkCall()
+    }
+
+    /// Offers to record a call, or to stop after one, when the apps using the microphone change, when recording starts or
+    /// stops, and when an offer falls due.
+    private func checkCall() {
+        guard suggestsCalls, let microphoneUsers else { return }
+        switch callWatch.update(using: microphoneUsers.bundleIDs, recording: isRecording, now: Date()) {
+        case .record(let app): offerRecording(app)
+        case .stop(let app): offerStopping(app)
+        case nil: break
+        }
+        if callToRecord != nil, isRecording || callWatch.call == nil { offerRecording(nil) }
+        if endedCall != nil, !isRecording || callWatch.call != nil { offerStopping(nil) }
+        callCheck?.cancel()
+        guard let due = callWatch.nextCheck else { return }
+        callCheck = Task {
+            try? await Task.sleep(for: .seconds(max(0, due.timeIntervalSinceNow)))
+            guard !Task.isCancelled else { return }
+            checkCall()
+        }
+    }
+
+    private func offerRecording(_ app: String?) {
+        callToRecord = app
+        guard let app else { return withdrawNotification(Self.callNotification) }
+        AppLog.write("Offered to record the call in \(app)")
+        notify(Self.callNotification, title: "Record this call?", body: "\(app) started using the microphone.")
+    }
+
+    private func offerStopping(_ app: String?) {
+        endedCall = app
+        guard let app else { return withdrawNotification(Self.callEndedNotification) }
+        AppLog.write("Offered to stop recording, since the call in \(app) ended")
+        notify(Self.callEndedNotification, title: "Did the call end?", body: "\(app) stopped using the microphone. Stop recording and write Notes?")
+    }
+
+    /// A notification with the actions of its category, registered at launch.
+    private func notify(_ identifier: String, title: String, body: String) {
+        Task {
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.categoryIdentifier = identifier
+            try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+        }
+    }
+
+    private func withdrawNotification(_ identifier: String) {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 
     /// Finishes the audio files so the Conversation is processed on the next launch.

@@ -61,6 +61,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
+        UNUserNotificationCenter.current().setNotificationCategories([
+            UNNotificationCategory(identifier: AppModel.callNotification, actions: [UNNotificationAction(identifier: Self.record, title: "Record")], intentIdentifiers: []),
+            UNNotificationCategory(identifier: AppModel.callEndedNotification, actions: [UNNotificationAction(identifier: Self.stop, title: "Stop and write Notes")], intentIdentifiers: []),
+        ])
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
         AppLog.write("Launched build \(version); microphone permission: \(MicrophoneRecorder.permission); system audio permission: \(SystemAudioRecorder.access.rawValue)")
 
@@ -97,13 +101,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         AppLog.flush()
     }
 
+    private static let record = "record"
+    private static let stop = "stop"
+
+    /// Clicking the offer to record a call records it, like its Record button; clicking the one to stop shows the
+    /// recording, since only its button stops it.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let id = response.notification.request.identifier
+        let action = response.actionIdentifier
         await MainActor.run {
-            if id == AppModel.updateNotification {
-                AppModel.shared.showMainWindow()
-            } else {
-                AppModel.shared.showMainWindow(selecting: id)
+            let model = AppModel.shared
+            switch id {
+            case AppModel.updateNotification:
+                model.showMainWindow()
+            case AppModel.callNotification:
+                Task { await model.startRecording() }
+            case AppModel.callEndedNotification:
+                if action == Self.stop { model.stopRecording() } else { model.showMainWindow(selecting: model.recordingID) }
+            default:
+                model.showMainWindow(selecting: id)
             }
         }
     }

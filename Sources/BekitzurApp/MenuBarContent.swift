@@ -24,6 +24,12 @@ struct MenuBarContent: View {
                 }
                 .buttonStyle(.plain)
                 .help("Show the live Transcript")
+                if let app = model.endedCall {
+                    Label("\(app) stopped using the microphone. Did the call end?", systemImage: "phone.down")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Button {
                     model.stopRecording()
                 } label: {
@@ -33,10 +39,15 @@ struct MenuBarContent: View {
                 .tint(.red)
                 .controlSize(.large)
             } else {
+                if let app = model.callToRecord {
+                    Label("\(app) is using the microphone.", systemImage: "phone")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
                 Button {
                     Task { await model.startRecording() }
                 } label: {
-                    Label("Start recording", systemImage: "record.circle").frame(maxWidth: .infinity)
+                    Label(model.callToRecord == nil ? "Start recording" : "Record this call", systemImage: "record.circle").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
