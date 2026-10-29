@@ -3,13 +3,18 @@ import Foundation
 
 /// The apps using the microphone, by bundle ID, from Core Audio's list of the processes doing audio, told whenever it
 /// changes. Bekitzur itself isn't one of them. Reading the list asks for no permission.
+///
+/// A process starting or stopping to use the microphone sends no notice; only the list changing does, when a process
+/// connects to audio, and Slack's helpers stay connected between calls. So the list is read every second while any
+/// microphone is in use, which each input device notices, including while Bekitzur records and keeps one in use itself.
 @MainActor
 public final class MicrophoneUsers {
     public private(set) var bundleIDs: [String] = []
     private let changed: ([String]) -> Void
-    private var processListListener: AudioObjectPropertyListenerBlock?
-    /// A listener on each process's use of the microphone, since the process list doesn't change when it starts.
-    private var inputListeners: [AudioObjectID: AudioObjectPropertyListenerBlock] = [:]
+    private var devicesListener: AudioObjectPropertyListenerBlock?
+    /// A listener on whether each device with an input is in use by any process.
+    private var runningListeners: [AudioObjectID: AudioObjectPropertyListenerBlock] = [:]
+    private var timer: Timer?
 
     public init(changed: @escaping ([String]) -> Void) {
         self.changed = changed
@@ -20,45 +25,60 @@ public final class MicrophoneUsers {
     }
 
     public func start() {
-        guard processListListener == nil else { return }
-        var address = Self.address(kAudioHardwarePropertyProcessObjectList)
-        let listener = listener()
-        guard AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main, listener) == noErr else { return }
-        processListListener = listener
-        refresh()
+        guard devicesListener == nil else { return }
+        var devices = Self.address(kAudioHardwarePropertyDevices)
+        let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in MainActor.assumeIsolated { self?.listenToInputDevices() } }
+        guard AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &devices, .main, listener) == noErr else { return }
+        devicesListener = listener
+        listenToInputDevices()
     }
 
     public func stop() {
-        if let processListListener {
-            var address = Self.address(kAudioHardwarePropertyProcessObjectList)
-            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main, processListListener)
+        if let devicesListener {
+            var devices = Self.address(kAudioHardwarePropertyDevices)
+            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &devices, .main, devicesListener)
         }
-        processListListener = nil
-        var input = Self.address(kAudioProcessPropertyIsRunningInput)
-        for (process, listener) in inputListeners {
-            AudioObjectRemovePropertyListenerBlock(process, &input, .main, listener)
+        devicesListener = nil
+        var running = Self.address(kAudioDevicePropertyDeviceIsRunningSomewhere)
+        for (device, listener) in runningListeners {
+            AudioObjectRemovePropertyListenerBlock(device, &running, .main, listener)
         }
-        inputListeners = [:]
+        runningListeners = [:]
+        timer?.invalidate()
+        timer = nil
         bundleIDs = []
     }
 
-    private func listener() -> AudioObjectPropertyListenerBlock {
-        { [weak self] _, _ in MainActor.assumeIsolated { self?.refresh() } }
+    /// Listens to each device with an input, as devices come and go.
+    private func listenToInputDevices() {
+        let inputs = Self.devices().filter(Self.hasInput)
+        var running = Self.address(kAudioDevicePropertyDeviceIsRunningSomewhere)
+        for device in inputs where runningListeners[device] == nil {
+            let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in MainActor.assumeIsolated { self?.inputUseChanged() } }
+            if AudioObjectAddPropertyListenerBlock(device, &running, .main, listener) == noErr { runningListeners[device] = listener }
+        }
+        for (device, listener) in runningListeners where !inputs.contains(device) {
+            AudioObjectRemovePropertyListenerBlock(device, &running, .main, listener)
+            runningListeners[device] = nil
+        }
+        inputUseChanged()
+    }
+
+    /// Reads the list now, and every second while any microphone is in use.
+    private func inputUseChanged() {
+        refresh()
+        let inUse = runningListeners.keys.contains { Self.uint32($0, kAudioDevicePropertyDeviceIsRunningSomewhere) == 1 }
+        if inUse, timer == nil {
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } }
+        } else if !inUse {
+            timer?.invalidate()
+            timer = nil
+        }
     }
 
     private func refresh() {
-        let processes = Self.processes()
-        var input = Self.address(kAudioProcessPropertyIsRunningInput)
-        for process in processes where inputListeners[process] == nil {
-            let listener = listener()
-            if AudioObjectAddPropertyListenerBlock(process, &input, .main, listener) == noErr { inputListeners[process] = listener }
-        }
-        for (process, listener) in inputListeners where !processes.contains(process) {
-            AudioObjectRemovePropertyListenerBlock(process, &input, .main, listener)
-            inputListeners[process] = nil
-        }
         let own = ProcessInfo.processInfo.processIdentifier
-        let using = processes
+        let using = Self.processes()
             .filter { Self.uint32($0, kAudioProcessPropertyIsRunningInput) == 1 && Self.uint32($0, kAudioProcessPropertyPID).map { Int32(bitPattern: $0) } != own }
             .compactMap { Self.string($0, kAudioProcessPropertyBundleID) }
             .filter { !$0.isEmpty }
@@ -69,12 +89,26 @@ public final class MicrophoneUsers {
     }
 
     private static func processes() -> [AudioObjectID] {
-        var address = address(kAudioHardwarePropertyProcessObjectList)
+        objects(kAudioHardwarePropertyProcessObjectList)
+    }
+
+    private static func devices() -> [AudioObjectID] {
+        objects(kAudioHardwarePropertyDevices)
+    }
+
+    private static func objects(_ selector: AudioObjectPropertySelector) -> [AudioObjectID] {
+        var address = address(selector)
         var size: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr else { return [] }
-        var processes = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &processes) == noErr else { return [] }
-        return Array(processes.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
+        var objects = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &objects) == noErr else { return [] }
+        return Array(objects.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
+    }
+
+    private static func hasInput(_ device: AudioObjectID) -> Bool {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams, mScope: kAudioObjectPropertyScopeInput, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        return AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr && size > 0
     }
 
     private static func address(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
