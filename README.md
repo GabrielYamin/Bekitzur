@@ -8,6 +8,7 @@ This repository is the source. People download the app from [Bekitzur-releases](
 
 - Records the microphone and everything the Mac plays, so both sides of a call, as two tracks lined up by their capture times.
 - Shows a live Transcript while recording, and tells Hebrew from English by the first speech.
+- Offers to record when Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, and to stop once the call is over.
 - Transcribes Hebrew with ivrit.ai's Whisper fine-tune and English with Whisper large-v3-turbo, through whisper.cpp. English terms spoken in Hebrew come out in English letters (the Vocabulary), and corrections teach it new spellings.
 - Separates Speakers with FluidAudio (pyannote community-1 and NVIDIA's Sortformer), and names people it has heard before from their Voiceprints.
 - Writes the Notes with Gemma 4 26B-A4B through llama.cpp. Quotes are checked against the Transcript, and due dates are worked out in code.
