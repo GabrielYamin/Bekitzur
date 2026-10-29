@@ -328,7 +328,10 @@ private struct TranscriptLines: View {
                 .coordinateSpace(.named(WordSelection.space))
                 .gesture(
                     DragGesture(minimumDistance: 4, coordinateSpace: .named(WordSelection.space))
-                        .onChanged { selection.drag(from: $0.startLocation, to: $0.location) }
+                        .onChanged {
+                            WordTooltip.shared.hide()
+                            selection.drag(from: $0.startLocation, to: $0.location)
+                        }
                         .onEnded { _ in selection.endDrag() }
                 )
             }
@@ -480,7 +483,21 @@ private struct WordView: View {
             .contentShape(Rectangle())
             .anchorPreference(key: SelectedWords.self, value: .bounds) { isSelected ? [$0] : [] }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WordSelection.space)) } action: { selection.frames[item.number] = $0 }
-            .onTapGesture { actions.toggle(item.word) }
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let pointer):
+                    if let tip, selection.range == nil, let size = selection.frames[item.number]?.size {
+                        WordTooltip.shared.show(tip, word: item.number, pointer: pointer, size: size)
+                    }
+                case .ended:
+                    WordTooltip.shared.hide(word: item.number)
+                }
+            }
+            .onDisappear { WordTooltip.shared.hide(word: item.number) }
+            .onTapGesture {
+                WordTooltip.shared.hide()
+                actions.toggle(item.word)
+            }
             .contextMenu {
                 if let group = (isSelected ? actions.selected(item.number) : nil)?.flatMap(\.phrase) {
                     Button("Play from here") { actions.play(group[0].word.start) }
@@ -495,7 +512,6 @@ private struct WordView: View {
                     Button("Type what was said…") { actions.correct(item.phrase.map(\.word)) }
                 }
             }
-            .modifier(Tooltip(text: tip))
     }
 
     private var underline: Color {
@@ -505,8 +521,8 @@ private struct WordView: View {
         return .secondary
     }
 
-    /// What the fixes took the place of, as the word's tooltip: what was transcribed before a correction or the
-    /// Vocabulary's spelling, and who it was transcribed as said by. Other words have none, since tooltips show quickly.
+    /// What the fixes took the place of, shown above the word while the pointer is on it: what was transcribed before a
+    /// correction or the Vocabulary's spelling, and who it was transcribed as said by.
     private var tip: String? {
         var parts: [String] = []
         if notSaid {
@@ -556,19 +572,6 @@ private struct SelectionBands: Shape {
             path.addRoundedRect(in: band, cornerSize: CGSize(width: 4, height: 4))
         }
         return path
-    }
-}
-
-/// A tooltip, for the words that have one.
-private struct Tooltip: ViewModifier {
-    let text: String?
-
-    func body(content: Content) -> some View {
-        if let text {
-            content.help(text)
-        } else {
-            content
-        }
     }
 }
 
