@@ -398,7 +398,8 @@ private struct LineView: View, @MainActor Equatable {
             if line.words.isEmpty {
                 DirectionalText(line.text, rightToLeft: direction == .rightToLeft)
             } else {
-                FlowLayout(rightToLeft: direction == .rightToLeft) {
+                let layout = FlowLayout(rightToLeft: direction == .rightToLeft)
+                layout {
                     ForEach(Array(line.words.enumerated()), id: \.element.number) { position, item in
                         WordView(
                             item: item,
@@ -412,6 +413,14 @@ private struct LineView: View, @MainActor Equatable {
                             actions: actions
                         )
                         .layoutValue(key: FlowRun.self, value: runs[position])
+                    }
+                }
+                .backgroundPreferenceValue(SelectedWords.self) { words in
+                    if !words.isEmpty {
+                        GeometryReader { proxy in
+                            SelectionBands(words: words.map { proxy[$0] }, spacing: layout.spacing)
+                                .fill(Color.accentColor.opacity(0.2))
+                        }
                     }
                 }
                 .environment(\.layoutDirection, .leftToRight)
@@ -451,6 +460,7 @@ private struct WordView: View {
     let rightToLeft: Bool
     let selection: WordSelection
     let actions: TranscriptActions
+    @ViewState private var hovering = false
 
     private var corrected: Bool { flag?.correction != nil }
     /// Part of a correction over several words that gave fewer words than were transcribed.
@@ -469,7 +479,16 @@ private struct WordView: View {
             .background(background, in: RoundedRectangle(cornerRadius: 4))
             .environment(\.layoutDirection, rightToLeft ? .rightToLeft : .leftToRight)
             .contentShape(Rectangle())
+            .anchorPreference(key: SelectedWords.self, value: .bounds) { isSelected ? [$0] : [] }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WordSelection.space)) } action: { selection.frames[item.number] = $0 }
+            .onHover { hovering = $0 && tip != nil && selection.range == nil }
+            .overlay(alignment: .top) {
+                if hovering, let tip {
+                    HoverTip(text: tip)
+                        .alignmentGuide(.top) { $0[.bottom] + 4 }
+                        .transition(.asymmetric(insertion: .opacity.animation(.easeIn(duration: 0.1).delay(0.3)), removal: .identity))
+                }
+            }
             .onTapGesture { actions.toggle(item.word) }
             .contextMenu {
                 if let group = (isSelected ? actions.selected(item.number) : nil)?.flatMap(\.phrase) {
@@ -485,7 +504,6 @@ private struct WordView: View {
                     Button("Type what was said…") { actions.correct(item.phrase.map(\.word)) }
                 }
             }
-            .help(helpText)
     }
 
     private var underline: Color {
@@ -495,27 +513,74 @@ private struct WordView: View {
         return .secondary
     }
 
-    private var helpText: String {
-        let transcribed = item.phrase.map { $0.word.transcribed ?? $0.word.text }.joined(separator: " ")
-        guard flag != nil else {
-            return rewritten ? "Transcribed as “\(transcribed)”; click to mark as wrong" : "Click to mark as wrong"
-        }
+    /// What the fixes took the place of, shown while the pointer is on the word: what was transcribed before a correction
+    /// or the Vocabulary's spelling, and who it was transcribed as said by.
+    private var tip: String? {
         var parts: [String] = []
         if notSaid {
             parts.append("Not said: part of what you typed for the words before it")
         } else if corrected || rewritten {
-            parts.append("Transcribed as “\(transcribed)”")
+            parts.append("Transcribed as “\(item.phrase.map { $0.word.transcribed ?? $0.word.text }.joined(separator: " "))”")
         }
         if moved { parts.append("Transcribed as said by \(item.transcribedSpeaker ?? "another speaker")") }
-        if markedWrong { parts.append("Marked wrong") }
-        return parts.joined(separator: "; ")
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 
+    /// The selection is drawn behind the line's words, as one band where they sit side by side.
     private var background: Color {
         if isCurrent { return Color.accentColor.opacity(0.35) }
-        if isSelected { return Color.accentColor.opacity(0.2) }
         if markedWrong { return Color.red.opacity(0.15) }
         return .clear
+    }
+}
+
+/// Where a line's selected words are, to draw the selection behind them.
+private struct SelectedWords: PreferenceKey {
+    static var defaultValue: [Anchor<CGRect>] { [] }
+
+    static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
+        value += nextValue()
+    }
+}
+
+/// The selected words of a line as one highlight: a band over each run of them that sit side by side on a row. An
+/// English run in a Hebrew line can put a word that isn't selected between two that are, which then get a band each.
+private struct SelectionBands: Shape {
+    let words: [CGRect]
+    /// The space between words that sit side by side.
+    let spacing: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var bands: [CGRect] = []
+        for word in words.sorted(by: { ($0.minY, $0.minX) < ($1.minY, $1.minX) }) {
+            if let last = bands.last, abs(last.minY - word.minY) < 1, word.minX - last.maxX <= spacing + 1 {
+                bands[bands.count - 1] = last.union(word)
+            } else {
+                bands.append(word)
+            }
+        }
+        var path = Path()
+        for band in bands {
+            path.addRoundedRect(in: band, cornerSize: CGSize(width: 4, height: 4))
+        }
+        return path
+    }
+}
+
+/// A word's tip, above it like a tooltip but without the wait.
+private struct HoverTip: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.callout)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.background, in: RoundedRectangle(cornerRadius: 5))
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.separator))
+            .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+            .fixedSize()
+            .allowsHitTesting(false)
     }
 }
 
