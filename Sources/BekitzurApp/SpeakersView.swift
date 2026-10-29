@@ -34,7 +34,6 @@ struct SpeakersView: View {
                     .fixedSize()
                     Spacer()
                     Button("Separate Speakers again") { model.separateSpeakersAgain(info.id, people: people) }
-                        .disabled(people == info.people)
                 }
             } footer: {
                 Text("If Bekitzur found the wrong number of people, say how many spoke. Speakers and Notes are made again; the Transcript stays. Names you gave are kept only for voices Bekitzur recognizes.")

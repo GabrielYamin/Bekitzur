@@ -150,12 +150,25 @@ public enum Speakers {
         max(3, min(10, 0.05 * turns.map(\.duration).reduce(0, +)))
     }
 
+    /// How many voices in `turns` speak long enough to count as people.
+    static func voices(in turns: [SpeakerTurn]) -> Int {
+        let minimum = minimumVoiceSeconds(amid: turns)
+        return Dictionary(grouping: turns, by: \.voice).values.filter { $0.map(\.duration).reduce(0, +) >= minimum }.count
+    }
+
     /// Keeps `timeline`'s turns (who spoke when) and gives each of its voices the label and embedding of the
     /// `identities` voice it overlaps most. Voices are matched one to one, longest first. A voice with no match is
     /// dropped when it's too brief to be a person, so its words go to the turns around it; a longer one stays a voice of
     /// its own, without an embedding, unless the user said how many people spoke and `identities` has that many: then it
     /// joins the voice it overlaps most.
+    ///
+    /// A timeline with fewer voices that count as people than `identities` heard two people as one, and then
+    /// `identities` are kept as they are: in a weekly team call, Sortformer gave one voice to two of the three people on
+    /// the other side, whom pyannote told apart, and matching voices one to one left one of them with a second of speech.
+    /// Two Speakers who are one person can be joined by giving them the same name, but two people in one Speaker can only
+    /// be fixed word by word.
     public static func combine(timeline: [SpeakerTurn], identities: [SpeakerTurn], people: Int? = nil) -> [SpeakerTurn] {
+        guard voices(in: timeline) >= voices(in: identities) else { return identities }
         let foldExtraVoices = people != nil && people == Set(identities.map(\.voice)).count
         let minimumVoiceSeconds = minimumVoiceSeconds(amid: timeline)
         let centroids = Dictionary(grouping: identities, by: \.voice).mapValues(weightedMean)

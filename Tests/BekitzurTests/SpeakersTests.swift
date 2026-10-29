@@ -69,6 +69,20 @@ struct SpeakersTests {
         #expect(Set(combined.map(\.voice)) == ["Ron", "Tal", "Maya"])
     }
 
+    /// A weekly team call: on the other side, pyannote told three people apart, and Sortformer gave two of them one voice.
+    @Test func whenTheTimelineHearsTwoPeopleAsOneTheIdentitiesAreKept() {
+        let identities = [
+            turn("S1", 0, 100, guest), turn("S2", 100, 200, user), turn("S3", 200, 300, [0, 0, 1]), turn("S4", 300, 302, [1, 1, 0]),
+        ]
+        let timeline = [turn("S0", 0, 100), turn("S1", 100, 200), turn("S1", 200, 300), turn("S2", 300, 301)]
+
+        let combined = Speakers.combine(timeline: timeline, identities: identities)
+
+        #expect(combined.map(\.voice) == ["S1", "S2", "S3", "S4"])
+        #expect(Speakers.voices(in: timeline) == 2)
+        #expect(Speakers.voices(in: identities) == 3)
+    }
+
     @Test func blipsWithoutAVoiceAreDroppedAndLongerVoicesStayTheirOwn() {
         let identities = [turn("A", 0, 30, guest)]
         let timeline = [turn("S0", 0, 30), turn("S1", 40, 50), turn("S2", 60, 61)]

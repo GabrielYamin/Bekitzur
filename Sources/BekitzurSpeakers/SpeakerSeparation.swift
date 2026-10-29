@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Sortformer follows quick exchanges that the pyannote pipeline folds into the surrounding speaker, but it has no
 /// embeddings and at most four voices. So Sortformer's timeline is used with pyannote's embeddings, which Voiceprints
-/// are made of, unless pyannote hears more than four voices.
+/// are made of, unless pyannote hears more than four voices, or more than Sortformer does (``Speakers/combine(timeline:identities:people:)``).
 ///
 /// When the user says how many people spoke and pyannote hears a different number, pyannote is held to that number
 /// and its own timeline is used: Sortformer can't be told how many voices to find. In a 32-minute meeting recorded as a
@@ -15,10 +15,7 @@ public enum SpeakerSeparation {
         let pyannote = SpeakerSeparator()
         try await pyannote.prepare()
         let identities = try await pyannote.separate(samples)
-        let minimumVoiceSeconds = Speakers.minimumVoiceSeconds(amid: identities)
-        let voices = Dictionary(grouping: identities, by: \.voice)
-            .filter { $0.value.map(\.duration).reduce(0, +) >= minimumVoiceSeconds }
-            .count
+        let voices = Speakers.voices(in: identities)
 
         if let people, people != voices {
             let held = SpeakerSeparator(people: people)
