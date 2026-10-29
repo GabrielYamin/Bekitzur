@@ -67,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         ])
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
         AppLog.write("Launched build \(version); microphone permission: \(MicrophoneRecorder.permission); system audio permission: \(SystemAudioRecorder.access.rawValue)")
+        Task { AppLog.write("At launch, \(await AppModel.notificationSettings())") }
 
         // SIGTERM (pkill, the build script) would otherwise end the process before a recording's files are finished.
         signal(SIGTERM, SIG_IGN)

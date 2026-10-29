@@ -50,14 +50,14 @@ struct CallWatchTests {
         #expect(watch.call == nil)
     }
 
-    @Test func mutingForAWhileIsntTheEndOfTheCall() {
+    @Test func aGapShorterThanTheEndDelayIsntTheEndOfTheCall() {
         var watch = CallWatch()
         _ = watch.update(using: slack, recording: true, now: at(0))
 
-        #expect(watch.update(using: [], recording: true, now: at(10)) == nil)
-        #expect(watch.update(using: slack, recording: true, now: at(25)) == nil)
-        #expect(watch.update(using: [], recording: true, now: at(40)) == nil)
-        #expect(watch.update(using: [], recording: true, now: at(59)) == nil)
+        #expect(watch.update(using: [], recording: true, now: at(30)) == nil)
+        #expect(watch.update(using: slack, recording: true, now: at(30 + CallWatch.endDelay - 1)) == nil)
+        #expect(watch.update(using: [], recording: true, now: at(60)) == nil)
+        #expect(watch.update(using: [], recording: true, now: at(60 + CallWatch.endDelay - 1)) == nil)
         #expect(watch.call == "Slack")
     }
 

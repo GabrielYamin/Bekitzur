@@ -438,7 +438,7 @@ final class AppModel {
 
     /// What's happening, while recording or processing; otherwise nil, for the app's own bubble.
     var menuBarSymbol: String? {
-        if isRecording { return "record.circle.fill" }
+        if isRecording { return endedCall == nil ? "record.circle.fill" : "stop.circle" }
         if callToRecord != nil { return "record.circle" }
         if processingID != nil { return "hourglass" }
         if let modelDownload, modelDownload.failure == nil { return "arrow.down.circle" }
@@ -621,15 +621,48 @@ final class AppModel {
         notify(Self.callEndedNotification, title: "Did the call end?", body: "\(app) stopped using the microphone. Stop recording and write Notes?")
     }
 
-    /// A notification with the actions of its category, registered at launch.
+    /// Shows how Bekitzur's notifications look, and logs how macOS shows them, which the app can't see otherwise.
+    func sendTestNotification() {
+        notify("test", title: "Bekitzur's notifications work", body: "Offers to record a call will look like this.")
+    }
+
+    /// A notification with the actions of its category, registered at launch. What macOS does with it is logged, since
+    /// one it doesn't show fails silently.
     private func notify(_ identifier: String, title: String, body: String) {
         Task {
+            let center = UNUserNotificationCenter.current()
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
             content.categoryIdentifier = identifier
-            try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+            do {
+                try await center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+                AppLog.write("Notification \"\(title)\" sent; \(await Self.notificationSettings())")
+            } catch {
+                AppLog.write("Notification \"\(title)\" not sent: \(error.localizedDescription); \(await Self.notificationSettings())")
+            }
         }
+    }
+
+    /// How macOS shows Bekitzur's notifications, as System Settings → Notifications sets it.
+    nonisolated static func notificationSettings() async -> String {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        let authorization = switch settings.authorizationStatus {
+        case .authorized: "allowed"
+        case .denied: "not allowed"
+        case .notDetermined: "not asked yet"
+        case .provisional: "allowed quietly"
+        case .ephemeral: "allowed for now"
+        @unknown default: "unknown"
+        }
+        let style = switch settings.alertStyle {
+        case .none: "no banners"
+        case .banner: "banners"
+        case .alert: "alerts"
+        @unknown default: "unknown style"
+        }
+        let center = settings.notificationCenterSetting == .enabled ? "in Notification Center" : "not in Notification Center"
+        return "notifications \(authorization), \(style), \(center)"
     }
 
     private func withdrawNotification(_ identifier: String) {
