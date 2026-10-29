@@ -161,7 +161,7 @@ struct TranscriptView: View {
                 lineOfWord: lineOfWord,
                 flags: flags,
                 speakers: result.speakers.map(\.displayName),
-                rightToLeft: result.transcript.language == .hebrew,
+                fallback: result.transcript.language == .hebrew ? .rightToLeft : .leftToRight,
                 follow: follow,
                 playback: playback,
                 actions: actions
@@ -183,7 +183,8 @@ private struct TranscriptLines: View {
     let lineOfWord: [Int]
     let flags: TranscriptFlags
     let speakers: [String]
-    let rightToLeft: Bool
+    /// For a line without letters to tell its direction by.
+    let fallback: TextDirection
     let follow: Bool
     let playback: PlaybackModel
     let actions: TranscriptActions
@@ -200,7 +201,7 @@ private struct TranscriptLines: View {
                             current: currentLine == line.id ? current : nil,
                             flags: flags,
                             speakers: speakers,
-                            rightToLeft: rightToLeft,
+                            fallback: fallback,
                             actions: actions
                         )
                         .equatable()
@@ -235,17 +236,21 @@ private struct LineView: View, @MainActor Equatable {
     let current: Int?
     let flags: TranscriptFlags
     let speakers: [String]
-    let rightToLeft: Bool
+    let fallback: TextDirection
     let actions: TranscriptActions
 
     static func == (a: LineView, b: LineView) -> Bool {
         a.line.id == b.line.id && a.line.start == b.line.start && a.line.speaker == b.line.speaker && a.line.text == b.line.text
-            && a.current == b.current && a.rightToLeft == b.rightToLeft && a.speakers == b.speakers
+            && a.current == b.current && a.fallback == b.fallback && a.speakers == b.speakers
             && a.flags.words == b.flags.words && a.flags.speakers == b.flags.speakers
     }
 
     var body: some View {
         let speakerFlagged = flags.isSpeakerFlagged(lineStartingAt: line.start)
+        // A Hebrew Conversation can switch to English, and either can quote the other.
+        let texts = line.words.isEmpty ? line.text.split(separator: " ").map(String.init) : line.words.map(\.text)
+        let direction = TextDirection.of(texts, fallback: fallback)
+        let runs = TextDirection.runs(texts, in: direction)
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Text(line.speaker).font(.headline)
@@ -266,19 +271,20 @@ private struct LineView: View, @MainActor Equatable {
                 Button("Play from here") { actions.play(line.start) }
             }
             if line.words.isEmpty {
-                DirectionalText(line.text, rightToLeft: rightToLeft)
+                DirectionalText(line.text, rightToLeft: direction == .rightToLeft)
             } else {
-                FlowLayout(rightToLeft: rightToLeft) {
-                    ForEach(line.words, id: \.number) { item in
+                FlowLayout(rightToLeft: direction == .rightToLeft) {
+                    ForEach(Array(line.words.enumerated()), id: \.element.number) { position, item in
                         WordView(
                             item: item,
                             isCurrent: item.number == current,
                             flag: flags.flag(for: item.word),
                             lineSpeaker: line.speaker,
                             speakers: speakers,
-                            rightToLeft: rightToLeft,
+                            rightToLeft: (runs[position] == nil ? direction : direction.opposite) == .rightToLeft,
                             actions: actions
                         )
+                        .layoutValue(key: FlowRun.self, value: runs[position])
                     }
                 }
                 .environment(\.layoutDirection, .leftToRight)

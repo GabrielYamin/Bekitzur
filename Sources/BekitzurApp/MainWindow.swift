@@ -130,17 +130,14 @@ extension ConversationInfo {
 }
 
 extension String {
-    /// More Hebrew (or other right-to-left) letters than Latin ones.
+    /// The direction of most of its words, by `TextDirection.of`; counting letters instead, a Hebrew sentence with a few
+    /// long English terms came out left to right.
+    func direction(fallback: TextDirection) -> TextDirection {
+        TextDirection.of(split(whereSeparator: \.isWhitespace), fallback: fallback)
+    }
+
     var isMostlyRightToLeft: Bool {
-        var rightToLeft = 0, leftToRight = 0
-        for scalar in unicodeScalars where scalar.properties.isAlphabetic {
-            if (0x0590...0x08FF).contains(scalar.value) || (0xFB1D...0xFEFF).contains(scalar.value) {
-                rightToLeft += 1
-            } else {
-                leftToRight += 1
-            }
-        }
-        return rightToLeft > leftToRight
+        direction(fallback: .leftToRight) == .rightToLeft
     }
 }
 

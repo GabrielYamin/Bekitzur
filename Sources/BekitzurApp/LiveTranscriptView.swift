@@ -69,7 +69,7 @@ struct LiveTranscriptView: View {
                                         .font(.caption.monospacedDigit())
                                         .foregroundStyle(.secondary)
                                         .frame(width: 44, alignment: .leading)
-                                    DirectionalText(segment.text, rightToLeft: live?.language == .hebrew)
+                                    DirectionalText(segment.text, rightToLeft: segment.text.direction(fallback: live?.language == .hebrew ? .rightToLeft : .leftToRight) == .rightToLeft)
                                         .textSelection(.enabled)
                                 }
                                 .id(index)
