@@ -1038,18 +1038,29 @@ final class AppModel {
         }
     }
 
-    /// Records what was said instead of a word. An English term typed for a word transcribed in Hebrew letters also
-    /// teaches the Vocabulary that spelling, so later Transcripts get it right.
-    func correct(_ word: TranscriptWord, as said: String, in id: String) {
-        changeFlags(id) { $0.correct(word, as: said) }
+    /// Records what was said instead of words in a row. An English term typed for a word transcribed in Hebrew letters
+    /// also teaches the Vocabulary that spelling, so later Transcripts get it right; over several words, only when each
+    /// got one typed word, since otherwise which spelling goes with which term is a guess.
+    func correct(_ words: [TranscriptWord], as said: String, in id: String) {
+        changeFlags(id) { $0.correct(words, as: said) }
+        let parts = TranscriptFlags.spread(said, over: words.count)
+        guard words.count == 1 || said.split(whereSeparator: \.isWhitespace).count == words.count else { return }
         do {
-            if let learned = try vocabularyStore.learn(transcribed: word.transcribed ?? word.text, correction: said) {
-                vocabulary = vocabularyStore.load()
+            var learnedAny = false
+            for (word, part) in zip(words, parts) {
+                guard let part, let learned = try vocabularyStore.learn(transcribed: word.transcribed ?? word.text, correction: words.count == 1 ? said : part) else { continue }
+                learnedAny = true
                 AppLog.write("Vocabulary learned \(learned.spelling) → \(learned.term)")
             }
+            if learnedAny { vocabulary = vocabularyStore.load() }
         } catch {
             alert = "Couldn't save the Vocabulary: \(error.localizedDescription)"
         }
+    }
+
+    /// Marks words wrong, or takes every mark off them.
+    func mark(_ words: [TranscriptWord], wrong: Bool, in id: String) {
+        changeFlags(id) { $0.mark(words, wrong: wrong) }
     }
 
     // MARK: Vocabulary

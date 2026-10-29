@@ -4,8 +4,9 @@ import Foundation
 /// it), lines with the wrong Speaker, and how far they listened. Unmarked words before that point count as right,
 /// which is what lets accuracy be measured on real Conversations.
 public struct TranscriptFlags: Codable, Sendable, Equatable {
-    /// A marked word. With a `correction`, the text was wrong; with `saidBy`, the Speaker was. With neither, the text
-    /// was wrong and the user didn't say what was said.
+    /// A marked word. With a `correction`, the text was wrong; an empty one means nothing was said there, as when
+    /// "דאטה בייס" was "database". With `saidBy`, the Speaker was wrong. With neither, the text was wrong and the user
+    /// didn't say what was said.
     public struct Word: Codable, Sendable, Hashable {
         public var start: Double
         public var text: String
@@ -48,10 +49,44 @@ public struct TranscriptFlags: Codable, Sendable, Equatable {
     /// Marks the word wrong with what was said instead; an empty correction keeps it marked without one.
     public mutating func correct(_ word: TranscriptWord, as said: String) {
         let said = said.trimmingCharacters(in: .whitespacesAndNewlines)
+        setCorrection(of: word, to: said.isEmpty ? nil : said)
+    }
+
+    /// What was said instead of several words in a row, spread over them by `spread`. Typing nothing keeps them marked
+    /// without a correction.
+    public mutating func correct(_ words: [TranscriptWord], as said: String) {
+        guard words.count > 1 else {
+            if let word = words.first { correct(word, as: said) }
+            return
+        }
+        for (word, part) in zip(words, Self.spread(said, over: words.count)) {
+            setCorrection(of: word, to: part)
+        }
+    }
+
+    /// The words of `said` for `count` words in a row: one each in order, the last taking any left over, and an empty
+    /// correction for words past the last one typed. Nil for each when nothing was typed.
+    public static func spread(_ said: String, over count: Int) -> [String?] {
+        let parts = said.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !parts.isEmpty else { return Array(repeating: nil, count: count) }
+        return (0..<count).map { index in
+            guard index < parts.count else { return "" }
+            return index == count - 1 ? parts[index...].joined(separator: " ") : parts[index]
+        }
+    }
+
+    /// Marks words wrong, or takes every mark off them.
+    public mutating func mark(_ words: [TranscriptWord], wrong: Bool) {
+        for word in words where (flag(for: word) != nil) != wrong {
+            toggle(word)
+        }
+    }
+
+    private mutating func setCorrection(of word: TranscriptWord, to correction: String?) {
         if let index = index(of: word) {
-            words[index].correction = said.isEmpty ? nil : said
+            words[index].correction = correction
         } else {
-            words.append(Word(start: word.start, text: Self.key(word), correction: said.isEmpty ? nil : said))
+            words.append(Word(start: word.start, text: Self.key(word), correction: correction))
         }
     }
 

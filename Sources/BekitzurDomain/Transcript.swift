@@ -105,10 +105,12 @@ public struct Transcript: Codable, Sendable, Equatable {
                 run = []
             }
             for word in words {
-                let speaker = flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers)
-                if !run.isEmpty, speaker != runSpeaker { finishRun() }
                 var shown = word
                 shown.text = flags.text(of: word)
+                // Marked as not said, as part of a correction over several words.
+                guard !shown.text.isEmpty else { continue }
+                let speaker = flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers)
+                if !run.isEmpty, speaker != runSpeaker { finishRun() }
                 runSpeaker = speaker
                 run.append(shown)
             }

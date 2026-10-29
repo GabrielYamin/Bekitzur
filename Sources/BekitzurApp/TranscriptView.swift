@@ -47,7 +47,7 @@ struct TranscriptLine: Identifiable {
                 }
                 let text = flags.text(of: word)
                 words.append(NumberedWord(number: number, word: word, text: text, transcribedSpeaker: segment.speaker))
-                texts.append(text)
+                if !text.isEmpty { texts.append(text) }
                 number += 1
             }
         }
@@ -85,12 +85,54 @@ struct NumberedWord {
 
 /// What the Transcript's words and lines can do, passed down so the rows stay cheap to compare.
 struct TranscriptActions {
+    /// A click on a word: clears the selection if there is one, and otherwise marks the word or takes its mark off.
     let toggle: (TranscriptWord) -> Void
     let assign: ([NumberedWord], String) -> Void
-    let correct: (TranscriptWord) -> Void
+    let correct: ([TranscriptWord]) -> Void
+    let mark: ([TranscriptWord], Bool) -> Void
+    let isMarked: (TranscriptWord) -> Bool
+    /// The selected words, when the word with this number is one of several selected.
+    let selected: (Int) -> [NumberedWord]?
     let toggleSpeaker: (TranscriptLine) -> Void
     let play: (Double) -> Void
     let listened: (Double) -> Void
+}
+
+/// The words dragged across, by number, so marks and corrections can apply to a phrase at once.
+@Observable
+@MainActor
+final class WordSelection {
+    nonisolated static let space = "transcript"
+
+    var range: ClosedRange<Int>?
+    /// The word the drag started on.
+    @ObservationIgnored private var anchor: Int?
+    /// Where each word is in the Transcript's scrolling content, to tell which word a drag is over.
+    @ObservationIgnored var frames: [Int: CGRect] = [:]
+
+    var count: Int { range?.count ?? 0 }
+
+    func drag(from start: CGPoint, to point: CGPoint) {
+        guard let anchor = anchor ?? word(at: start) else { return }
+        self.anchor = anchor
+        guard let end = word(at: point) else { return }
+        range = min(anchor, end)...max(anchor, end)
+    }
+
+    /// A drag that stayed on one word selects nothing.
+    func endDrag() {
+        anchor = nil
+        if count < 2 { range = nil }
+    }
+
+    /// The word under `point`, or the nearest one on its row of words; nil between rows.
+    private func word(at point: CGPoint) -> Int? {
+        func distance(_ frame: CGRect) -> CGFloat {
+            point.x < frame.minX ? frame.minX - point.x : max(0, point.x - frame.maxX)
+        }
+        return frames.filter { $0.value.minY - 2 <= point.y && point.y <= $0.value.maxY + 2 }
+            .min { distance($0.value) < distance($1.value) }?.key
+    }
 }
 
 struct TranscriptView: View {
@@ -99,11 +141,12 @@ struct TranscriptView: View {
     let result: ProcessedConversation
     let playback: PlaybackModel
     @ViewState private var follow = true
-    @ViewState private var correcting: WordToCorrect?
+    @ViewState private var correcting: WordsToCorrect?
+    @ViewState private var selection = WordSelection()
 
-    private struct WordToCorrect: Identifiable {
-        let word: TranscriptWord
-        var id: Double { word.start }
+    private struct WordsToCorrect: Identifiable {
+        let words: [TranscriptWord]
+        var id: Double { words[0].start }
     }
 
     var body: some View {
@@ -112,10 +155,29 @@ struct TranscriptView: View {
         let words = lines.flatMap(\.words)
         let starts = words.map(\.word.start)
         let lineOfWord = lines.flatMap { line in line.words.map { _ in line.id } }
+        let selection = self.selection
         let actions = TranscriptActions(
-            toggle: { model.toggleFlag($0, in: info.id) },
-            assign: { words, speaker in model.assign(words.map { ($0.word, $0.transcribedSpeaker) }, to: speaker, in: info.id) },
-            correct: { correcting = WordToCorrect(word: $0) },
+            toggle: { word in
+                if selection.range != nil {
+                    selection.range = nil
+                } else {
+                    model.toggleFlag(word, in: info.id)
+                }
+            },
+            assign: { words, speaker in
+                model.assign(words.map { ($0.word, $0.transcribedSpeaker) }, to: speaker, in: info.id)
+                selection.range = nil
+            },
+            correct: { correcting = WordsToCorrect(words: $0) },
+            mark: { words, wrong in
+                model.mark(words, wrong: wrong, in: info.id)
+                selection.range = nil
+            },
+            isMarked: { (model.flags[info.id] ?? TranscriptFlags()).flag(for: $0) != nil },
+            selected: { number in
+                guard let range = selection.range, range.count > 1, range.contains(number) else { return nil }
+                return words.filter { range.contains($0.number) }
+            },
             toggleSpeaker: { model.toggleSpeakerFlag(lineStartingAt: $0.start, speaker: $0.speaker, in: info.id) },
             play: { time in
                 playback.seek(to: time)
@@ -126,11 +188,7 @@ struct TranscriptView: View {
 
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Text(words.isEmpty
-                     ? "This Transcript has no word timings. Transcribe it again to follow along word by word."
-                     : "Click a word to mark it wrong. Right-click a word or a speaker to say what was said, or who said it. F marks the word just played.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                TranscriptHint(selection: selection, hasWords: !words.isEmpty)
                 Spacer()
                 if !flags.words.isEmpty || !flags.speakers.isEmpty {
                     let corrected = flags.words.filter { $0.correction != nil }.count
@@ -164,14 +222,45 @@ struct TranscriptView: View {
                 fallback: result.transcript.language == .hebrew ? .rightToLeft : .leftToRight,
                 follow: follow,
                 playback: playback,
+                selection: selection,
                 actions: actions
             )
         }
         .task(id: info.id) { model.loadFlags(info.id) }
         .sheet(item: $correcting) { item in
-            CorrectionSheet(word: item.word, said: flags.flag(for: item.word)?.correction ?? "") { said in
-                model.correct(item.word, as: said, in: info.id)
+            CorrectionSheet(words: item.words, said: Self.correction(of: item.words, in: flags)) { said in
+                model.correct(item.words, as: said, in: info.id)
+                selection.range = nil
             }
+        }
+    }
+
+    /// What the sheet starts with: what was typed for these words before, if every one of them has a correction.
+    private static func correction(of words: [TranscriptWord], in flags: TranscriptFlags) -> String {
+        let corrections = words.map { flags.flag(for: $0)?.correction }
+        guard corrections.allSatisfy({ $0 != nil }) else { return "" }
+        return corrections.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+}
+
+/// What can be done with the Transcript, or with the words selected; a view of its own, so a drag redraws only this and
+/// the lines it changes, not the whole Transcript.
+private struct TranscriptHint: View {
+    let selection: WordSelection
+    let hasWords: Bool
+
+    var body: some View {
+        if selection.count > 1 {
+            Text("\(selection.count) words selected. Right-click them to say what was said, who said it, or to mark them wrong.")
+                .font(.callout)
+            Button("Clear Selection") { selection.range = nil }
+                .keyboardShortcut(.cancelAction)
+        } else {
+            Text(hasWords
+                 ? "Click a word to mark it wrong, or drag across words to select several. Right-click a word or a speaker to say what was said, or who said it. F marks the word just played."
+                 : "This Transcript has no word timings. Transcribe it again to follow along word by word.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -187,11 +276,13 @@ private struct TranscriptLines: View {
     let fallback: TextDirection
     let follow: Bool
     let playback: PlaybackModel
+    let selection: WordSelection
     let actions: TranscriptActions
 
     var body: some View {
         let current = TranscriptLine.word(at: playback.time, starts: starts)
         let currentLine = current.map { lineOfWord[$0] }
+        let selected = selection.range
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
@@ -199,9 +290,14 @@ private struct TranscriptLines: View {
                         LineView(
                             line: line,
                             current: currentLine == line.id ? current : nil,
+                            selected: selected.flatMap { range in
+                                guard let first = line.words.first?.number, let last = line.words.last?.number, range.overlaps(first...last) else { return nil }
+                                return range.clamped(to: first...last)
+                            },
                             flags: flags,
                             speakers: speakers,
                             fallback: fallback,
+                            selection: selection,
                             actions: actions
                         )
                         .equatable()
@@ -209,6 +305,12 @@ private struct TranscriptLines: View {
                     }
                 }
                 .padding(16)
+                .coordinateSpace(.named(WordSelection.space))
+                .gesture(
+                    DragGesture(minimumDistance: 4, coordinateSpace: .named(WordSelection.space))
+                        .onChanged { selection.drag(from: $0.startLocation, to: $0.location) }
+                        .onEnded { _ in selection.endDrag() }
+                )
             }
             .onChange(of: currentLine) { _, line in
                 guard follow, playback.isPlaying, let line else { return }
@@ -234,14 +336,17 @@ private struct TranscriptLines: View {
 private struct LineView: View, @MainActor Equatable {
     let line: TranscriptLine
     let current: Int?
+    /// The selected words in this line, by number.
+    let selected: ClosedRange<Int>?
     let flags: TranscriptFlags
     let speakers: [String]
     let fallback: TextDirection
+    let selection: WordSelection
     let actions: TranscriptActions
 
     static func == (a: LineView, b: LineView) -> Bool {
         a.line.id == b.line.id && a.line.start == b.line.start && a.line.speaker == b.line.speaker && a.line.text == b.line.text
-            && a.current == b.current && a.fallback == b.fallback && a.speakers == b.speakers
+            && a.current == b.current && a.selected == b.selected && a.fallback == b.fallback && a.speakers == b.speakers
             && a.flags.words == b.flags.words && a.flags.speakers == b.flags.speakers
     }
 
@@ -278,10 +383,12 @@ private struct LineView: View, @MainActor Equatable {
                         WordView(
                             item: item,
                             isCurrent: item.number == current,
+                            isSelected: selected?.contains(item.number) == true,
                             flag: flags.flag(for: item.word),
                             lineSpeaker: line.speaker,
                             speakers: speakers,
                             rightToLeft: (runs[position] == nil ? direction : direction.opposite) == .rightToLeft,
+                            selection: selection,
                             actions: actions
                         )
                         .layoutValue(key: FlowRun.self, value: runs[position])
@@ -317,31 +424,46 @@ private struct SaidByMenu: View {
 private struct WordView: View {
     let item: NumberedWord
     let isCurrent: Bool
+    let isSelected: Bool
     let flag: TranscriptFlags.Word?
     let lineSpeaker: String
     let speakers: [String]
     let rightToLeft: Bool
+    let selection: WordSelection
     let actions: TranscriptActions
 
     private var corrected: Bool { flag?.correction != nil }
+    /// Part of a correction over several words that gave fewer words than were transcribed.
+    private var notSaid: Bool { flag?.correction?.isEmpty == true }
     private var moved: Bool { flag?.saidBy != nil || flag?.otherSpeaker == true }
     private var markedWrong: Bool { flag != nil && !corrected && !moved }
     private var rewritten: Bool { item.word.transcribed != nil && !corrected }
 
     var body: some View {
-        Text(item.text)
+        Text(notSaid ? item.word.text : item.text)
+            .strikethrough(notSaid)
+            .foregroundStyle(notSaid ? .secondary : .primary)
             .underline(flag != nil || rewritten, pattern: flag == nil ? .dot : .solid, color: underline)
             .padding(.horizontal, 3)
             .padding(.vertical, 1)
             .background(background, in: RoundedRectangle(cornerRadius: 4))
             .environment(\.layoutDirection, rightToLeft ? .rightToLeft : .leftToRight)
             .contentShape(Rectangle())
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WordSelection.space)) } action: { selection.frames[item.number] = $0 }
             .onTapGesture { actions.toggle(item.word) }
             .contextMenu {
-                Button("Play from here") { actions.play(item.word.start) }
-                Button(flag == nil ? "Mark as wrong" : "Take the mark off") { actions.toggle(item.word) }
-                SaidByMenu(speakers: speakers, current: lineSpeaker) { actions.assign([item], $0) }
-                Button("Type what was said…") { actions.correct(item.word) }
+                if let group = isSelected ? actions.selected(item.number) : nil {
+                    Button("Play from here") { actions.play(group[0].word.start) }
+                    let marked = group.allSatisfy { actions.isMarked($0.word) }
+                    Button(marked ? "Take the marks off" : "Mark as wrong") { actions.mark(group.map(\.word), !marked) }
+                    SaidByMenu(speakers: speakers, current: lineSpeaker) { actions.assign(group, $0) }
+                    Button("Type what was said…") { actions.correct(group.map(\.word)) }
+                } else {
+                    Button("Play from here") { actions.play(item.word.start) }
+                    Button(flag == nil ? "Mark as wrong" : "Take the mark off") { actions.toggle(item.word) }
+                    SaidByMenu(speakers: speakers, current: lineSpeaker) { actions.assign([item], $0) }
+                    Button("Type what was said…") { actions.correct([item.word]) }
+                }
             }
             .help(helpText)
     }
@@ -359,7 +481,11 @@ private struct WordView: View {
             return rewritten ? "Transcribed as “\(transcribed)”; click to mark as wrong" : "Click to mark as wrong"
         }
         var parts: [String] = []
-        if corrected || rewritten { parts.append("Transcribed as “\(transcribed)”") }
+        if notSaid {
+            parts.append("Not said: part of what you typed for the words before it")
+        } else if corrected || rewritten {
+            parts.append("Transcribed as “\(transcribed)”")
+        }
         if moved { parts.append("Transcribed as said by \(item.transcribedSpeaker ?? "another speaker")") }
         if markedWrong { parts.append("Marked wrong") }
         return parts.joined(separator: "; ")
@@ -367,30 +493,38 @@ private struct WordView: View {
 
     private var background: Color {
         if isCurrent { return Color.accentColor.opacity(0.35) }
+        if isSelected { return Color.accentColor.opacity(0.2) }
         if markedWrong { return Color.red.opacity(0.15) }
         return .clear
     }
 }
 
 private struct CorrectionSheet: View {
-    let word: TranscriptWord
+    let words: [TranscriptWord]
     let save: (String) -> Void
     @ViewState private var said: String
     @Environment(\.dismiss) private var dismiss
 
-    init(word: TranscriptWord, said: String, save: @escaping (String) -> Void) {
-        self.word = word
+    init(words: [TranscriptWord], said: String, save: @escaping (String) -> Void) {
+        self.words = words
         self.save = save
         _said = ViewState(initialValue: said)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("What was said instead of “\(word.text)”?").font(.headline)
+            Text("What was said instead of “\(words.map(\.text).joined(separator: " "))”?").font(.headline)
             TextField("What was said", text: $said)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 320)
                 .onSubmit(done)
+            if words.count > 1 {
+                Text("The words you type replace these in order. If you type fewer, the rest count as not said.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 320, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
