@@ -107,7 +107,7 @@ public struct Transcript: Codable, Sendable, Equatable {
             for word in words {
                 var shown = word
                 shown.text = flags.text(of: word)
-                // Marked as not said, as part of a correction over several words.
+                // The rest of a phrase corrected together, which its first word says.
                 guard !shown.text.isEmpty else { continue }
                 let speaker = flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers)
                 if !run.isEmpty, speaker != runSpeaker { finishRun() }

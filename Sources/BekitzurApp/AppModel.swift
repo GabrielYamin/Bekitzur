@@ -1038,17 +1038,17 @@ final class AppModel {
         }
     }
 
-    /// Records what was said instead of words in a row. An English term typed for a word transcribed in Hebrew letters
-    /// also teaches the Vocabulary that spelling, so later Transcripts get it right; over several words, only when each
-    /// got one typed word, since otherwise which spelling goes with which term is a guess.
+    /// Records what was said instead of words in a row, as one phrase. An English term typed for a word transcribed in
+    /// Hebrew letters also teaches the Vocabulary that spelling, so later Transcripts get it right; over several words,
+    /// only when each got one typed word, since otherwise which spelling goes with which term is a guess.
     func correct(_ words: [TranscriptWord], as said: String, in id: String) {
         changeFlags(id) { $0.correct(words, as: said) }
-        let parts = TranscriptFlags.spread(said, over: words.count)
-        guard words.count == 1 || said.split(whereSeparator: \.isWhitespace).count == words.count else { return }
+        let parts = said.split(whereSeparator: \.isWhitespace).map(String.init)
+        let pairs = words.count == 1 ? [(words[0], said)] : parts.count == words.count ? Array(zip(words, parts)) : []
         do {
             var learnedAny = false
-            for (word, part) in zip(words, parts) {
-                guard let part, let learned = try vocabularyStore.learn(transcribed: word.transcribed ?? word.text, correction: words.count == 1 ? said : part) else { continue }
+            for (word, part) in pairs {
+                guard let learned = try vocabularyStore.learn(transcribed: word.transcribed ?? word.text, correction: part) else { continue }
                 learnedAny = true
                 AppLog.write("Vocabulary learned \(learned.spelling) → \(learned.term)")
             }

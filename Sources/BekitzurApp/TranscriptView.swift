@@ -10,10 +10,23 @@ struct TranscriptLine: Identifiable {
     /// The segments' text, shown as is when they have no word times (Transcripts made before those were kept).
     let text: String
 
-    /// The Transcript's lines with the user's fixes applied: corrected words show what was said, and words said by
-    /// another Speaker sit in that Speaker's line.
+    /// The Transcript's lines with the user's fixes applied: corrected words show what was said, a phrase corrected
+    /// together shows as its first word, and words said by another Speaker sit in that Speaker's line.
     static func lines(from transcript: Transcript, flags: TranscriptFlags) -> [TranscriptLine] {
         let speakers = Array(Set(transcript.segments.compactMap(\.speaker))).sorted()
+        // The rest of each phrase, by when it starts, shown with its first word.
+        var phrases: [(start: Double, rest: [NumberedWord])] = []
+        for segment in transcript.segments {
+            for word in segment.words ?? [] {
+                guard let start = flags.flag(for: word)?.phrase else { continue }
+                let rest = NumberedWord(number: -1, word: word, text: "", transcribedSpeaker: segment.speaker)
+                if let index = phrases.firstIndex(where: { abs($0.start - start) < 0.005 }) {
+                    phrases[index].rest.append(rest)
+                } else {
+                    phrases.append((start, [rest]))
+                }
+            }
+        }
         var lines: [TranscriptLine] = []
         var number = 0
         var speaker: String?
@@ -39,6 +52,7 @@ struct TranscriptLine: Identifiable {
                 continue
             }
             for word in segmentWords {
+                if flags.flag(for: word)?.phrase != nil { continue }
                 let said = flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers)
                 if !texts.isEmpty, said != speaker { finishLine() }
                 if texts.isEmpty {
@@ -46,7 +60,8 @@ struct TranscriptLine: Identifiable {
                     start = word.start
                 }
                 let text = flags.text(of: word)
-                words.append(NumberedWord(number: number, word: word, text: text, transcribedSpeaker: segment.speaker))
+                let rest = phrases.first { abs($0.start - word.start) < 0.005 }?.rest ?? []
+                words.append(NumberedWord(number: number, word: word, text: text, transcribedSpeaker: segment.speaker, rest: rest))
                 if !text.isEmpty { texts.append(text) }
                 number += 1
             }
@@ -81,6 +96,11 @@ struct NumberedWord {
     /// What the word says: the user's correction, or what was transcribed.
     let text: String
     let transcribedSpeaker: String?
+    /// The rest of the phrase this word was corrected with, which isn't shown on its own.
+    var rest: [NumberedWord] = []
+
+    /// This word with the rest of its phrase, which marks and corrections apply to together.
+    var phrase: [NumberedWord] { [self] + rest }
 }
 
 /// What the Transcript's words and lines can do, passed down so the rows stay cheap to compare.
@@ -191,7 +211,7 @@ struct TranscriptView: View {
                 TranscriptHint(selection: selection, hasWords: !words.isEmpty)
                 Spacer()
                 if !flags.words.isEmpty || !flags.speakers.isEmpty {
-                    let corrected = flags.words.filter { $0.correction != nil }.count
+                    let corrected = flags.words.filter { $0.correction != nil && $0.phrase == nil }.count
                     let moved = flags.words.filter { $0.saidBy != nil || $0.otherSpeaker == true }.count
                     let wrong = flags.words.filter { !$0.isFix }.count
                     Text([
@@ -452,7 +472,7 @@ private struct WordView: View {
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WordSelection.space)) } action: { selection.frames[item.number] = $0 }
             .onTapGesture { actions.toggle(item.word) }
             .contextMenu {
-                if let group = isSelected ? actions.selected(item.number) : nil {
+                if let group = (isSelected ? actions.selected(item.number) : nil)?.flatMap(\.phrase) {
                     Button("Play from here") { actions.play(group[0].word.start) }
                     let marked = group.allSatisfy { actions.isMarked($0.word) }
                     Button(marked ? "Take the marks off" : "Mark as wrong") { actions.mark(group.map(\.word), !marked) }
@@ -461,8 +481,8 @@ private struct WordView: View {
                 } else {
                     Button("Play from here") { actions.play(item.word.start) }
                     Button(flag == nil ? "Mark as wrong" : "Take the mark off") { actions.toggle(item.word) }
-                    SaidByMenu(speakers: speakers, current: lineSpeaker) { actions.assign([item], $0) }
-                    Button("Type what was said…") { actions.correct([item.word]) }
+                    SaidByMenu(speakers: speakers, current: lineSpeaker) { actions.assign(item.phrase, $0) }
+                    Button("Type what was said…") { actions.correct(item.phrase.map(\.word)) }
                 }
             }
             .help(helpText)
@@ -476,7 +496,7 @@ private struct WordView: View {
     }
 
     private var helpText: String {
-        let transcribed = item.word.transcribed ?? item.word.text
+        let transcribed = item.phrase.map { $0.word.transcribed ?? $0.word.text }.joined(separator: " ")
         guard flag != nil else {
             return rewritten ? "Transcribed as “\(transcribed)”; click to mark as wrong" : "Click to mark as wrong"
         }
@@ -519,7 +539,7 @@ private struct CorrectionSheet: View {
                 .frame(width: 320)
                 .onSubmit(done)
             if words.count > 1 {
-                Text("The words you type replace these in order. If you type fewer, the rest count as not said.")
+                Text("What you type replaces all of them as one phrase, which a click takes back.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(width: 320, alignment: .leading)
