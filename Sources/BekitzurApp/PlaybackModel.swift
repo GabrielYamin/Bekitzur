@@ -11,6 +11,8 @@ final class PlaybackModel {
     private(set) var duration: Double = 0
     private(set) var isPlaying = false
     private(set) var isLoaded = false
+    /// The part playing on its own, like a line a Speaker said, which stops at its end.
+    private(set) var clip: ClosedRange<Double>?
     var rate: Float = 1 {
         didSet {
             player?.defaultRate = rate
@@ -21,6 +23,7 @@ final class PlaybackModel {
     @ObservationIgnored private var player: AVPlayer?
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
+    @ObservationIgnored private var clipEndObserver: Any?
 
     isolated deinit {
         stop()
@@ -54,7 +57,10 @@ final class PlaybackModel {
             MainActor.assumeIsolated { self?.time = time.seconds }
         }
         endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.isPlaying = false }
+            MainActor.assumeIsolated {
+                self?.isPlaying = false
+                self?.endClip()
+            }
         }
         self.player = player
         duration = composition.duration.seconds
@@ -67,23 +73,40 @@ final class PlaybackModel {
 
     func play() {
         guard let player else { return }
+        endClip()
         if time >= duration - 0.1 { seek(to: 0) }
         player.playImmediately(atRate: rate)
         isPlaying = true
     }
 
+    /// Plays just `clip`, and stops at its end. A boundary observer rather than the time updates, since an update
+    /// queued before the seek would report the old time and stop the clip as it starts.
+    func play(_ clip: ClosedRange<Double>) {
+        seek(to: clip.lowerBound)
+        play()
+        guard let player else { return }
+        self.clip = clip
+        let end = NSValue(time: CMTime(seconds: clip.upperBound, preferredTimescale: 600))
+        clipEndObserver = player.addBoundaryTimeObserver(forTimes: [end], queue: .main) { [weak self] in
+            MainActor.assumeIsolated { self?.pause() }
+        }
+    }
+
     func pause() {
         player?.pause()
         isPlaying = false
+        endClip()
     }
 
     func seek(to seconds: Double) {
+        endClip()
         time = min(max(0, seconds), duration)
         player?.seek(to: CMTime(seconds: time, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     func stop() {
         player?.pause()
+        endClip()
         if let timeObserver { player?.removeTimeObserver(timeObserver) }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         timeObserver = nil
@@ -93,5 +116,11 @@ final class PlaybackModel {
         isLoaded = false
         time = 0
         duration = 0
+    }
+
+    private func endClip() {
+        if let clipEndObserver { player?.removeTimeObserver(clipEndObserver) }
+        clipEndObserver = nil
+        clip = nil
     }
 }

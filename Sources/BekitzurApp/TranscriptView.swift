@@ -163,6 +163,11 @@ struct TranscriptView: View {
     @ViewState private var follow = true
     @ViewState private var correcting: WordsToCorrect?
     @ViewState private var selection = WordSelection()
+    @ViewState private var finding = false
+    @ViewState private var query = ""
+    /// Which match Find is on.
+    @ViewState private var match = 0
+    @FocusState private var typingQuery: Bool
 
     private struct WordsToCorrect: Identifiable {
         let words: [TranscriptWord]
@@ -175,6 +180,8 @@ struct TranscriptView: View {
         let words = lines.flatMap(\.words)
         let starts = words.map(\.word.start)
         let lineOfWord = lines.flatMap { line in line.words.map { _ in line.id } }
+        let matches = finding ? TranscriptSearch.matches(of: query, in: words.map(\.text)) : []
+        let currentMatch = matches.isEmpty ? nil : matches[min(match, matches.count - 1)]
         let selection = self.selection
         let actions = TranscriptActions(
             toggle: { word in
@@ -226,13 +233,26 @@ struct TranscriptView: View {
                         model.toggleFlag(words[index].word, in: info.id)
                     }
                 }
-                .keyboardShortcut("f", modifiers: [])
+                .keyboardShortcut(typingQuery ? nil : KeyboardShortcut("f", modifiers: []))
                 .disabled(words.isEmpty || !playback.isLoaded)
+                Button {
+                    finding = true
+                    typingQuery = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                .help("Find in the Transcript (⌘F)")
+                .disabled(words.isEmpty)
                 Toggle("Follow", isOn: $follow).toggleStyle(.checkbox)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
             Divider()
+            if finding {
+                findBar(matches: matches.count)
+                Divider()
+            }
             TranscriptLines(
                 lines: lines,
                 starts: starts,
@@ -243,10 +263,14 @@ struct TranscriptView: View {
                 follow: follow,
                 playback: playback,
                 selection: selection,
+                matches: Self.matchesByLine(matches, in: lines),
+                currentMatch: currentMatch,
                 actions: actions
             )
+            PlayerBar(playback: playback, spaceBar: !typingQuery)
         }
         .task(id: info.id) { model.loadFlags(info.id) }
+        .onChange(of: query) { match = 0 }
         .sheet(item: $correcting) { item in
             CorrectionSheet(words: item.words, said: Self.correction(of: item.words, in: flags)) { said in
                 model.correct(item.words, as: said, in: info.id)
@@ -260,6 +284,65 @@ struct TranscriptView: View {
         let corrections = words.map { flags.flag(for: $0)?.correction }
         guard corrections.allSatisfy({ $0 != nil }) else { return "" }
         return corrections.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// What to find, how many matches there are and which one is showing, and the way to the others. Return goes to the
+    /// next match and Escape closes it, like Find elsewhere.
+    private func findBar(matches: Int) -> some View {
+        HStack(spacing: 8) {
+            TextField("Find in the Transcript", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 260)
+                .focused($typingQuery)
+                .onAppear { typingQuery = true }
+                .onSubmit { step(1, of: matches) }
+                .onExitCommand(perform: closeFind)
+            if !query.allSatisfy(\.isWhitespace) {
+                Text(matches == 0 ? "Not found" : "\(min(match, matches - 1) + 1) of \(matches)")
+                    .font(.callout)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            Button { step(-1, of: matches) } label: { Image(systemName: "chevron.up") }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .help("Previous match (⇧⌘G)")
+                .disabled(matches == 0)
+            Button { step(1, of: matches) } label: { Image(systemName: "chevron.down") }
+                .keyboardShortcut("g", modifiers: .command)
+                .help("Next match (⌘G)")
+                .disabled(matches == 0)
+            Spacer()
+            Button("Done", action: closeFind)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+    }
+
+    /// Moves to the next match, or with -1 the one before, going around at either end.
+    private func step(_ by: Int, of matches: Int) {
+        guard matches > 0 else { return }
+        match = (min(match, matches - 1) + by + matches) % matches
+    }
+
+    private func closeFind() {
+        finding = false
+        typingQuery = false
+    }
+
+    /// The matches in each line, by line, cut to its words; a match that runs on into the next line is in both.
+    private static func matchesByLine(_ matches: [ClosedRange<Int>], in lines: [TranscriptLine]) -> [Int: [ClosedRange<Int>]] {
+        var byLine: [Int: [ClosedRange<Int>]] = [:]
+        var next = 0
+        for line in lines {
+            guard let first = line.words.first?.number, let last = line.words.last?.number else { continue }
+            while next < matches.count, matches[next].upperBound < first { next += 1 }
+            var index = next
+            while index < matches.count, matches[index].lowerBound <= last {
+                byLine[line.id, default: []].append(matches[index].clamped(to: first...last))
+                index += 1
+            }
+        }
+        return byLine
     }
 }
 
@@ -277,7 +360,7 @@ private struct TranscriptHint: View {
                 .keyboardShortcut(.cancelAction)
         } else {
             Text(hasWords
-                 ? "Click a word to mark it wrong, or drag across words to select several. Right-click a word or a speaker to say what was said, or who said it. F marks the word just played."
+                 ? "Click a word to mark it wrong, or drag across words to select several. Right-click a word or a speaker to say what was said, or who said it. F marks the word just played, and ⌘F finds words."
                  : "This Transcript has no word timings. Transcribe it again to follow along word by word.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -297,6 +380,9 @@ private struct TranscriptLines: View {
     let follow: Bool
     let playback: PlaybackModel
     let selection: WordSelection
+    /// What Find found, by line.
+    let matches: [Int: [ClosedRange<Int>]]
+    let currentMatch: ClosedRange<Int>?
     let actions: TranscriptActions
 
     var body: some View {
@@ -310,10 +396,9 @@ private struct TranscriptLines: View {
                         LineView(
                             line: line,
                             current: currentLine == line.id ? current : nil,
-                            selected: selected.flatMap { range in
-                                guard let first = line.words.first?.number, let last = line.words.last?.number, range.overlaps(first...last) else { return nil }
-                                return range.clamped(to: first...last)
-                            },
+                            selected: Self.part(of: selected, in: line),
+                            matches: matches[line.id] ?? [],
+                            currentMatch: Self.part(of: currentMatch, in: line),
                             flags: flags,
                             speakers: speakers,
                             fallback: fallback,
@@ -339,6 +424,10 @@ private struct TranscriptLines: View {
                 guard follow, playback.isPlaying, let line else { return }
                 withAnimation { proxy.scrollTo(line, anchor: .center) }
             }
+            .onChange(of: currentMatch) { _, match in
+                guard let match else { return }
+                withAnimation { proxy.scrollTo(lineOfWord[match.lowerBound], anchor: .center) }
+            }
             // A Source in the Notes or a quote in an answer opens the Transcript already playing, on a line that won't
             // change again for a while.
             .onAppear {
@@ -354,6 +443,12 @@ private struct TranscriptLines: View {
             }
         }
     }
+
+    /// The words of `range` that are in the line, by number.
+    private static func part(of range: ClosedRange<Int>?, in line: TranscriptLine) -> ClosedRange<Int>? {
+        guard let range, let first = line.words.first?.number, let last = line.words.last?.number, range.overlaps(first...last) else { return nil }
+        return range.clamped(to: first...last)
+    }
 }
 
 private struct LineView: View, @MainActor Equatable {
@@ -361,6 +456,9 @@ private struct LineView: View, @MainActor Equatable {
     let current: Int?
     /// The selected words in this line, by number.
     let selected: ClosedRange<Int>?
+    /// What Find found in this line, and the part of it Find is on.
+    let matches: [ClosedRange<Int>]
+    let currentMatch: ClosedRange<Int>?
     let flags: TranscriptFlags
     let speakers: [String]
     let fallback: TextDirection
@@ -369,8 +467,8 @@ private struct LineView: View, @MainActor Equatable {
 
     static func == (a: LineView, b: LineView) -> Bool {
         a.line.id == b.line.id && a.line.start == b.line.start && a.line.speaker == b.line.speaker && a.line.text == b.line.text
-            && a.current == b.current && a.selected == b.selected && a.fallback == b.fallback && a.speakers == b.speakers
-            && a.flags.words == b.flags.words && a.flags.speakers == b.flags.speakers
+            && a.current == b.current && a.selected == b.selected && a.matches == b.matches && a.currentMatch == b.currentMatch
+            && a.fallback == b.fallback && a.speakers == b.speakers && a.flags.words == b.flags.words && a.flags.speakers == b.flags.speakers
     }
 
     var body: some View {
@@ -408,6 +506,8 @@ private struct LineView: View, @MainActor Equatable {
                             item: item,
                             isCurrent: item.number == current,
                             isSelected: selected?.contains(item.number) == true,
+                            found: currentMatch?.contains(item.number) == true ? .currentMatch
+                                : matches.contains { $0.contains(item.number) } ? .match : nil,
                             flag: flags.flag(for: item.word),
                             lineSpeaker: line.speaker,
                             speakers: speakers,
@@ -418,11 +518,13 @@ private struct LineView: View, @MainActor Equatable {
                         .layoutValue(key: FlowRun.self, value: runs[position])
                     }
                 }
-                .backgroundPreferenceValue(SelectedWords.self) { words in
-                    if !words.isEmpty {
+                .backgroundPreferenceValue(WordHighlights.self) { highlights in
+                    if !highlights.isEmpty {
                         GeometryReader { proxy in
-                            SelectionBands(words: words.map { proxy[$0] }, spacing: layout.spacing)
-                                .fill(Color.accentColor.opacity(0.2))
+                            ForEach(Highlight.allCases.filter { highlights[$0] != nil }, id: \.self) { highlight in
+                                HighlightBands(words: highlights[highlight, default: []].map { proxy[$0] }, spacing: layout.spacing)
+                                    .fill(highlight.color)
+                            }
                         }
                     }
                 }
@@ -457,6 +559,8 @@ private struct WordView: View {
     let item: NumberedWord
     let isCurrent: Bool
     let isSelected: Bool
+    /// Found by Find: in a match, or in the one Find is on.
+    let found: Highlight?
     let flag: TranscriptFlags.Word?
     let lineSpeaker: String
     let speakers: [String]
@@ -481,7 +585,12 @@ private struct WordView: View {
             .background(background, in: RoundedRectangle(cornerRadius: 4))
             .environment(\.layoutDirection, rightToLeft ? .rightToLeft : .leftToRight)
             .contentShape(Rectangle())
-            .anchorPreference(key: SelectedWords.self, value: .bounds) { isSelected ? [$0] : [] }
+            .anchorPreference(key: WordHighlights.self, value: .bounds) { bounds in
+                var highlights: [Highlight: [Anchor<CGRect>]] = [:]
+                if let found { highlights[found] = [bounds] }
+                if isSelected { highlights[.selected] = [bounds] }
+                return highlights
+            }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WordSelection.space)) } action: { selection.frames[item.number] = $0 }
             .onContinuousHover { phase in
                 switch phase {
@@ -534,7 +643,7 @@ private struct WordView: View {
         return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 
-    /// The selection is drawn behind the line's words, as one band where they sit side by side.
+    /// The selection and what Find found are drawn behind the line's words, as one band where they sit side by side.
     private var background: Color {
         if isCurrent { return Color.accentColor.opacity(0.35) }
         if markedWrong { return Color.red.opacity(0.15) }
@@ -542,18 +651,31 @@ private struct WordView: View {
     }
 }
 
-/// Where a line's selected words are, to draw the selection behind them.
-private struct SelectedWords: PreferenceKey {
-    static var defaultValue: [Anchor<CGRect>] { [] }
+/// A word's highlight behind the line, drawn in this order, so the selection shows over what Find found.
+private enum Highlight: CaseIterable {
+    case match, currentMatch, selected
 
-    static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
-        value += nextValue()
+    var color: Color {
+        switch self {
+        case .match: Color.yellow.opacity(0.22)
+        case .currentMatch: Color.orange.opacity(0.55)
+        case .selected: Color.accentColor.opacity(0.2)
+        }
     }
 }
 
-/// The selected words of a line as one highlight: a band over each run of them that sit side by side on a row. An
-/// English run in a Hebrew line can put a word that isn't selected between two that are, which then get a band each.
-private struct SelectionBands: Shape {
+/// Where a line's highlighted words are, by highlight, to draw the highlights behind them.
+private struct WordHighlights: PreferenceKey {
+    static var defaultValue: [Highlight: [Anchor<CGRect>]] { [:] }
+
+    static func reduce(value: inout [Highlight: [Anchor<CGRect>]], nextValue: () -> [Highlight: [Anchor<CGRect>]]) {
+        value.merge(nextValue(), uniquingKeysWith: +)
+    }
+}
+
+/// A line's words with one highlight as one: a band over each run of them that sit side by side on a row. An English run
+/// in a Hebrew line can put a word without the highlight between two with it, which then get a band each.
+private struct HighlightBands: Shape {
     let words: [CGRect]
     /// The space between words that sit side by side.
     let spacing: CGFloat

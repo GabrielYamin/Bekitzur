@@ -5,6 +5,7 @@ struct SpeakersView: View {
     let model: AppModel
     let info: ConversationInfo
     let result: ProcessedConversation
+    let playback: PlaybackModel
     @ViewState private var people: Int?
 
     var body: some View {
@@ -15,11 +16,12 @@ struct SpeakersView: View {
                         model: model,
                         id: info.id,
                         speaker: speaker,
-                        said: result.turns.filter { $0.speaker == speaker.displayName }.prefix(3).map(\.text)
+                        said: Self.samples(of: speaker.displayName, in: result.turns),
+                        playback: playback
                     )
                 }
             } footer: {
-                Text("Bekitzur remembers the names you give and recognizes those voices in later Conversations. Giving two Speakers the same name joins them.")
+                Text("Bekitzur remembers the names you give and recognizes those voices in later Conversations. Giving two Speakers the same name joins them. Play a line to hear who said it.")
             }
 
             Section {
@@ -40,13 +42,25 @@ struct SpeakersView: View {
         }
         .onAppear { people = info.people }
     }
+
+    /// Up to three things the Speaker said, to tell who it is by reading and listening: the first that last two seconds
+    /// or more, since a "yes" says little about who spoke, or the first three when nothing they said is that long.
+    private static func samples(of speaker: String, in turns: [Turn]) -> [Turn] {
+        let theirs = turns.filter { $0.speaker == speaker }
+        let long = theirs.filter { turn in
+            guard let start = turn.start, let end = turn.end else { return false }
+            return end - start >= 2
+        }
+        return Array((long.isEmpty ? theirs : long).prefix(3))
+    }
 }
 
 private struct SpeakerRow: View {
     let model: AppModel
     let id: String
     let speaker: ConversationSpeaker
-    let said: [String]
+    let said: [Turn]
+    let playback: PlaybackModel
     @ViewState private var name = ""
     @ViewState private var renaming = false
 
@@ -70,11 +84,35 @@ private struct SpeakerRow: View {
                 }
             }
             if renaming { HStack { Spacer(); nameField } }
-            ForEach(Array(said.enumerated()), id: \.offset) { _, line in
-                DirectionalText(line).foregroundStyle(.secondary).lineLimit(2)
+            ForEach(Array(said.enumerated()), id: \.offset) { _, turn in
+                let rightToLeft = turn.text.isMostlyRightToLeft
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if let start = turn.start {
+                        listenButton(from: start, to: turn.end)
+                    }
+                    DirectionalText(turn.text, rightToLeft: rightToLeft).foregroundStyle(.secondary).lineLimit(2)
+                }
+                .environment(\.layoutDirection, rightToLeft ? .rightToLeft : .leftToRight)
             }
         }
         .padding(.vertical, 6)
+    }
+
+    /// Plays the line, or its first 15 seconds when it's long, which is enough to know the voice.
+    private func listenButton(from start: Double, to end: Double?) -> some View {
+        let playing = playback.isPlaying && playback.clip?.lowerBound == start
+        return Button {
+            if playing {
+                playback.pause()
+            } else {
+                playback.play(start...max(start + 0.5, min(end ?? start + 15, start + 15)))
+            }
+        } label: {
+            Image(systemName: playing ? "stop.fill" : "play.fill")
+        }
+        .buttonStyle(.borderless)
+        .disabled(!playback.isLoaded)
+        .help(playing ? "Stop" : "Listen")
     }
 
     private var nameField: some View {

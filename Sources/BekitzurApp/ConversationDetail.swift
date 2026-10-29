@@ -152,9 +152,8 @@ struct ConversationDetail: View {
                         }
                     case .transcript:
                         TranscriptView(model: model, info: info, result: result, playback: playback)
-                        PlayerBar(playback: playback)
                     case .speakers:
-                        SpeakersView(model: model, info: info, result: result)
+                        SpeakersView(model: model, info: info, result: result, playback: playback)
                     case .ask:
                         AskView(model: model, info: info) { time in
                             tab = .transcript
@@ -175,10 +174,11 @@ struct ConversationDetail: View {
     }
 }
 
-/// Play and pause (space bar), where playback is, and how fast. Shown with the Transcript, which has no text fields
-/// for the space bar to collide with.
-private struct PlayerBar: View {
+/// Play and pause (space bar), where playback is, and how fast. Shown with the Transcript.
+struct PlayerBar: View {
     let playback: PlaybackModel
+    /// Off while a text field is typed in, which the space bar would otherwise play and pause instead of typing a space.
+    var spaceBar = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -187,7 +187,7 @@ private struct PlayerBar: View {
             } label: {
                 Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill").frame(width: 18)
             }
-            .keyboardShortcut(.space, modifiers: [])
+            .keyboardShortcut(spaceBar ? KeyboardShortcut(.space, modifiers: []) : nil)
             .help("Play or pause (space bar)")
             Text("\(timestamp(playback.time)) / \(timestamp(playback.duration))")
                 .monospacedDigit()
