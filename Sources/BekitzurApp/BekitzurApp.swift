@@ -21,6 +21,9 @@ enum Entry {
             guard language != nil || argument == LiveTranscriptionHelper.detect else { exit(2) }
             exit(LiveTranscriptionHelper.serve(language: language))
         }
+        // A word's tooltip says what a fix in the Transcript took the place of; the system's wait of about a second made
+        // that easy to miss.
+        UserDefaults.standard.set(400, forKey: "NSInitialToolTipDelay")
         BekitzurApp.main()
     }
 }

@@ -460,7 +460,6 @@ private struct WordView: View {
     let rightToLeft: Bool
     let selection: WordSelection
     let actions: TranscriptActions
-    @ViewState private var hovering = false
 
     private var corrected: Bool { flag?.correction != nil }
     /// Part of a correction over several words that gave fewer words than were transcribed.
@@ -481,14 +480,6 @@ private struct WordView: View {
             .contentShape(Rectangle())
             .anchorPreference(key: SelectedWords.self, value: .bounds) { isSelected ? [$0] : [] }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WordSelection.space)) } action: { selection.frames[item.number] = $0 }
-            .onHover { hovering = $0 && tip != nil && selection.range == nil }
-            .overlay(alignment: .top) {
-                if hovering, let tip {
-                    HoverTip(text: tip)
-                        .alignmentGuide(.top) { $0[.bottom] + 4 }
-                        .transition(.asymmetric(insertion: .opacity.animation(.easeIn(duration: 0.1).delay(0.3)), removal: .identity))
-                }
-            }
             .onTapGesture { actions.toggle(item.word) }
             .contextMenu {
                 if let group = (isSelected ? actions.selected(item.number) : nil)?.flatMap(\.phrase) {
@@ -504,6 +495,7 @@ private struct WordView: View {
                     Button("Type what was said…") { actions.correct(item.phrase.map(\.word)) }
                 }
             }
+            .modifier(Tooltip(text: tip))
     }
 
     private var underline: Color {
@@ -513,8 +505,8 @@ private struct WordView: View {
         return .secondary
     }
 
-    /// What the fixes took the place of, shown while the pointer is on the word: what was transcribed before a correction
-    /// or the Vocabulary's spelling, and who it was transcribed as said by.
+    /// What the fixes took the place of, as the word's tooltip: what was transcribed before a correction or the
+    /// Vocabulary's spelling, and who it was transcribed as said by. Other words have none, since tooltips show quickly.
     private var tip: String? {
         var parts: [String] = []
         if notSaid {
@@ -567,20 +559,16 @@ private struct SelectionBands: Shape {
     }
 }
 
-/// A word's tip, above it like a tooltip but without the wait.
-private struct HoverTip: View {
-    let text: String
+/// A tooltip, for the words that have one.
+private struct Tooltip: ViewModifier {
+    let text: String?
 
-    var body: some View {
-        Text(text)
-            .font(.callout)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(.background, in: RoundedRectangle(cornerRadius: 5))
-            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.separator))
-            .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
-            .fixedSize()
-            .allowsHitTesting(false)
+    func body(content: Content) -> some View {
+        if let text {
+            content.help(text)
+        } else {
+            content
+        }
     }
 }
 
