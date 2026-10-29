@@ -54,27 +54,44 @@ struct NotesReviewTests {
         #expect(notes.openQuestions == draft.openQuestions)
     }
 
-    @Test func eachOpenQuestionGetsAnEntryWithTheTurnThatAnswersIt() {
-        let request = NotesWriter.questionsRequest(draft.openQuestions)
-        let grammar = NotesWriter.questionsGrammar(count: 4)
-
-        #expect(request.contains("2. Does product want CSV too? (T005)"))
-        #expect(grammar.contains(#"root ::= "[" ws question1 "," ws question2 "," ws question3 "," ws question4 ws "]""#))
-        #expect(grammar.contains(#"question4 ::= "{" ws "\"item\":" ws "4" "," ws "\"answered_in\":" ws (turn | "null") "," ws "\"kind\":" ws kind ws "}""#))
+    @Test func turnIDsAfterAnItemsTextAreLeftOut() {
+        #expect(NotesWriter.withoutTurnIDs("How do we share best practices? (T026)") == "How do we share best practices?")
+        #expect(NotesWriter.withoutTurnIDs("Test the new fields tomorrow. (T008, T009)") == "Test the new fields tomorrow.")
+        #expect(NotesWriter.withoutTurnIDs("Move to the new client (in unbiased infra).") == "Move to the new client (in unbiased infra).")
     }
 
-    @Test func aQuestionAnsweredLaterOrNeverMeantIsDropped() {
-        let checked = [
-            NotesWriter.CheckedQuestion(item: 1, answeredIn: "T008", kind: "open"),
-            NotesWriter.CheckedQuestion(item: 2, answeredIn: nil, kind: "open"),
-            NotesWriter.CheckedQuestion(item: 3, answeredIn: nil, kind: "hypothetical"),
-            // An "answer" before the question, or in no turn at all, answers nothing.
-            NotesWriter.CheckedQuestion(item: 4, answeredIn: "T002", kind: "open"),
-        ]
+    @Test func eachOpenQuestionComesWithWhatWasSaidFromWhereItWasAsked() {
+        var turns = self.turns
+        turns[4].text = (1...400).map { "w\($0)" }.joined(separator: " ")
+        turns[5].text = (1...100).map { "v\($0)" }.joined(separator: " ")
 
-        let open = NotesWriter.stillOpen(draft.openQuestions, checked: checked, turns: turns)
+        let request = NotesWriter.questionRequest(draft.openQuestions[1], number: 2, of: 4, turns: turns)
 
-        #expect(open.map(\.text) == ["Does product want CSV too?", "Which region do we deploy to first?"])
-        #expect(NotesWriter.stillOpen([draft.openQuestions[0]], checked: [NotesWriter.CheckedQuestion(item: 1, answeredIn: "T950", kind: "open")], turns: turns).count == 1)
+        #expect(request.hasPrefix("Open question 2 of 4: Does product want CSV too? (T005)"))
+        #expect(!request.contains("[T004]"))
+        // Its own turn ends with what was asked; the turns after it start with any answer.
+        #expect(request.contains("[T005] Ron: w101 w102") && request.contains("w400\n"))
+        #expect(request.contains("[T006] Ron: v1 v2") && request.contains("v80 …\n"))
+        #expect(request.contains("[T010] Ron: …"))
+    }
+
+    @Test func onlyATurnAfterTheQuestionCanAnswerIt() {
+        let question = draft.openQuestions[3]
+        func answer(_ turn: String?) -> String? {
+            NotesWriter.laterAnswer(to: question, NotesWriter.CheckedQuestion(answeredIn: turn, kind: "open"), turns: turns)?.id
+        }
+
+        #expect(answer("T009") == "T009")
+        #expect(answer("T002") == nil)
+        #expect(answer("T007") == nil)
+        #expect(answer("T950") == nil)
+        #expect(answer(nil) == nil)
+    }
+
+    @Test func theAnswerTheSearchFoundIsShownOnItsOwn() {
+        let request = NotesWriter.answerRequest(draft.openQuestions[1], Turn(id: "T009", speaker: "Omer", text: "Build Parquet only for now."))
+
+        #expect(request.hasPrefix(#"Does this turn answer the question "Does product want CSV too?"?"#))
+        #expect(request.contains("[T009] Omer: Build Parquet only for now."))
     }
 }

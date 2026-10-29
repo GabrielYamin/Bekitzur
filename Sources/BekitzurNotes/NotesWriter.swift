@@ -29,7 +29,7 @@ public struct NotesWriter {
         )
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard let draft = try? decoder.decode(Notes.self, from: Data(completion.text.utf8)) else {
+        guard let draft = try? decoder.decode(Notes.self, from: Data(completion.text.utf8)).withoutTurnIDsInText else {
             throw NotesWriterError.unreadableOutput(completion.text)
         }
         var notes = reviewed(draft, turns: turns)
@@ -46,7 +46,7 @@ public struct NotesWriter {
 
     /// The draft checked in the same chat, which still holds the transcript, since one pass over a long transcript leaves
     /// items like "We'll do it tomorrow" as they were said and lists questions that were answered later on. Decisions and
-    /// action items are checked first, then the open questions, separately: asked together, wording for one changed the
+    /// action items are checked first, then each open question on its own: asked together, wording for one changed the
     /// model's answers about the other. The draft stands where the context is full or a reply doesn't decode.
     private func reviewed(_ draft: Notes, turns: [Turn]) -> Notes {
         var notes = draft
@@ -57,15 +57,20 @@ public struct NotesWriter {
            checked.count == items.count {
             notes = Self.apply(checked, of: items, to: notes)
         }
-        let questions = draft.openQuestions
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        if !questions.isEmpty,
-           let reply = try? model.continueChat(user: Self.questionsRequest(questions), grammar: Self.questionsGrammar(count: questions.count), maxTokens: 1_000),
-           let checked = try? decoder.decode([CheckedQuestion].self, from: Data(reply.text.utf8)),
-           checked.count == questions.count {
-            notes.openQuestions = Self.stillOpen(questions, checked: checked, turns: turns)
-        }
+        notes.openQuestions = draft.openQuestions.enumerated().filter { offset, question in
+            let request = Self.questionRequest(question, number: offset + 1, of: draft.openQuestions.count, turns: turns)
+            guard let reply = try? model.continueChat(user: request, grammar: Self.questionGrammar, maxTokens: 100),
+                  let check = try? decoder.decode(CheckedQuestion.self, from: Data(reply.text.utf8))
+            else { return true }
+            guard check.kind == "open" else { return false }
+            guard let answer = Self.laterAnswer(to: question, check, turns: turns),
+                  let verdict = try? model.continueChat(user: Self.answerRequest(question, answer), grammar: Self.answerGrammar, maxTokens: 20),
+                  let answered = try? JSONDecoder().decode(Verdict.self, from: Data(verdict.text.utf8))
+            else { return true }
+            return !answered.answers
+        }.map(\.element)
         return notes
     }
 
@@ -84,7 +89,6 @@ public struct NotesWriter {
 
     /// An open question checked against the rest of the transcript.
     struct CheckedQuestion: Decodable {
-        let item: Int
         /// The later turn that answers it, by the model.
         let answeredIn: String?
         /// "open", or "hypothetical", "rhetorical", or "discussion".
@@ -115,40 +119,63 @@ public struct NotesWriter {
         """
     }
 
-    static func questionsRequest(_ questions: [OpenQuestion]) -> String {
-        let lines = questions.enumerated().map { "\($0.offset + 1). \($0.element.text) (\($0.element.sourceTurns.joined(separator: ", ")))" }
+    /// One open question with what was said from where it was asked on, in the message itself: Gemma's sliding-window
+    /// layers see only the last 1,024 tokens, so in a later message the transcript reaches only its few global layers, and
+    /// asked from there the model rarely found an answer that came from another speaker in other words.
+    static func questionRequest(_ question: OpenQuestion, number: Int, of count: Int, turns: [Turn]) -> String {
+        let position = Dictionary(turns.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
+        let asked = question.sourceTurns.compactMap { position[$0] }.min() ?? 0
+        var lines: [String] = []
+        var words = 0
+        for turn in turns[min(asked, turns.count)...] where lines.count < 30 && words < 900 {
+            let all = turn.text.split(separator: " ")
+            // The question can be anywhere in its own turn; later turns usually answer early, if at all.
+            let shown = lines.isEmpty ? all.suffix(300) : all.prefix(80)
+            words += shown.count
+            let text = shown.joined(separator: " ") + (shown.count < all.count && !lines.isEmpty ? " …" : "")
+            lines.append("[\(turn.id)] \(turn.speaker): \(text)")
+        }
         return """
-        Now check the open questions. For each, look through the turns after the ones it came from for a turn that answers it.
+        Open question \(number) of \(count): \(question.text) (\(question.sourceTurns.joined(separator: ", ")))
 
+        What was said from there on:
         \(lines.joined(separator: "\n"))
 
-        For each question give answered_in, the turn that answers it, or null if no later turn does; deciding what to do meanwhile doesn't answer it. Then give its kind: "open" for a question about the work that someone still has to answer, decide, or find out, or "hypothetical", "rhetorical", or "discussion" for one asked to imagine something, to make a point, or to start a discussion. A question about the field, the company, or careers in general, that nobody has to act on, is a discussion question. A question about the field, the company, or careers in general, that nobody has to act on, is a discussion question.
+        Does a turn after the question answer it? An answer usually comes from someone other than whoever asked, often without the question's words, and the speaker names in the transcript can be wrong. Deciding what to do meanwhile doesn't answer it. Give answered_in, the turn that answers it, or null if none does. Then give its kind: "open" for a question about the work that someone still has to answer, decide, or find out, or "hypothetical", "rhetorical", or "discussion" for one asked to imagine something, to make a point, or to start a discussion. A question about the field, the company, or careers in general, that nobody has to act on, is a discussion question.
         """
     }
 
-    /// One entry per question in order.
-    static func questionsGrammar(count: Int) -> String {
-        let entries = (1...count).map { number in
-            #"question\#(number) ::= "{" ws "\"item\":" ws "\#(number)" "," ws "\"answered_in\":" ws (turn | "null") "," ws "\"kind\":" ws kind ws "}""#
-        }
-        let root = #"root ::= "[" ws "# + (1...count).map { "question\($0)" }.joined(separator: #" "," ws "#) + #" ws "]""#
-        return ([root] + entries + [
-            #"turn ::= "\"T" [0-9] [0-9] [0-9] [0-9]? "\"""#,
-            #"kind ::= "\"open\"" | "\"hypothetical\"" | "\"rhetorical\"" | "\"discussion\"""#,
-            #"ws ::= [ \t\n]{0,20}"#,
-        ]).joined(separator: "\n")
+    static let questionGrammar = #"""
+    root ::= "{" ws "\"answered_in\":" ws (turn | "null") "," ws "\"kind\":" ws kind ws "}"
+    turn ::= "\"T" [0-9] [0-9] [0-9] [0-9]? "\""
+    kind ::= "\"open\"" | "\"hypothetical\"" | "\"rhetorical\"" | "\"discussion\""
+    ws ::= [ \t\n]{0,20}
+    """#
+
+    /// The turn the model says answers the question, if it's in the transcript and after the turns the question came from.
+    static func laterAnswer(to question: OpenQuestion, _ check: CheckedQuestion, turns: [Turn]) -> Turn? {
+        let position = Dictionary(turns.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
+        let asked = question.sourceTurns.compactMap { position[$0] }.max() ?? -1
+        guard let answer = check.answeredIn.flatMap({ position[$0] }), answer > asked else { return nil }
+        return turns[answer]
     }
 
-    /// The questions still open: real questions with no answer after the turns they came from. A turn the model names
-    /// that isn't in the transcript, or comes before, answers nothing.
-    static func stillOpen(_ questions: [OpenQuestion], checked: [CheckedQuestion], turns: [Turn]) -> [OpenQuestion] {
-        let position = Dictionary(turns.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
-        return zip(questions, checked).compactMap { question, check in
-            guard check.kind == "open" else { return nil }
-            let asked = question.sourceTurns.compactMap { position[$0] }.max() ?? -1
-            if let answer = check.answeredIn.flatMap({ position[$0] }), answer > asked { return nil }
-            return question
-        }
+    /// The one turn the search named, on its own: searching, the model calls nearly any reply an answer, like "Build
+    /// Parquet only for now" to "Will product want CSV too?"; shown the turn alone, it tells the two apart.
+    static func answerRequest(_ question: OpenQuestion, _ turn: Turn) -> String {
+        """
+        Does this turn answer the question "\(question.text)"?
+
+        [\(turn.id)] \(turn.speaker): \(turn.text.split(separator: " ").prefix(300).joined(separator: " "))
+
+        It answers it only if whoever asked now knows the answer. A turn that says nobody knows yet, that it depends on something else, or that decides what to do in the meantime doesn't.
+        """
+    }
+
+    static let answerGrammar = #"root ::= "{" [ \t\n]* "\"answers\":" [ \t\n]* ("true" | "false") [ \t\n]* "}""#
+
+    struct Verdict: Decodable {
+        let answers: Bool
     }
 
     /// One entry per item in order; action items can only be rewritten.
@@ -165,8 +192,7 @@ public struct NotesWriter {
         var notes = draft
         notes.decisions = []
         for (item, answer) in zip(items, checked) {
-            // The list shows each item's turns after it, and the reply sometimes carries them along.
-            let text = (answer.text ?? "").replacing(/\s*\((T\d+(,\s*)?)+\)\s*$/, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = withoutTurnIDs(answer.text ?? "")
             switch item.kind {
             case .decision where !text.isEmpty:
                 var decision = draft.decisions[item.index]
@@ -179,6 +205,11 @@ public struct NotesWriter {
             }
         }
         return notes
+    }
+
+    /// Text without the turn IDs that the model sometimes puts after it, like "(T029)", copying how turns are listed.
+    static func withoutTurnIDs(_ text: String) -> String {
+        text.replacing(/\s*\((T\d+(,\s*)?)+\)\s*$/, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Merges consecutive segments by the same Speaker into numbered turns.
@@ -250,4 +281,14 @@ public struct NotesWriter {
     char ::= [^"\\\x7F\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
     ws ::= [ \t\n]{0,20}
     """#
+}
+
+private extension Notes {
+    var withoutTurnIDsInText: Notes {
+        var notes = self
+        for i in notes.decisions.indices { notes.decisions[i].text = NotesWriter.withoutTurnIDs(notes.decisions[i].text) }
+        for i in notes.actionItems.indices { notes.actionItems[i].text = NotesWriter.withoutTurnIDs(notes.actionItems[i].text) }
+        for i in notes.openQuestions.indices { notes.openQuestions[i].text = NotesWriter.withoutTurnIDs(notes.openQuestions[i].text) }
+        return notes
+    }
 }
