@@ -44,7 +44,7 @@ To bring your data along, copy `~/Library/Application Support/Bekitzur` (its Mod
 - `scripts/package.sh` builds the app and packs it with `install.sh` into `build/Bekitzur.zip`, the file to hand someone. It installs nothing, so it can run while recording. `BEKITZUR_VERSION=0.3.0 scripts/package.sh` sets the version the app shows.
 - `swift build -c release` builds the app's executable and the `bekitzur` command-line tool into `.build/release`.
 
-Builds are signed ad hoc as `app.bekitzur.mac`, which needs no developer certificate and keeps macOS permissions across updates. Build numbers are the build's time in UTC.
+Builds are signed ad hoc as `app.bekitzur.mac`, which needs no developer certificate and keeps macOS permissions across updates. Build numbers are the build's time in UTC, and updates compare only those. Builds made here show version 9.9.9, from `App/Info.plist`, so they're never mistaken for a release; releases show their tag's version.
 
 `scripts/make-icon.swift` draws the icon and the menu bar images into `App/Resources`, and `scripts/generate-built-in-vocabulary.py` turns `eval/vocabulary/built-in.txt` into the built-in list of English terms.
 
