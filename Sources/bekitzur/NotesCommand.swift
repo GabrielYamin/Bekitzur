@@ -26,17 +26,20 @@ struct NotesCommand: AsyncParsableCommand {
     @Option(help: "Write the draft, before the model checked it item by item, as JSON to this file.")
     var draft: String?
 
+    @Option(help: "Most tokens the language model's context grows to; 32768 keeps it at the size it starts with.")
+    var maxContext: Int = LanguageModel.maximumContextSize
+
     func run() async throws {
         let (turns, header) = try loadTurns(URL(filePath: input))
         guard let day = (date ?? header.date).flatMap(parseDay) else {
             throw ValidationError("Give the Conversation date with --date YYYY-MM-DD")
         }
-        let model = try LanguageModel(modelURL: URL(filePath: model))
+        let model = try LanguageModel(modelURL: URL(filePath: model), largestContext: maxContext)
         let started = Date()
         let (notes, draftNotes, completion) = try NotesWriter(model: model).write(turns: turns, date: day, language: header.language)
         try output(notes, completion: completion, json: json)
         if let draft { try writeJSON(draftNotes, to: draft) }
-        log(String(format: "Draft and check: %.1f s", Date().timeIntervalSince(started)))
+        log(String(format: "Draft and check: %.1f s, in a %d-token context", Date().timeIntervalSince(started), model.contextSize))
     }
 }
 

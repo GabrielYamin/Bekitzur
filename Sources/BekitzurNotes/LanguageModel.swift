@@ -29,22 +29,42 @@ public struct Completion: Sendable {
 /// Runs a GGUF language model through llama.cpp, fully on the GPU, with greedy decoding.
 public final class LanguageModel {
     private let model: OpaquePointer
-    private let context: OpaquePointer
+    private var context: OpaquePointer
     private let vocab: OpaquePointer
-    public let contextSize: Int
+    /// Tokens the context holds. A chat that needs more grows it, up to `largestContext`.
+    public private(set) var contextSize: Int
+    private let largestContext: Int
     /// Tokens in the context: the chat so far.
     private var held = 0
     private static let backend: Void = llama_backend_init()
 
-    public init(modelURL: URL, contextSize: Int = 32_768) throws {
+    /// Gemma 4 reads up to 256K tokens, and Google reports it still finds what it needs at 128K. Its cache stays small,
+    /// since most of its layers keep only the last 1,024 tokens, so the context starts at 32K and grows only for a long
+    /// Transcript: a short one doesn't hold memory it won't use, on a 32 GB Mac too.
+    public static let maximumContextSize = 131_072
+    private static let growthStep = 16_384
+
+    public init(modelURL: URL, contextSize: Int = 32_768, largestContext: Int = LanguageModel.maximumContextSize) throws {
         _ = Self.backend
         var modelParams = llama_model_default_params()
         modelParams.n_gpu_layers = -1
         guard let model = llama_model_load_from_file(modelURL.path, modelParams) else {
             throw LanguageModelError.modelNotLoaded(modelURL)
         }
+        guard let context = Self.makeContext(for: model, size: contextSize) else {
+            llama_model_free(model)
+            throw LanguageModelError.contextNotCreated
+        }
+        self.model = model
+        self.context = context
+        self.vocab = llama_model_get_vocab(model)
+        self.contextSize = contextSize
+        self.largestContext = largestContext
+    }
+
+    private static func makeContext(for model: OpaquePointer, size: Int) -> OpaquePointer? {
         var contextParams = llama_context_default_params()
-        contextParams.n_ctx = UInt32(contextSize)
+        contextParams.n_ctx = UInt32(size)
         contextParams.n_batch = 2048
         contextParams.n_ubatch = 512
         contextParams.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO
@@ -54,14 +74,24 @@ public final class LanguageModel {
         let threads = Int32(max(1, min(8, ProcessInfo.processInfo.activeProcessorCount - 2)))
         contextParams.n_threads = threads
         contextParams.n_threads_batch = threads
-        guard let context = llama_init_from_model(model, contextParams) else {
-            llama_model_free(model)
-            throw LanguageModelError.contextNotCreated
+        return llama_init_from_model(model, contextParams)
+    }
+
+    /// Grows the context to hold `tokens`, in steps of 16K up to the maximum, or as much of that as there's memory for;
+    /// without memory for more, the context stays as it is. Only between chats, since a new context starts empty.
+    private func fit(_ tokens: Int) {
+        guard tokens > contextSize else { return }
+        var size = min(largestContext, (tokens + Self.growthStep - 1) / Self.growthStep * Self.growthStep)
+        while size > contextSize {
+            if let grown = Self.makeContext(for: model, size: size) {
+                llama_free(context)
+                context = grown
+                contextSize = size
+                held = 0
+                return
+            }
+            size -= Self.growthStep
         }
-        self.model = model
-        self.context = context
-        self.vocab = llama_model_get_vocab(model)
-        self.contextSize = contextSize
     }
 
     deinit {
@@ -82,10 +112,14 @@ public final class LanguageModel {
     }
 
     /// Starts a chat with a system and a user message, and replies; the context keeps all of it for `continueChat`.
-    public func startChat(system: String, user: String, grammar: String?, maxTokens: Int) throws -> Completion {
+    /// - Parameter followUp: Tokens to leave room for in the messages and replies that `continueChat` adds; the context
+    ///   grows to fit them with the first message, since it can't grow during a chat.
+    public func startChat(system: String, user: String, grammar: String?, maxTokens: Int, followUp: Int = 0) throws -> Completion {
+        let prompt = tokenize(Self.gemma4Prompt(system: system, user: user), addingStart: true)
+        fit(prompt.count + maxTokens + followUp)
         llama_memory_clear(llama_get_memory(context), true)
         held = 0
-        return try reply(to: tokenize(Self.gemma4Prompt(system: system, user: user), addingStart: true), grammar: grammar, maxTokens: maxTokens)
+        return try reply(to: prompt, grammar: grammar, maxTokens: maxTokens)
     }
 
     /// Adds a user message to the chat and replies. Only the new message is read: everything before it is still in the

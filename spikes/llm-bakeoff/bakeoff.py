@@ -185,7 +185,7 @@ FILLER_SPEAKERS = ["Dana", "Amir", "Noa", "Speaker 5"]
 FILLER_AFTER_TURNS = [4, 16, 23, 37, 49, 54, 59]
 
 
-def long_variant(case, blocks_per_gap=35):
+def long_variant(case, blocks_per_gap=35, name="t5-hebrew-team-sync-long"):
     rng = random.Random(7)
     turns, new_id = [], {}
 
@@ -207,12 +207,17 @@ def long_variant(case, blocks_per_gap=35):
         for item in key.get(section, []):
             item["turns"] = [new_id[i] for i in item["turns"]]
             item["also_turns"] = [new_id[i] for i in item.get("also_turns", [])]
-    return Case("t5-hebrew-team-sync-long", case.meta, turns, key)
+    return Case(name, case.meta, turns, key)
 
 
 def build_cases():
     t1 = load_case("t1-hebrew-team-sync")
-    cases = [t1, load_case("t2-english-one-on-one"), load_case("t3-hebrew-switches-to-english"), noisy_variant(t1), long_variant(t1)]
+    cases = [
+        t1, load_case("t2-english-one-on-one"), load_case("t3-hebrew-switches-to-english"), noisy_variant(t1), long_variant(t1),
+        # Past the 32K tokens the app's language model once stopped at: about 64K and 118K tokens.
+        long_variant(t1, blocks_per_gap=150, name="t6-hebrew-team-sync-2h"),
+        long_variant(t1, blocks_per_gap=280, name="t7-hebrew-team-sync-4h"),
+    ]
     generated = TRANSCRIPTS / "generated"
     generated.mkdir(exist_ok=True)
     for case in cases[3:]:

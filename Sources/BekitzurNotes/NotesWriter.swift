@@ -21,11 +21,12 @@ public struct NotesWriter {
 
     /// - Returns: The Notes, and the draft they were checked from.
     public func write(turns: [Turn], date: Date, language: ConversationLanguage, calendar: Calendar = .current) throws -> (notes: Notes, draft: Notes, completion: Completion) {
-        let completion = try model.complete(
+        let completion = try model.startChat(
             system: Self.instructions,
             user: Self.render(turns, date: date, language: language),
             grammar: Self.grammar,
-            maxTokens: 6_000
+            maxTokens: 6_000,
+            followUp: Self.reviewTokens
         )
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -43,6 +44,12 @@ public struct NotesWriter {
         }
         return (notes, draft, completion)
     }
+
+    /// Room for the checks after the draft: the decisions and action items, then each open question, whose message shows
+    /// up to 900 words said after it, about 4,000 tokens in Hebrew, so this covers about two of them. Checks that don't
+    /// fit leave their items as drafted. More room grew the context past its first 32K for a 3,000-token Transcript,
+    /// for the same Notes, where this keeps it there up to about an hour of Hebrew.
+    static let reviewTokens = 12_288
 
     /// The draft checked in the same chat, which still holds the transcript, since one pass over a long transcript leaves
     /// items like "We'll do it tomorrow" as they were said and lists questions that were answered later on. Decisions and
