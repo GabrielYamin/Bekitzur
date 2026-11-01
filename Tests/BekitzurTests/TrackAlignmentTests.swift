@@ -81,7 +81,7 @@ struct TrackAlignmentTests {
         try #require(delays.count == 2)
         #expect(delays[0] == TrackDelay(from: 0, delay: 0.02))
         #expect(delays[1].delay == Double(320 + lost) / Double(rate))
-        #expect(abs(delays[1].from - 41) < 4)
+        #expect(abs(delays[1].from - 41) < 2.5)
         // Placed, the system audio is the call as the microphone heard it, away from where the delay changes.
         let placed = TrackAlignment.placing(system, by: delays)
         for second in [10, 30, 60, 80] { #expect(placed[second * rate + 320] == call[second * rate]) }

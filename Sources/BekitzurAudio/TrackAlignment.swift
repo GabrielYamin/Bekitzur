@@ -4,42 +4,31 @@ import BekitzurDomain
 /// Lines up a call's two tracks by the copy of the system audio that laptop speakers put in the microphone.
 public enum TrackAlignment {
     /// How much later to play the system audio along the call so the other side lines up with the microphone's copy:
-    /// measured every 4 seconds over 8 while the other side talks, a new delay wherever it moves by more than 3 ms.
-    /// Empty without a clear copy, as with headphones.
+    /// found every 4 seconds over 8 while the other side talks, then every second over 2 near that, with a new delay
+    /// wherever it moves by more than 3 ms, in the quietest moment around. Empty without a clear copy, as with headphones.
     ///
     /// The copy comes after the system audio by however long the speakers take to play it, and a recording that lost
     /// audio on the way drifts: on November 1 the system audio track lost seven blocks while the Mac was busy, and the
-    /// copy went from 66 ms after it to 237 ms, an echo by the end.
+    /// copy went from 66 ms after it to 237 ms, an echo by the end. Measured over 8 seconds alone, where blocks went
+    /// missing every few seconds, a change came seconds away from the loss, and three half-minutes stayed 6 to 19 ms off.
     /// - Parameters:
     ///   - microphone: 16 kHz mono, like `system`.
     public static func systemAudioDelays(microphone: [Float], system: [Float], sampleRate: Double = 16_000) -> [TrackDelay] {
-        let count = min(system.count, microphone.count)
-        let window = Int(8 * sampleRate), hop = Int(4 * sampleRate), maxLag = Int(sampleRate)
-        guard count >= window, let correlator = Correlator(minimumSize: window + maxLag, sampleRate: sampleRate) else { return [] }
-
-        var measured: [(time: Int, lag: Double)] = []
-        for start in stride(from: 0, through: count - window, by: hop) where vDSP.rootMeanSquare(system[start..<start + window]) > 0.005 {
-            let r = correlator.normalized(microphone[start..<start + window], system[start..<start + window], maxLag: maxLag)
-            let peak = vDSP.indexOfMaximum(vDSP.absolute(r))
-            guard abs(r[Int(peak.0)]) >= 0.1 else { continue }
-            measured.append((start + window / 2, Double(Int(peak.0) - maxLag) / sampleRate))
-        }
+        let coarse = lags(of: system, in: microphone, window: 8, hop: 4, searching: 1, sampleRate: sampleRate) { _ in 0 }
         // Too little of the other side to follow along: one delay for the whole call, from its loudest stretches together.
-        guard measured.count >= 3 else {
+        guard coarse.count >= 3 else {
             return copyLag(of: system, in: microphone, sampleRate: sampleRate).map { [TrackDelay(from: 0, delay: $0)] } ?? []
         }
-
-        // A stray peak in one window isn't a change: each lag becomes the median of itself and its neighbors, and the
-        // first or last takes its neighbors' when both agree against it. Within a few ms, a room's reflections take
-        // turns being the strongest path, so smaller moves stay one delay.
-        let tolerance = 0.003
-        let lags = measured.indices.map { i -> Double in
-            if i > 0, i < measured.count - 1 { return median([measured[i - 1].lag, measured[i].lag, measured[i + 1].lag]) }
-            let near = measured[i == 0 ? 1 : i - 1].lag, far = measured[i == 0 ? 2 : i - 2].lag
-            return abs(near - far) <= tolerance && abs(measured[i].lag - near) > tolerance ? near : measured[i].lag
+        let near = smoothed(coarse, radius: 1)
+        let fine = lags(of: system, in: microphone, window: 2, hop: 1, searching: 0.04, sampleRate: sampleRate) { time in
+            near.min { abs($0.time - time) < abs($1.time - time) }?.lag ?? 0
         }
+        // A stray peak or two isn't a change. Within a few ms, a room's reflections take turns being the strongest path,
+        // so smaller moves stay one delay.
+        let measured = fine.count >= 3 ? smoothed(fine, radius: 2) : near
+        let tolerance = 0.003
         var runs: [(first: Int, lags: [Double])] = []
-        for (i, lag) in lags.enumerated() {
+        for (i, lag) in measured.map(\.lag).enumerated() {
             if let run = runs.last, abs(lag - median(run.lags)) <= tolerance {
                 runs[runs.count - 1].lags.append(lag)
             } else {
@@ -50,6 +39,37 @@ public enum TrackAlignment {
             let from = index == 0 ? 0 : quietest(system, between: measured[run.first - 1].time, and: measured[run.first].time, sampleRate: sampleRate)
             return TrackDelay(from: Double(from) / sampleRate, delay: (median(run.lags) * sampleRate).rounded() / sampleRate)
         }
+    }
+
+    /// The copy's lag behind the system audio, in windows of `window` seconds every `hop` where the other side talks and
+    /// the copy is clear, searched `searching` seconds either way of where `around` says it is, by the window's middle.
+    private static func lags(
+        of system: [Float],
+        in microphone: [Float],
+        window seconds: Double,
+        hop: Double,
+        searching: Double,
+        sampleRate: Double,
+        around: (Int) -> Double
+    ) -> [(time: Int, lag: Double)] {
+        let count = min(system.count, microphone.count)
+        let window = Int(seconds * sampleRate), maxLag = Int(searching * sampleRate)
+        guard count >= window, let correlator = Correlator(minimumSize: window + maxLag, sampleRate: sampleRate) else { return [] }
+        var measured: [(time: Int, lag: Double)] = []
+        for start in stride(from: 0, through: count - window, by: Int(hop * sampleRate)) where vDSP.rootMeanSquare(system[start..<start + window]) > 0.005 {
+            let shift = Int((around(start + window / 2) * sampleRate).rounded())
+            guard start + shift >= 0, start + shift + window <= microphone.count else { continue }
+            let r = correlator.normalized(microphone[(start + shift)..<(start + shift + window)], system[start..<start + window], maxLag: maxLag)
+            let peak = vDSP.indexOfMaximum(vDSP.absolute(r))
+            guard abs(r[Int(peak.0)]) >= 0.1 else { continue }
+            measured.append((start + window / 2, Double(shift + Int(peak.0) - maxLag) / sampleRate))
+        }
+        return measured
+    }
+
+    /// Each lag as the median of those within `radius` windows of it.
+    private static func smoothed(_ measured: [(time: Int, lag: Double)], radius: Int) -> [(time: Int, lag: Double)] {
+        measured.indices.map { i in (measured[i].time, median(measured[max(0, i - radius)...min(measured.count - 1, i + radius)].map(\.lag))) }
     }
 
     /// The system audio as `delays` place it, for mixing with the microphone.
