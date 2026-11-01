@@ -22,6 +22,24 @@ public final class SystemAudioRecorder {
     private var procID: AudioDeviceIOProcID?
     private var writer: AudioFileWriter?
     private let queue = DispatchQueue(label: "bekitzur.system-audio", qos: .userInitiated)
+    private let overloads = Overloads()
+    private var overloadListener: AudioObjectPropertyListenerBlock?
+
+    /// Times Core Audio couldn't hand the recording a block in time, counted on Core Audio's notification queue.
+    private final class Overloads: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+
+        func add() {
+            lock.withLock { count += 1 }
+        }
+
+        var total: Int { lock.withLock { count } }
+    }
+
+    private static var overloadAddress: AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(mSelector: kAudioDeviceProcessorOverload, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    }
 
     public init() {}
 
@@ -72,28 +90,42 @@ public final class SystemAudioRecorder {
         try check(
             AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, queue) { _, input, inputTime, _, _ in
                 let time = inputTime.pointee
-                writer.write(input, at: time.mFlags.contains(.hostTimeValid) ? time.mHostTime : nil)
+                writer.write(
+                    input,
+                    at: time.mFlags.contains(.hostTimeValid) ? time.mHostTime : nil,
+                    sampleTime: time.mFlags.contains(.sampleTimeValid) ? time.mSampleTime : nil
+                )
             },
             "receive system audio"
         )
+        let overloads = overloads
+        let overloaded: AudioObjectPropertyListenerBlock = { _, _ in overloads.add() }
+        var overloadAddress = Self.overloadAddress
+        if AudioObjectAddPropertyListenerBlock(aggregateID, &overloadAddress, queue, overloaded) == noErr { overloadListener = overloaded }
         try check(AudioDeviceStart(aggregateID, procID), "start recording system audio")
     }
 
-    /// Seconds of silence the file started with, once the first sound arrived.
-    var leadingSilence: Double? { writer?.leadingSilence }
-
-    public func stop() {
+    /// Stops and finishes the file; nil if it wasn't recording.
+    @discardableResult
+    public func stop() -> TrackReport? {
         if let procID {
             AudioDeviceStop(aggregateID, procID)
             AudioDeviceDestroyIOProcID(aggregateID, procID)
         }
+        if let overloadListener {
+            var address = Self.overloadAddress
+            AudioObjectRemovePropertyListenerBlock(aggregateID, &address, queue, overloadListener)
+        }
         if aggregateID != kAudioObjectUnknown { AudioHardwareDestroyAggregateDevice(aggregateID) }
         if tapID != kAudioObjectUnknown { AudioHardwareDestroyProcessTap(tapID) }
         procID = nil
+        overloadListener = nil
         aggregateID = AudioObjectID(kAudioObjectUnknown)
         tapID = AudioObjectID(kAudioObjectUnknown)
-        writer?.close()
+        var report = writer?.close()
+        report?.overloads = overloads.total
         writer = nil
+        return report
     }
 
     private static func defaultOutputDeviceUID() throws -> String {

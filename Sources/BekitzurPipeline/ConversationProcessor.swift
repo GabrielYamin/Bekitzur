@@ -38,13 +38,28 @@ public struct CallTracks: Sendable {
         TrackAlignment.microphoneDelay(microphone: microphone, system: system)
     }
 
+    /// How much later to play the system audio along the call so the other side lines up with the microphone's copy
+    /// (`TrackAlignment`); empty without one.
+    public var measuredSystemAudioDelays: [TrackDelay] {
+        TrackAlignment.systemAudioDelays(microphone: microphone, system: system)
+    }
+
     /// The tracks with the microphone played `seconds` later, and their sum.
     public func delayingMicrophone(by seconds: Double) -> (tracks: CallTracks, mixed: [Float]) {
         let delayed = [Float](repeating: 0, count: Int((seconds * AudioLoader.sampleRate).rounded())) + microphone
-        var mixed = [Float](repeating: 0, count: max(delayed.count, system.count))
-        for i in delayed.indices { mixed[i] += delayed[i] }
+        return Self.mixing(microphone: delayed, system: system)
+    }
+
+    /// The tracks with the system audio played as `delays` say, and their sum.
+    public func placingSystemAudio(by delays: [TrackDelay]) -> (tracks: CallTracks, mixed: [Float]) {
+        Self.mixing(microphone: microphone, system: TrackAlignment.placing(system, by: delays))
+    }
+
+    private static func mixing(microphone: [Float], system: [Float]) -> (tracks: CallTracks, mixed: [Float]) {
+        var mixed = [Float](repeating: 0, count: max(microphone.count, system.count))
+        for i in microphone.indices { mixed[i] += microphone[i] }
         for i in system.indices { mixed[i] += system[i] }
-        return (CallTracks(microphone: delayed, system: system), mixed)
+        return (CallTracks(microphone: microphone, system: system), mixed)
     }
 }
 
@@ -68,6 +83,13 @@ public enum ConversationProcessor {
     /// nil without a copy of the system audio in the microphone.
     public static func microphoneDelay(microphone: URL, system: URL) throws -> Double? {
         TrackAlignment.microphoneDelay(microphone: try AudioLoader.loadMono16k(microphone), system: try AudioLoader.loadMono16k(system))
+    }
+
+    /// How much later to play a call's system audio along the call (`TrackAlignment.systemAudioDelays`), with the
+    /// microphone played `microphoneDelay` seconds later as it is everywhere else.
+    public static func systemAudioDelays(microphone: URL, system: URL, microphoneDelay: Double) throws -> [TrackDelay] {
+        let tracks = CallTracks(microphone: try AudioLoader.loadMono16k(microphone), system: try AudioLoader.loadMono16k(system))
+        return (microphoneDelay > 0 ? tracks.delayingMicrophone(by: microphoneDelay).tracks : tracks).measuredSystemAudioDelays
     }
 
     /// Loads the tracks that exist and sums them into one signal.

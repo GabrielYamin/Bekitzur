@@ -90,6 +90,7 @@ struct AudioTests {
         for i in 0..<48_000 { second.floatChannelData![0][i] = tone(0.3, frame: i) }
         let writer = try AudioFileWriter(url: url, format: mono)
         for _ in 0..<10 { writer.write(second) }
+        writer.flush()
 
         // Not closed, as when the app dies mid-recording.
         let samples = try AudioLoader.loadMono16k(url)
@@ -135,6 +136,7 @@ struct AudioTests {
         for i in 0..<48_000 { second.floatChannelData![0][i] = tone(0.3, frame: i) }
         let writer = try AudioFileWriter(url: url, format: mono)
         for _ in 0..<5 { writer.write(second) }
+        writer.flush()
 
         let finished = try RecordingFiles.finish(url)
 

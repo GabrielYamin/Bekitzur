@@ -24,6 +24,10 @@ public struct ConversationInfo: Codable, Identifiable, Sendable, Hashable {
     /// Seconds the microphone track plays later than the system audio track so a call's two tracks line up: 0 for
     /// recordings lined up while recording, measured once for earlier ones, nil until then.
     public var microphoneDelay: Double?
+    /// How much later the system audio track plays, along the call, so the other side lines up with the copy the
+    /// microphone heard: measured after recording, on the microphone as `microphoneDelay` places it. Empty when the
+    /// microphone didn't hear the call, as with headphones; nil until measured.
+    public var systemAudioDelays: [TrackDelay]?
 
     public init(id: String, startedAt: Date, language: ConversationLanguage? = nil, status: ConversationStatus) {
         self.id = id

@@ -1,4 +1,5 @@
 import BekitzurAudio
+import BekitzurDomain
 import Testing
 
 /// Reproducible noise, standing in for speech on the system audio track.
@@ -56,9 +57,62 @@ struct TrackAlignmentTests {
 
     @Test func withoutACopyThereIsNothingToLineUp() {
         var callNoise = Noise(seed: 1), roomNoise = Noise(seed: 3)
+        let room = roomNoise.samples(30 * rate, amplitude: 0.1), call = callNoise.samples(30 * rate, amplitude: 0.3)
 
-        let delay = TrackAlignment.microphoneDelay(microphone: roomNoise.samples(30 * rate, amplitude: 0.1), system: callNoise.samples(30 * rate, amplitude: 0.3))
+        #expect(TrackAlignment.microphoneDelay(microphone: room, system: call) == nil)
+        #expect(TrackAlignment.systemAudioDelays(microphone: room, system: call).isEmpty)
+    }
 
-        #expect(delay == nil)
+    /// The other side, as the system audio track has it: three seconds of talk, then a second's pause.
+    private func talking(seconds: Int) -> [Float] {
+        var noise = Noise(seed: 1)
+        return (0..<seconds * rate).map { i in (i / rate) % 4 == 3 ? 0 : noise.next() * 0.3 }
+    }
+
+    /// November 1: each block lost from the system audio moved the rest of it further ahead of the microphone's copy.
+    @Test func systemAudioThatLostABlockPlaysLaterFromThere() throws {
+        let call = talking(seconds: 90)
+        // A block of 1,024 frames at 48 kHz went missing 41 seconds in; the speakers took 20 ms.
+        let lost = 341, at = 41 * rate
+        let system = Array(call[..<at] + call[(at + lost)...])
+
+        let delays = TrackAlignment.systemAudioDelays(microphone: microphone(hearing: call, shift: 320, gain: 0.12), system: system)
+
+        try #require(delays.count == 2)
+        #expect(delays[0] == TrackDelay(from: 0, delay: 0.02))
+        #expect(delays[1].delay == Double(320 + lost) / Double(rate))
+        #expect(abs(delays[1].from - 41) < 4)
+        // Placed, the system audio is the call as the microphone heard it, away from where the delay changes.
+        let placed = TrackAlignment.placing(system, by: delays)
+        for second in [10, 30, 60, 80] { #expect(placed[second * rate + 320] == call[second * rate]) }
+    }
+
+    /// Speakers and a microphone with clocks of their own, 50 parts per million apart: the copy moves a little at a time,
+    /// and the delay follows.
+    @Test func aCopyThatDriftsIsFollowedWithinAFewMilliseconds() throws {
+        let call = talking(seconds: 300)
+        let lag = { (i: Int) in 320 + i / 20_000 }
+        var noise = Noise(seed: 2)
+        let drifting = call.indices.map { i in (i >= lag(i) ? 0.12 * call[i - lag(i)] : 0) + noise.next() * 0.02 }
+
+        let delays = TrackAlignment.systemAudioDelays(microphone: drifting, system: call)
+
+        #expect(delays.count >= 2)
+        for second in stride(from: 30, to: 300, by: 30) {
+            let delay = try #require(delays.last { $0.from <= Double(second) }).delay
+            #expect(abs(delay - Double(lag(second * rate)) / Double(rate)) <= 0.004)
+        }
+    }
+
+    @Test func aGrowingDelayLeavesSilenceAndAShrinkingOneCutsTheStart() {
+        let pieces = TrackDelay.pieces([TrackDelay(from: 0, delay: -0.05), TrackDelay(from: 10, delay: 0.02), TrackDelay(from: 20, delay: 0.01)], duration: 30)
+
+        let expected: [(source: Range<Double>, at: Double)] = [(0.05..<10, 0), (10..<20, 10.02), (20.01..<30, 20.02)]
+        #expect(pieces.count == expected.count)
+        for (piece, expected) in zip(pieces, expected) {
+            #expect(abs(piece.source.lowerBound - expected.source.lowerBound) < 1e-9)
+            #expect(piece.source.upperBound == expected.source.upperBound)
+            #expect(abs(piece.at - expected.at) < 1e-9)
+        }
     }
 }

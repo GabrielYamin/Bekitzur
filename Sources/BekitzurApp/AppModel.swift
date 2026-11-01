@@ -109,6 +109,8 @@ final class AppModel {
     }
 
     @ObservationIgnored private var recorder: ConversationRecorder?
+    /// Keeps macOS from slowing Bekitzur down in the background, or sleeping, while it records.
+    @ObservationIgnored private var recordingActivity: NSObjectProtocol?
     @ObservationIgnored private var liveTranscriber: LiveTranscriber?
     @ObservationIgnored private var waiting: [String] = []
     /// Conversations whose next processing separates Speakers again but keeps the Transcript.
@@ -144,7 +146,7 @@ final class AppModel {
             }
         }
         Task { await refreshPermissions() }
-        Task(priority: .utility) { await lineUpEarlierCalls() }
+        Task(priority: .utility) { await lineUpCalls() }
         Updater.removeLeftovers(beside: Bundle.main.bundleURL)
         if let freed = SpeakerModels.removeReplaced() {
             AppLog.write("Deleted Sortformer's model, which Nemotron 3 Diarization replaced: \(freed.formatted(.byteCount(style: .file)))")
@@ -281,23 +283,50 @@ final class AppModel {
         alert.runModal()
     }
 
-    /// Calls recorded before tracks were lined up while recording: measures once how much later each one's microphone
-    /// plays, for playback and processing.
-    private func lineUpEarlierCalls() async {
-        for info in conversations where info.microphoneDelay == nil && info.status != .recording && info.status != .processing {
+    /// Lines up calls processed before they were measured, once, for playback: calls recorded before tracks were lined
+    /// up while recording by how much later their microphone plays, then every call by how much later its system audio
+    /// plays along the call. Waits while recording, so measuring never competes with it.
+    private func lineUpCalls() async {
+        for info in conversations where (info.microphoneDelay == nil || info.systemAudioDelays == nil) && info.status != .recording && info.status != .processing {
+            while isRecording { try? await Task.sleep(for: .seconds(10)) }
             let tracks = library.audioTracks(for: info.id)
             let named = { (track: ConversationRecorder.Track) in tracks.first { $0.deletingPathExtension().lastPathComponent == track.name } }
             guard let microphone = named(.microphone), let system = named(.systemAudio) else { continue }
-            let delay = await Self.measureMicrophoneDelay(microphone: microphone, system: system)
-            guard conversations.first(where: { $0.id == info.id })?.microphoneDelay == nil else { continue }
-            update(info.id) { $0.microphoneDelay = delay }
-            AppLog.write(String(format: "%@: microphone track lined up, played %.0f ms later", info.id, delay * 1000))
+            var microphoneDelay = info.microphoneDelay
+            if microphoneDelay == nil {
+                let delay = await Self.measureMicrophoneDelay(microphone: microphone, system: system)
+                guard conversations.first(where: { $0.id == info.id })?.microphoneDelay == nil else { continue }
+                update(info.id) { $0.microphoneDelay = delay }
+                microphoneDelay = delay
+                AppLog.write(String(format: "%@: microphone track lined up, played %.0f ms later", info.id, delay * 1000))
+            }
+            let delays = await Self.measureSystemAudioDelays(microphone: microphone, system: system, microphoneDelay: microphoneDelay ?? 0)
+            guard let current = conversations.first(where: { $0.id == info.id }), current.systemAudioDelays == nil,
+                  current.status != .recording, current.status != .processing else { continue }
+            update(info.id) { $0.systemAudioDelays = delays }
+            AppLog.write("\(info.id): \(Self.describe(delays))")
         }
     }
 
     @concurrent
     private nonisolated static func measureMicrophoneDelay(microphone: URL, system: URL) async -> Double {
         ((try? ConversationProcessor.microphoneDelay(microphone: microphone, system: system)) ?? nil) ?? 0
+    }
+
+    @concurrent
+    private nonisolated static func measureSystemAudioDelays(microphone: URL, system: URL, microphoneDelay: Double) async -> [TrackDelay] {
+        (try? ConversationProcessor.systemAudioDelays(microphone: microphone, system: system, microphoneDelay: microphoneDelay)) ?? []
+    }
+
+    /// For the log: how a call's system audio was lined up.
+    nonisolated static func describe(_ delays: [TrackDelay]) -> String {
+        guard let first = delays.first, let last = delays.last else {
+            return "system audio not lined up, since the microphone didn't hear the call"
+        }
+        let played = { (delay: Double) in String(format: "%.0f ms %@", abs(delay) * 1000, delay < 0 ? "earlier" : "later") }
+        guard delays.count > 1 else { return "system audio lined up, played \(played(first.delay))" }
+        return String(format: "system audio lined up, played %@ at first and %@ from %d:%02d, in %d steps",
+                      played(first.delay), played(last.delay), Int(last.from) / 60, Int(last.from) % 60, delays.count - 1)
     }
 
     // MARK: Permissions
@@ -492,6 +521,7 @@ final class AppModel {
                 throw error
             }
             self.recorder = recorder
+            recordingActivity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Recording a Conversation")
             liveTranscriber = live
             recordingID = info.id
             recordingStartedAt = info.startedAt
@@ -511,11 +541,10 @@ final class AppModel {
 
     func stopRecording() {
         guard let id = recordingID, let recorder else { return }
-        recorder.stop()
+        let reports = recorder.stop()
+        endRecordingActivity()
         AppLog.write("\(id): recording stopped after \(Int(Date().timeIntervalSince(recordingStartedAt ?? Date()))) s")
-        let silence = recorder.leadingSilence
-        AppLog.write(String(format: "%@: tracks lined up; system audio started after %.0f ms, the microphone after %.0f ms",
-                            id, (silence[.systemAudio] ?? 0) * 1000, (silence[.microphone] ?? 0) * 1000))
+        log(reports, for: id)
         self.recorder = nil
         recordingID = nil
         recordingStartedAt = nil
@@ -530,6 +559,31 @@ final class AppModel {
         Task {
             if let live { await finishLive(live, for: id) }
             enqueue(id)
+        }
+    }
+
+    private func endRecordingActivity() {
+        if let recordingActivity { ProcessInfo.processInfo.endActivity(recordingActivity) }
+        recordingActivity = nil
+    }
+
+    /// How each track kept time: when its device started, and anything that went wrong on the way.
+    private func log(_ reports: [ConversationRecorder.Track: TrackReport], for id: String) {
+        AppLog.write(String(format: "%@: tracks lined up; system audio started after %.0f ms, the microphone after %.0f ms",
+                            id, (reports[.systemAudio]?.leadingSilence ?? 0) * 1000, (reports[.microphone]?.leadingSilence ?? 0) * 1000))
+        for track in ConversationRecorder.Track.allCases {
+            guard let report = reports[track] else { continue }
+            var problems: [String] = []
+            if report.gaps > 0 {
+                var gaps = String(format: "lost audio %d times on the way, %.0f ms in all, kept in time with silence", report.gaps, report.gapSeconds * 1000)
+                if report.lostSeconds > 0 { gaps += String(format: " (%.0f ms while writing fell behind)", report.lostSeconds * 1000) }
+                problems.append(gaps)
+            }
+            if report.overloads > 0 { problems.append("Core Audio was late \(report.overloads) times") }
+            if report.restarts > 0 { problems.append("started over \(report.restarts) times after a change of device") }
+            if report.failedWrites > 0 { problems.append("\(report.failedWrites) blocks couldn't be written") }
+            guard !problems.isEmpty else { continue }
+            AppLog.write("\(id): \(track == .microphone ? "the microphone" : "system audio") \(problems.joined(separator: "; "))")
         }
     }
 
@@ -677,8 +731,10 @@ final class AppModel {
         guard let id = recordingID else { return }
         liveTranscriber?.cancel()
         liveTranscriber = nil
-        recorder?.stop()
+        let reports = recorder?.stop() ?? [:]
+        endRecordingActivity()
         AppLog.write("\(id): recording stopped by quitting; it will be processed on the next launch")
+        log(reports, for: id)
         update(id) {
             $0.endedAt = Date()
             $0.status = .processing
@@ -776,6 +832,7 @@ final class AppModel {
                 let result: ProcessedConversation
                 let warning: String?
                 let measuredDelay: Double?
+                let measuredDelays: [TrackDelay]?
                 if let notesOnly {
                     result = try await Self.rewrite(notesOnly, flags: flags, date: info.startedAt, language: notesOnly.transcript.language) { step in
                         Task { @MainActor in
@@ -784,14 +841,16 @@ final class AppModel {
                     }
                     warning = info.warning
                     measuredDelay = nil
+                    measuredDelays = nil
                 } else {
-                    (result, warning, measuredDelay) = try await Self.run(
+                    (result, warning, measuredDelay, measuredDelays) = try await Self.run(
                         folder: folder,
                         date: info.startedAt,
                         language: info.language,
                         assumed: lastLanguage,
                         people: info.people,
                         microphoneDelay: info.microphoneDelay,
+                        systemAudioDelays: info.systemAudioDelays,
                         transcript: transcript,
                         salvage: salvage,
                         flags: flags
@@ -815,9 +874,11 @@ final class AppModel {
                     $0.warning = warning
                     $0.language = language
                     if let measuredDelay { $0.microphoneDelay = measuredDelay }
+                    if let measuredDelays { $0.systemAudioDelays = measuredDelays }
                 }
                 if info.language == nil { lastLanguage = language }
                 if let measuredDelay { AppLog.write(String(format: "%@: microphone track lined up, played %.0f ms later", id, measuredDelay * 1000)) }
+                if let measuredDelays { AppLog.write("\(id): \(Self.describe(measuredDelays))") }
                 let notes = result.notes
                 AppLog.write(String(
                     format: "%@: Notes ready after %.0f s: %@, %d Speakers, %d Decisions, %d Action Items, %d Open Questions",
@@ -861,6 +922,8 @@ final class AppModel {
     ///   - language: Nil to detect it.
     ///   - assumed: The language for a Recording without speech to detect it from.
     ///   - microphoneDelay: How much later to play the microphone track; measured here when nil, and returned.
+    ///   - systemAudioDelays: How much later to play the system audio track along a call; measured here when nil, and
+    ///     returned.
     ///   - transcript: A Transcript already made, used if it's in `language`.
     ///   - salvage: A live Transcript to write the Notes from if the audio can't be read, as when the app quit before it
     ///     finished the files.
@@ -872,11 +935,12 @@ final class AppModel {
         assumed: ConversationLanguage,
         people: Int?,
         microphoneDelay: Double?,
+        systemAudioDelays: [TrackDelay]?,
         transcript given: Transcript?,
         salvage: Transcript?,
         flags: TranscriptFlags,
         progress: @escaping @Sendable (ProcessingStep) -> Void
-    ) async throws -> (result: ProcessedConversation, warning: String?, measuredDelay: Double?) {
+    ) async throws -> (result: ProcessedConversation, warning: String?, measuredDelay: Double?, measuredDelays: [TrackDelay]?) {
         for track in RecordingFiles.unfinished(in: folder) {
             do {
                 try RecordingFiles.finish(track)
@@ -901,7 +965,7 @@ final class AppModel {
                 progress: progress
             )
             let minutes = Int(((salvage.segments.last?.end ?? 0) / 60).rounded(.up))
-            return (result, "The audio couldn't be read because the app quit before finishing it, so these Notes come from the live Transcript of the first \(minutes) minutes, without Speakers.", nil)
+            return (result, "The audio couldn't be read because the app quit before finishing it, so these Notes come from the live Transcript of the first \(minutes) minutes, without Speakers.", nil, nil)
         }
         let byName = Dictionary(audio.tracks.map { ($0.key.deletingPathExtension().lastPathComponent, $0.value) }, uniquingKeysWith: { first, _ in first })
         var call = byName[ConversationRecorder.Track.microphone.name].flatMap { microphone in
@@ -919,6 +983,16 @@ final class AppModel {
             }
             if delay > 0 {
                 let lined = tracks.delayingMicrophone(by: delay)
+                call = lined.tracks
+                samples = lined.mixed
+            }
+        }
+        var measuredDelays: [TrackDelay]?
+        if let tracks = call {
+            let delays = systemAudioDelays ?? tracks.measuredSystemAudioDelays
+            if systemAudioDelays == nil { measuredDelays = delays }
+            if !delays.isEmpty {
+                let lined = tracks.placingSystemAudio(by: delays)
                 call = lined.tracks
                 samples = lined.mixed
             }
@@ -951,7 +1025,7 @@ final class AppModel {
         } else if silent.contains(ConversationRecorder.Track.microphone.name) {
             warning = "Your microphone recorded only silence. Check the input device in System Settings → Sound."
         }
-        return (result, warning, measuredDelay)
+        return (result, warning, measuredDelay, measuredDelays)
     }
 
     /// Transcribes a whole Recording as live transcription does, in the helper process: a crash in whisper.cpp then fails

@@ -1,5 +1,6 @@
 import AVFoundation
 import BekitzurCapture
+import BekitzurDomain
 import Observation
 
 /// Plays a Conversation's Recording, with both tracks of a call together, and reports where it is so the Transcript
@@ -29,8 +30,10 @@ final class PlaybackModel {
         stop()
     }
 
-    /// - Parameter microphoneDelay: Seconds the microphone track starts later than the others, to line up a call.
-    func load(_ tracks: [URL], microphoneDelay: Double = 0) async {
+    /// - Parameters:
+    ///   - microphoneDelay: Seconds the microphone track starts later than the others, to line up a call.
+    ///   - systemAudioDelays: How much later the system audio track plays along a call, to line it up.
+    func load(_ tracks: [URL], microphoneDelay: Double = 0, systemAudioDelays: [TrackDelay] = []) async {
         stop()
         let composition = AVMutableComposition()
         do {
@@ -38,10 +41,14 @@ final class PlaybackModel {
                 let asset = AVURLAsset(url: url)
                 guard let track = try await asset.loadTracks(withMediaType: .audio).first else { continue }
                 let length = try await asset.load(.duration)
-                let lane = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-                let isMicrophone = url.deletingPathExtension().lastPathComponent == ConversationRecorder.Track.microphone.name
-                let start = isMicrophone ? CMTime(seconds: microphoneDelay, preferredTimescale: 48_000) : .zero
-                try lane?.insertTimeRange(CMTimeRange(start: .zero, duration: length), of: track, at: start)
+                guard let lane = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
+                let name = url.deletingPathExtension().lastPathComponent
+                if name == ConversationRecorder.Track.systemAudio.name, !systemAudioDelays.isEmpty {
+                    try Self.insert(track, into: lane, pieces: TrackDelay.pieces(systemAudioDelays, duration: length.seconds))
+                } else {
+                    let start = name == ConversationRecorder.Track.microphone.name ? CMTime(seconds: microphoneDelay, preferredTimescale: 48_000) : .zero
+                    try lane.insertTimeRange(CMTimeRange(start: .zero, duration: length), of: track, at: start)
+                }
             }
         } catch {
             AppLog.write("Playback couldn't load \(tracks.map(\.lastPathComponent)): \(error)")
@@ -65,6 +72,21 @@ final class PlaybackModel {
         self.player = player
         duration = composition.duration.seconds
         isLoaded = true
+    }
+
+    /// Each stretch of the track where it plays, with silence where one starts after the last ends.
+    private static func insert(_ track: AVAssetTrack, into lane: AVMutableCompositionTrack, pieces: [TrackDelay.Piece]) throws {
+        let time = { (seconds: Double) in CMTime(seconds: seconds, preferredTimescale: 48_000) }
+        var end = CMTime.zero
+        for piece in pieces {
+            // Rounded to the timescale, a piece can come a tick before the last one ends, and inserting it there would
+            // split that one.
+            let at = max(time(piece.at), end)
+            if at > end { lane.insertEmptyTimeRange(CMTimeRange(start: end, end: at)) }
+            let source = CMTimeRange(start: time(piece.source.lowerBound), end: time(piece.source.upperBound))
+            try lane.insertTimeRange(source, of: track, at: at)
+            end = at + source.duration
+        }
     }
 
     func toggle() {

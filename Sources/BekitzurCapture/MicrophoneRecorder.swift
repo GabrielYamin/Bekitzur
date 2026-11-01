@@ -2,9 +2,11 @@ import AVFoundation
 import CoreAudio
 
 /// Records the default input device to a mono file.
-public final class MicrophoneRecorder {
+public final class MicrophoneRecorder: @unchecked Sendable {
     private let engine = AVAudioEngine()
     private var writer: AudioFileWriter?
+    private var configurationChanges: NSObjectProtocol?
+    private let restarts = DispatchQueue(label: "bekitzur.microphone-restarts")
 
     public init() {}
 
@@ -24,26 +26,77 @@ public final class MicrophoneRecorder {
 
     /// - Parameter origin: The host time the recording started; the file starts with silence up to the first sound.
     public func start(writingTo url: URL, origin: UInt64? = nil, listener: AudioListener? = nil) throws {
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
+        let format = engine.inputNode.outputFormat(forBus: 0)
         guard format.channelCount > 0, let mono = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 1) else {
             throw CaptureError(step: "find a microphone", status: kAudioHardwareBadDeviceError)
         }
         let writer = try AudioFileWriter(url: url, format: mono, origin: origin, listener: listener)
         self.writer = writer
-        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, when in
-            writer.write(buffer, at: when.isHostTimeValid ? when.hostTime : nil)
+        tap(into: writer)
+        // A change of input device, or of its format, stops the engine; the recording goes on from the new device.
+        configurationChanges = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
+            guard let self else { return }
+            restarts.async { self.restart() }
         }
         try engine.start()
     }
 
-    /// Seconds of silence the file started with, once the first sound arrived.
-    var leadingSilence: Double? { writer?.leadingSilence }
+    private func tap(into writer: AudioFileWriter) {
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.channelCount > 0 else { return }
+        // A device at another rate than the file's is converted, and its blocks are placed by when they were captured,
+        // since the converter's blocks don't follow the device's count.
+        let converter = format.sampleRate == writer.format.sampleRate ? nil : AVAudioFormat(
+            standardFormatWithSampleRate: writer.format.sampleRate,
+            channels: format.channelCount
+        ).flatMap { AVAudioConverter(from: format, to: $0) }
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, when in
+            let hostTime = when.isHostTimeValid ? when.hostTime : nil
+            if let converter {
+                if let converted = Self.convert(buffer, with: converter) { writer.write(converted, at: hostTime) }
+            } else {
+                writer.write(buffer, at: hostTime, sampleTime: when.isSampleTimeValid ? Double(when.sampleTime) : nil)
+            }
+        }
+    }
 
-    public func stop() {
+    private func restart() {
+        guard let writer else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        writer.restarted()
+        tap(into: writer)
+        try? engine.start()
+    }
+
+    private static func convert(_ buffer: AVAudioPCMBuffer, with converter: AVAudioConverter) -> AVAudioPCMBuffer? {
+        let ratio = converter.outputFormat.sampleRate / converter.inputFormat.sampleRate
+        guard let output = AVAudioPCMBuffer(pcmFormat: converter.outputFormat, frameCapacity: AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64) else {
+            return nil
+        }
+        var supplied = false
+        converter.convert(to: output, error: nil) { _, status in
+            if supplied {
+                status.pointee = .noDataNow
+                return nil
+            }
+            supplied = true
+            status.pointee = .haveData
+            return buffer
+        }
+        return output.frameLength > 0 ? output : nil
+    }
+
+    /// Stops and finishes the file; nil if it wasn't recording.
+    @discardableResult
+    public func stop() -> TrackReport? {
+        if let configurationChanges { NotificationCenter.default.removeObserver(configurationChanges) }
+        configurationChanges = nil
+        restarts.sync {}
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        writer?.close()
+        let report = writer?.close()
         writer = nil
+        return report
     }
 }

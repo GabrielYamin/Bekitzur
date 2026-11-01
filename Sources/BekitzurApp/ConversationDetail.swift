@@ -31,13 +31,17 @@ struct ConversationDetail: View {
             model.loadResult(info.id)
             model.loadFlags(info.id)
         }
-        // Reloaded when the status changes, since processing turns the recorded .aac tracks into .m4a files, and once an
-        // earlier call's microphone delay is measured.
-        .task(id: "\(info.id)-\(info.status)-\(info.microphoneDelay ?? -1)") {
+        // Reloaded when the status changes, since processing turns the recorded .aac tracks into .m4a files, and once a
+        // call's tracks are lined up.
+        .task(id: "\(info.id)-\(info.status)-\(info.microphoneDelay ?? -1)-\(info.systemAudioDelays?.hashValue ?? -1)") {
             if info.status == .recording || info.status == .processing {
                 playback.stop()
             } else {
-                await playback.load(model.library.audioTracks(for: info.id), microphoneDelay: info.microphoneDelay ?? 0)
+                await playback.load(
+                    model.library.audioTracks(for: info.id),
+                    microphoneDelay: info.microphoneDelay ?? 0,
+                    systemAudioDelays: info.systemAudioDelays ?? []
+                )
             }
         }
         .onDisappear { playback.stop() }

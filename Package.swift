@@ -25,7 +25,7 @@ let package = Package(
             checksum: "937891f26734c29c80817cdf8bf59b139c84a9c6fb36a4ad6ce31cceea608e7c"
         ),
         .target(name: "BekitzurDomain"),
-        .target(name: "BekitzurAudio"),
+        .target(name: "BekitzurAudio", dependencies: ["BekitzurDomain"]),
         .target(name: "BekitzurTranscription", dependencies: ["BekitzurDomain", "whisper"]),
         .target(name: "BekitzurSpeakers", dependencies: ["BekitzurDomain", .product(name: "FluidAudio", package: "FluidAudio")]),
         .target(name: "BekitzurNotes", dependencies: ["BekitzurDomain", "llama"]),

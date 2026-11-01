@@ -5,7 +5,7 @@ import Foundation
 
 /// Transcribes a Conversation while it's recorded, so the Transcript is nearly done when the recording stops.
 ///
-/// Each track's audio arrives on its recorder's thread and is only copied there. Every two seconds, on a low-priority
+/// Each track's audio arrives on its recorder's writing thread and is only copied there. Every two seconds, on a low-priority
 /// thread, the tracks are converted to 16 kHz and summed, as `ConversationProcessor.loadMixed` does with the files, and
 /// the mix is cut into chunks of 20 to 30 seconds that end at a pause, so words are rarely cut. Each chunk goes to a
 /// `LiveChunkTranscriber`; in the app that's a helper process, so a crash in whisper.cpp can't end the recording. If a
@@ -59,7 +59,7 @@ public final class LiveTranscriber: @unchecked Sendable {
         timer.resume()
     }
 
-    /// Copies a track's samples; called on the recorder's audio thread.
+    /// Copies a track's samples; called on the recorder's writing thread.
     public func receive(_ samples: UnsafeBufferPointer<Float>, sampleRate: Double, track: Int) {
         lock.lock()
         sampleRates[track] = sampleRate

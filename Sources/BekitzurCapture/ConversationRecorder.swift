@@ -24,10 +24,11 @@ public final class ConversationRecorder {
 
     public typealias TrackListener = @Sendable (Track, UnsafeBufferPointer<Float>, Double) -> Void
 
-    /// Both tracks start at the same moment, each file with silence until its device's first sound. Each used to start at
-    /// its own first sound, and the microphone, started second, ran 9 to 212 ms ahead of the system audio, so the copy of
-    /// a call that laptop speakers put in the microphone played before the call itself: an echo.
-    /// - Parameter listener: Gets a mono copy of each track as it's recorded, on that track's audio thread.
+    /// Both tracks start at the same moment, each file with silence until its device's first sound, and each block goes
+    /// where its device's timestamps put it (`TrackTimeline`). Each file used to start at its own first sound, and the
+    /// microphone, started second, ran 9 to 212 ms ahead of the system audio, so the copy of a call that laptop speakers
+    /// put in the microphone played before the call itself: an echo.
+    /// - Parameter listener: Gets a mono copy of each track as it's written, on that track's writing thread.
     public func start(in directory: URL, listener: TrackListener? = nil) throws {
         let origin = mach_absolute_time()
         try systemAudio.start(
@@ -43,22 +44,17 @@ public final class ConversationRecorder {
         }
     }
 
-    /// Seconds of silence each track's file starts with: how long its device took to deliver the first sound. Read it
-    /// after stopping.
-    public var leadingSilence: [Track: Double] {
-        var silence: [Track: Double] = [:]
-        silence[.microphone] = microphone.leadingSilence
-        silence[.systemAudio] = systemAudio.leadingSilence
-        return silence
-    }
-
     private static func listener(_ listener: TrackListener?, for track: Track) -> AudioListener? {
         guard let listener else { return nil }
         return { samples, sampleRate in listener(track, samples, sampleRate) }
     }
 
-    public func stop() {
-        microphone.stop()
-        systemAudio.stop()
+    /// Stops both tracks and finishes their files, with how each kept time.
+    @discardableResult
+    public func stop() -> [Track: TrackReport] {
+        var reports: [Track: TrackReport] = [:]
+        reports[.microphone] = microphone.stop()
+        reports[.systemAudio] = systemAudio.stop()
+        return reports
     }
 }

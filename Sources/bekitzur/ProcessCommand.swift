@@ -32,8 +32,17 @@ struct ProcessCommand: AsyncParsableCommand {
         let started = Date()
         let urls = audio.map { URL(filePath: $0) }
         let loaded = try ConversationProcessor.loadMixed(urls)
-        let samples = loaded.samples
-        let call = urls.count == 2 ? loaded.tracks[urls[0]].flatMap { microphone in loaded.tracks[urls[1]].map { CallTracks(microphone: microphone, system: $0) } } : nil
+        var samples = loaded.samples
+        var call = urls.count == 2 ? loaded.tracks[urls[0]].flatMap { microphone in loaded.tracks[urls[1]].map { CallTracks(microphone: microphone, system: $0) } } : nil
+        if let tracks = call {
+            let delays = tracks.measuredSystemAudioDelays
+            if !delays.isEmpty {
+                let lined = tracks.placingSystemAudio(by: delays)
+                call = lined.tracks
+                samples = lined.mixed
+                log("System audio played later to line up: " + delays.map { String(format: "%.0f ms from %.0f s", $0.delay * 1000, $0.from) }.joined(separator: ", "))
+            }
+        }
         let result = try await ConversationProcessor.process(
             samples,
             date: day,
