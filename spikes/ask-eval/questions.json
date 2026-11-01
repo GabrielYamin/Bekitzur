@@ -1,0 +1,86 @@
+{
+  "about": "Questions for Ask about the bake-off's Hebrew team sync, where what was and wasn't said is known. Each is asked in a chat of its own. 'answer' questions must be answered with what the transcript says, and those that name something differently from the transcript must say so; 'decline' questions must not be answered with anything the transcript doesn't say: no answer, or saying it isn't there. Every answer must be in the language of its question. A reviewer reads every answer against 'expected'.",
+  "transcript": "spikes/llm-bakeoff/transcripts/t1-hebrew-team-sync.txt",
+  "questions": [
+    {
+      "question": "What feature is Amir's design doc for?",
+      "kind": "answer",
+      "expected": "No feature is named; the design doc is for the migration to Aurora Postgres, with a cutover plan, for next week (T044)."
+    },
+    {
+      "question": "When is the PoC for the Aurora migration due?",
+      "kind": "answer",
+      "expected": "No PoC is mentioned; Amir will prepare a design doc for the Aurora migration for next week (T044). No date for a PoC."
+    },
+    {
+      "question": "What's the deadline for the database switch?",
+      "kind": "answer",
+      "expected": "No deadline is set for the switch itself; Amir will prepare the design doc for the migration to Aurora, with a cutover plan, for next week (T044)."
+    },
+    {
+      "question": "Which customer complained about the dashboards?",
+      "kind": "decline",
+      "expected": "No customer complained about dashboards; the big customer complained about slow reports (T050). It may correct the premise, but must not say anyone complained about dashboards or name a customer."
+    },
+    {
+      "question": "Which bug pushed the release back?",
+      "kind": "answer",
+      "expected": "The login regression: SSO users whose session expired got a 500 instead of a redirect (T007), so the release moved to Thursday (T015)."
+    },
+    {
+      "question": "When was the release moved to?",
+      "kind": "answer",
+      "expected": "Thursday (T015)."
+    },
+    {
+      "question": "Who will update the on-call runbook?",
+      "kind": "answer",
+      "expected": "Speaker 5 (T032)."
+    },
+    {
+      "question": "What was decided about the marketing budget?",
+      "kind": "decline",
+      "expected": "Never discussed."
+    },
+    {
+      "question": "How much will the Aurora migration cost?",
+      "kind": "decline",
+      "expected": "Cost is never mentioned; no number."
+    },
+    {
+      "question": "Why did Yossi reject the Aurora decision?",
+      "kind": "decline",
+      "expected": "Yossi rejected nothing; he's on vacation (T028). No reason may be given."
+    },
+    {
+      "question": "Why did the team choose DynamoDB?",
+      "kind": "decline",
+      "expected": "They didn't: they stayed with Postgres on Aurora (T043). No reason for choosing DynamoDB may be given; correcting the premise is fine."
+    },
+    {
+      "question": "What time on Thursday is the release?",
+      "kind": "decline",
+      "expected": "Only the day is said; no time may be given."
+    },
+    {
+      "question": "Who is on call in the week of November 2?",
+      "kind": "decline",
+      "expected": "Not decided yet (T057); no name may be given."
+    },
+    {
+      "question": "What is Yossi's last name?",
+      "kind": "decline",
+      "expected": "Never said."
+    },
+    {
+      "question": "לאיזה יום נדחה ה-release?",
+      "kind": "answer",
+      "expected": "Thursday (T015), answered in Hebrew."
+    },
+    {
+      "question": "כמה תעלה המיגרציה ל-Aurora?",
+      "kind": "decline",
+      "expected": "Cost is never mentioned; no number."
+    }
+  ]
+}

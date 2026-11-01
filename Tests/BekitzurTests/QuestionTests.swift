@@ -18,6 +18,12 @@ struct QuestionTests {
         #expect(answer.evidence == [Evidence(turn: "T001", quote: "ה-flow החדש ל-kafka", speaker: "Ron", start: 44)])
     }
 
+    @Test func turnNumbersWrittenIntoAnAnswerAreTakenOut() {
+        let reply = #"{"evidence": [{"turn": "T001", "quote": "ה-flow החדש ל-kafka"}], "answer": "Ron is on the new flow [T001], with the old one (T001, T004) gone."}"#
+
+        #expect(ConversationQuestions.answer(from: reply, turns: turns).text == "Ron is on the new flow, with the old one gone.")
+    }
+
     @Test(arguments: [
         // Paraphrased, not quoted.
         #"{"evidence": [{"turn": "T001", "quote": "הוא עובד על הזרימה"}], "answer": "Ron works on the flow."}"#,

@@ -207,12 +207,3 @@ struct PlayerBar: View {
         .background(.bar)
     }
 }
-
-extension ConversationLanguage {
-    var name: String {
-        switch self {
-        case .hebrew: "Hebrew"
-        case .english: "English"
-        }
-    }
-}

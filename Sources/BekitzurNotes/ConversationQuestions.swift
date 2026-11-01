@@ -30,7 +30,10 @@ public final class ConversationQuestions {
     /// - Parameter earlier: Questions already answered about this Conversation, with the answers the user was shown; a
     ///   chat that starts over is given the last of them.
     public func ask(_ question: String, after earlier: [(question: String, answer: Answer)] = []) throws -> Answer {
-        let message = "Question: \(question.trimmingCharacters(in: .whitespacesAndNewlines))"
+        let message = """
+        Question: \(question.trimmingCharacters(in: .whitespacesAndNewlines))
+        Answer in the language this question is written in; terms it borrows from another language don't change that.
+        """
         var completion: Completion?
         if chatting {
             do {
@@ -45,19 +48,35 @@ public final class ConversationQuestions {
             chatting = true
         }
         lastReply = completion?.text ?? ""
-        let answer = Self.answer(from: lastReply, turns: turns)
+        var answer = Self.answer(from: lastReply, turns: turns)
+        if answer.text == nil, let second = try? model.continueChat(user: Self.lookAgain, grammar: Self.grammar, maxTokens: 1_000) {
+            lastReply = second.text
+            answer = Self.answer(from: second.text, turns: turns)
+        }
         lastNotFound = answer.text == nil
         return answer
     }
+
+    /// Asked when nothing answered the question as it was put. Told in one message to answer what the question means, the
+    /// model still gave nothing for "What feature is the design doc for?" where no feature is named but the design
+    /// document is described; asked to look again, it can say what the transcript does say.
+    static let lookAgain = """
+    Nothing in the transcript answers that as asked. Look again for what the question means, which may be called \
+    something else there, or not be what the question takes for granted: a design document asked about as a PoC, or a \
+    plan asked about by a feature it never names. Speech recognition can also write a term from another language in \
+    the conversation's alphabet, or run it together with a word ending of the conversation's language. If the \
+    transcript talks about it, quote those turns and answer with what they say, starting with what they don't say, \
+    like "No feature is named; …". If it doesn't talk about it at all, give no evidence and an empty answer again.
+    """
 
     private func start(_ message: String, after earlier: [(question: String, answer: Answer)]) throws -> Completion {
         let transcript = NotesWriter.render(turns, date: date, language: language)
         let history = Self.history(earlier)
         do {
-            return try model.startChat(system: Self.instructions, user: transcript + history + "\n\n" + message, grammar: Self.grammar, maxTokens: 1_000)
+            return try model.startChat(system: Self.instructions(for: language), user: transcript + history + "\n\n" + message, grammar: Self.grammar, maxTokens: 1_000)
         } catch LanguageModelError.promptTooLong where !history.isEmpty {
             // A Conversation too long for its earlier questions still gets an answer.
-            return try model.startChat(system: Self.instructions, user: transcript + "\n\n" + message, grammar: Self.grammar, maxTokens: 1_000)
+            return try model.startChat(system: Self.instructions(for: language), user: transcript + "\n\n" + message, grammar: Self.grammar, maxTokens: 1_000)
         }
     }
 
@@ -93,7 +112,8 @@ public final class ConversationQuestions {
             guard quote.split(separator: " ").count >= 2, let turn = turnWithID[evidence.turn], normalized(turn.text).contains(quote) else { return nil }
             return Evidence(turn: turn.id, quote: evidence.quote, speaker: turn.speaker, start: turn.start)
         }
-        let text = reply.answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The quotes show which turns an answer comes from, so turn numbers the model writes into it go.
+        let text = reply.answer.replacing(/\s*[\[(]T\d+(?:\s*[,–-]\s*T?\d+)*[\])]/, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !checked.isEmpty, !text.isEmpty else { return .notInConversation }
         return Answer(text: text, evidence: checked)
     }
@@ -103,21 +123,35 @@ public final class ConversationQuestions {
         return String(kept).split(separator: " ").joined(separator: " ")
     }
 
-    static let instructions = """
-    You answer questions about one recorded work conversation, using only its transcript, which has numbered speaker \
-    turns like [T012]. The conversation may be in Hebrew; speakers are named people or unnamed voices like "Speaker 2".
+    /// The conversation's language is named: told only that a question can be in another language than the
+    /// conversation's, the model answered most English questions about a Hebrew conversation in Hebrew.
+    static func instructions(for language: ConversationLanguage) -> String {
+        let spoken = language.name
+        return """
+        You answer questions about one recorded work conversation, using only its transcript, which has numbered speaker \
+        turns like [T012]. Speakers are named people or unnamed voices like "Speaker 2". The conversation is in \
+        \(spoken), and a question can be in another language: find what it asks about in the \(spoken), where it may be \
+        said in \(spoken) words or in the question's terms written in \(spoken) letters.
 
-    For each question, first give the evidence: the turns that answer it, each with an exact quote of at least a few \
-    words, copied character for character from that turn. Then give a short answer in the language of the question, \
-    saying who said what when that matters.
+        For each question, first give the evidence: the turns that answer it, each with an exact quote of at least a few \
+        words, copied character for character from that turn. Then give a short answer in the language of the question, \
+        saying who said what when that matters.
 
-    If the transcript doesn't answer the question, give no evidence and an empty answer. Never guess, never fill a gap \
-    with what usually happens or what you know from elsewhere, and answer from nothing but the transcript.
+        A question can call something by another name than the transcript does, or take for granted something it \
+        doesn't say: ask about a PoC when only a design document came up, which feature a plan is for when no feature is \
+        named, or why someone did something they didn't do. Then answer with what the transcript does say about what the \
+        question means, and say first what it doesn't say, like "No feature is named; …" or "Nobody rejected it; …" in \
+        the question's language. Never take on what the question takes for granted unless the transcript says it.
 
-    A question may follow earlier ones, asked before in this chat or listed after the transcript with the answers \
-    given. Use them to tell what the question refers to, like who "he" is; they aren't evidence, so quote only the \
-    transcript's turns.
-    """
+        If the transcript says nothing about what the question is about, give no evidence and an empty answer. Never \
+        guess, never fill a gap with what usually happens or what you know from elsewhere, and answer from nothing but \
+        the transcript.
+
+        A question may follow earlier ones, asked before in this chat or listed after the transcript with the answers \
+        given. Use them to tell what the question refers to, like who "he" is; they aren't evidence, so quote only the \
+        transcript's turns.
+        """
+    }
 
     /// The evidence, at most five quotes, then the answer.
     static let grammar = #"""

@@ -65,6 +65,13 @@ public struct LiveTranscript: Codable, Sendable, Equatable {
 public enum ConversationLanguage: String, Codable, Sendable, CaseIterable {
     case hebrew = "he"
     case english = "en"
+
+    public var name: String {
+        switch self {
+        case .hebrew: "Hebrew"
+        case .english: "English"
+        }
+    }
 }
 
 public struct Transcript: Codable, Sendable, Equatable {

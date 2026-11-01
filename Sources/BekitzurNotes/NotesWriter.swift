@@ -241,7 +241,7 @@ public struct NotesWriter {
         let lines = turns.map { "[\($0.id)] \($0.speaker): \($0.text)" }.joined(separator: "\n")
         return """
         Conversation date: \(formatter.string(from: date))
-        Language: \(language == .hebrew ? "Hebrew" : "English")
+        Language: \(language.name)
 
         Transcript:
         \(lines)
