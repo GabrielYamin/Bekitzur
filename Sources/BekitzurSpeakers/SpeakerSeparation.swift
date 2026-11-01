@@ -22,8 +22,8 @@ public enum SpeakerSeparation {
         /// NVIDIA's Nemotron 3 Diarization, Sortformer's successor, for up to eight voices.
         case nemotron
 
-        /// The model, loaded. Nemotron's downloads the first time, so where it can't be, Sortformer's, which comes with
-        /// the other models, stands in.
+        /// The model, loaded. Nemotron's downloads the first time; an install from before, which has Sortformer's, uses
+        /// that until then, and deletes it once Nemotron's is in place.
         func load() async throws -> (maximumVoices: Int, separate: ([Float]) throws -> [SpeakerTurn]) {
             switch self {
             case .sortformer:
@@ -35,8 +35,10 @@ public enum SpeakerSeparation {
                 do {
                     try await nemotron.prepare()
                 } catch {
+                    guard SpeakerModels.hasSortformer else { throw error }
                     return try await Timeline.sortformer.load()
                 }
+                SpeakerModels.removeReplaced()
                 return (NemotronSeparator.maximumVoices, nemotron.separate)
             }
         }

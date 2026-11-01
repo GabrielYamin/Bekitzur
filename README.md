@@ -120,7 +120,7 @@ And these models, which the app downloads and which aren't part of it:
 | [Silero VAD](https://github.com/snakers4/silero-vad), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/silero-vad-coreml) | Finding speech | MIT |
 | [pyannote speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) with WeSpeaker and BUT Speech@FIT, [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/speaker-diarization-coreml) | Speaker embeddings and separation | CC BY 4.0 |
 | [NVIDIA Nemotron 3 Diarization](https://huggingface.co/nvidia/Nemotron-3-Diarization), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/nemotron-3-diarization-coreml) | Speaker separation | OpenMDW 1.1 |
-| [NVIDIA Streaming Sortformer](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/diar-streaming-sortformer-coreml) | Speaker separation where Nemotron's model can't be downloaded | NVIDIA Open Model License |
+| [NVIDIA Streaming Sortformer](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/diar-streaming-sortformer-coreml) | Speaker separation in installs from before Nemotron, until its model is downloaded | NVIDIA Open Model License |
 
 Thanks to ivrit.ai for open Hebrew speech models, to the ggml authors for whisper.cpp and llama.cpp, to Fluid Inference for FluidAudio and its Core ML conversions, and to OpenAI, Google, pyannote, WeSpeaker, BUT Speech@FIT, Silero, and NVIDIA for releasing their models.
 

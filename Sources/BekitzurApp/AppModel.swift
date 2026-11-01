@@ -146,6 +146,9 @@ final class AppModel {
         Task { await refreshPermissions() }
         Task(priority: .utility) { await lineUpEarlierCalls() }
         Updater.removeLeftovers(beside: Bundle.main.bundleURL)
+        if let freed = SpeakerModels.removeReplaced() {
+            AppLog.write("Deleted Sortformer's model, which Nemotron 3 Diarization replaced: \(freed.formatted(.byteCount(style: .file)))")
+        }
         Task { await checkForUpdatesRegularly() }
         watchCalls()
     }
