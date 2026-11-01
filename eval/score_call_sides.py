@@ -7,7 +7,7 @@ with a voice whose majority is the other side.
   python3 eval/score_call_sides.py mic.m4a system.m4a turns.txt
 """
 
-import audioop
+import array
 import collections
 import math
 import re
@@ -28,7 +28,9 @@ def levels(audio, folder):
     frames = int(w.getframerate() * WINDOW)
     out = []
     while chunk := w.readframes(frames):
-        out.append(20 * math.log10(max(audioop.rms(chunk, 2), 1) / 32768))
+        samples = array.array("h", chunk)
+        rms = math.sqrt(sum(s * s for s in samples) / len(samples))
+        out.append(20 * math.log10(max(rms, 1) / 32768))
     return out
 
 

@@ -27,6 +27,9 @@ struct Transcribe: AsyncParsableCommand {
     @Option(help: "How many people spoke, if known.")
     var people: Int?
 
+    @Option(help: "With --speakers: the model that says who spoke when, nemotron (as the app does) or sortformer.")
+    var timeline: SpeakerSeparation.Timeline = .nemotron
+
     @Option(help: "Write the Transcript as JSON to this file.")
     var json: String?
 
@@ -70,7 +73,7 @@ struct Transcribe: AsyncParsableCommand {
 
         if speakers {
             let separated = Date()
-            let turns = try await SpeakerSeparation.turns(in: samples, people: people)
+            let turns = try await SpeakerSeparation.turns(in: samples, people: people, timeline: timeline)
             let found = Speakers.name(Speakers.speakers(from: turns), with: try VoiceprintStore(url: URL(filePath: voiceprints)).load())
             transcript.segments = Speakers.attribute(transcript.segments, turns: turns, speakers: found)
             log(String(format: "Separated %d Speakers in %.1f s", found.count, Date().timeIntervalSince(separated)))

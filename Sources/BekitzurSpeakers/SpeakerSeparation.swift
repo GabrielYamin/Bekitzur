@@ -2,16 +2,47 @@ import Foundation
 
 /// Who spoke when in a whole Recording.
 ///
-/// Sortformer follows quick exchanges that the pyannote pipeline folds into the surrounding speaker, but it has no
-/// embeddings and at most four voices. So Sortformer's timeline is used with pyannote's embeddings, which Voiceprints
-/// are made of, unless pyannote hears more than four voices, or more than Sortformer does (``Speakers/combine(timeline:identities:people:)``).
+/// A timeline model follows quick exchanges that the pyannote pipeline folds into the surrounding speaker, but it has no
+/// embeddings. So its timeline is used with pyannote's embeddings, which Voiceprints are made of, unless pyannote hears
+/// more voices than the timeline model can tell apart, or than it heard (``Speakers/combine(timeline:identities:people:)``).
+///
+/// The timeline model is NVIDIA's Nemotron 3 Diarization, for up to eight voices. It took over from Sortformer, which
+/// tells apart four: on the other side of a weekly call it heard the three people pyannote did, where Sortformer gave two
+/// of them one voice; in an in-room conversation it heard the two pyannote did, where Sortformer split the user in two;
+/// and elsewhere the two gave the same Speakers.
 ///
 /// When the user says how many people spoke and pyannote hears a different number, pyannote is held to that number
-/// and its own timeline is used: Sortformer can't be told how many voices to find. In a 32-minute meeting recorded as a
-/// voice memo, where two of the three people were far from the microphone, pyannote heard two voices and Sortformer
-/// four; held to three, pyannote told all three apart.
+/// and its own timeline is used: the timeline model can't be told how many voices to find. In a 32-minute meeting
+/// recorded as a voice memo, where two of the three people were far from the microphone, pyannote heard two voices and
+/// Sortformer four; held to three, pyannote told all three apart.
 public enum SpeakerSeparation {
-    public static func turns(in samples: [Float], people: Int? = nil) async throws -> [SpeakerTurn] {
+    /// The model that says who spoke when, which pyannote's voices are matched to.
+    public enum Timeline: String, Sendable, CaseIterable {
+        case sortformer
+        /// NVIDIA's Nemotron 3 Diarization, Sortformer's successor, for up to eight voices.
+        case nemotron
+
+        /// The model, loaded. Nemotron's downloads the first time, so where it can't be, Sortformer's, which comes with
+        /// the other models, stands in.
+        func load() async throws -> (maximumVoices: Int, separate: ([Float]) throws -> [SpeakerTurn]) {
+            switch self {
+            case .sortformer:
+                let sortformer = SortformerSeparator()
+                try await sortformer.prepare()
+                return (SortformerSeparator.maximumVoices, sortformer.separate)
+            case .nemotron:
+                let nemotron = NemotronSeparator()
+                do {
+                    try await nemotron.prepare()
+                } catch {
+                    return try await Timeline.sortformer.load()
+                }
+                return (NemotronSeparator.maximumVoices, nemotron.separate)
+            }
+        }
+    }
+
+    public static func turns(in samples: [Float], people: Int? = nil, timeline: Timeline = .nemotron) async throws -> [SpeakerTurn] {
         let pyannote = SpeakerSeparator()
         try await pyannote.prepare()
         let identities = try await pyannote.separate(samples)
@@ -22,11 +53,9 @@ public enum SpeakerSeparation {
             try await held.prepare()
             return try await held.separate(samples)
         }
-        guard voices <= SortformerSeparator.maximumVoices else { return identities }
-
-        let sortformer = SortformerSeparator()
-        try await sortformer.prepare()
-        return Speakers.combine(timeline: try sortformer.separate(samples), identities: identities, people: people)
+        let model = try await timeline.load()
+        guard voices <= model.maximumVoices else { return identities }
+        return Speakers.combine(timeline: try model.separate(samples), identities: identities, people: people)
     }
 
     /// Who spoke when in a call recorded as two tracks. The system audio holds the other side, and the microphone the
@@ -40,14 +69,14 @@ public enum SpeakerSeparation {
     /// - Parameters:
     ///   - mixed: Both tracks summed.
     ///   - people: How many people spoke on both sides together, when the user said.
-    public static func turns(in mixed: [Float], microphone: [Float], system: [Float], people: Int? = nil) async throws -> [SpeakerTurn] {
+    public static func turns(in mixed: [Float], microphone: [Float], system: [Float], people: Int? = nil, timeline: Timeline = .nemotron) async throws -> [SpeakerTurn] {
         let otherSide = try await SpeechDetector().speech(in: system)
         guard otherSide.map({ $0.upperBound - $0.lowerBound }).reduce(0, +) >= minimumCallSpeech else {
-            return try await turns(in: mixed, people: people)
+            return try await turns(in: mixed, people: people, timeline: timeline)
         }
         let userSide = silencing(microphone, during: otherSide)
-        let user = userSide.allSatisfy({ abs($0) < 0.0005 }) ? [] : try await turns(in: userSide)
-        let other = try await turns(in: system, people: people.map { max(1, $0 - Set(user.map(\.voice)).count) })
+        let user = userSide.allSatisfy({ abs($0) < 0.0005 }) ? [] : try await turns(in: userSide, timeline: timeline)
+        let other = try await turns(in: system, people: people.map { max(1, $0 - Set(user.map(\.voice)).count) }, timeline: timeline)
         return sides(user: user, other: other)
     }
 

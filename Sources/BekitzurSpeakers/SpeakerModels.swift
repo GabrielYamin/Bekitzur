@@ -6,6 +6,7 @@ public enum SpeakerModels {
     @concurrent
     public static func download() async throws {
         try await SpeakerSeparator().prepare()
+        try await NemotronSeparator().prepare()
         try await SortformerSeparator().prepare()
         _ = try await SpeechDetector()
     }

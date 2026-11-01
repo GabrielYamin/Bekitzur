@@ -31,8 +31,11 @@ license:
   and BUT Speech@FIT's PLDA parameters, in modified Core ML conversions by Fluid Inference
   (FluidInference/speaker-diarization-coreml). CC BY 4.0, https://creativecommons.org/licenses/by/4.0/.
   https://huggingface.co/pyannote/speaker-diarization-community-1
-- Speaker separation: NVIDIA's Streaming Sortformer (nvidia/diar_streaming_sortformer_4spk-v2.1), converted to Core ML
-  by Fluid Inference (FluidInference/diar-streaming-sortformer-coreml). NVIDIA Open Model License,
+- Speaker separation: NVIDIA's Nemotron 3 Diarization (nvidia/Nemotron-3-Diarization), converted to Core ML by Fluid
+  Inference (FluidInference/nemotron-3-diarization-coreml). OpenMDW License 1.1, https://openmdw.ai/license/1-1/.
+- Speaker separation where that model can't be downloaded: NVIDIA's Streaming Sortformer
+  (nvidia/diar_streaming_sortformer_4spk-v2.1), converted to Core ML by Fluid Inference
+  (FluidInference/diar-streaming-sortformer-coreml). NVIDIA Open Model License,
   https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/.
 
 ================================================================================

@@ -10,7 +10,7 @@ This repository is the source. People download the app from [Bekitzur-releases](
 - Shows a live Transcript while recording, and tells Hebrew from English by the first speech.
 - Offers to record when Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, and to stop once the call is over.
 - Transcribes Hebrew with ivrit.ai's Whisper fine-tune and English with Whisper large-v3-turbo, through whisper.cpp. English terms spoken in Hebrew come out in English letters (the Vocabulary), and corrections teach it new spellings.
-- Separates Speakers with FluidAudio (pyannote community-1 and NVIDIA's Sortformer), and names people it has heard before from their Voiceprints.
+- Separates Speakers with FluidAudio (pyannote community-1 and NVIDIA's Nemotron 3 Diarization), and names people it has heard before from their Voiceprints.
 - Writes the Notes with Gemma 4 26B-A4B through llama.cpp. Quotes are checked against the Transcript, and due dates are worked out in code.
 - For review: listen back along the Transcript, fix words and Speakers, update the Notes, and ask questions that are answered only from the Transcript.
 - Downloads its own models with their progress, imports recordings made elsewhere, and updates itself from signed releases after asking.
@@ -119,7 +119,8 @@ And these models, which the app downloads and which aren't part of it:
 | [Google Gemma 4 26B-A4B](https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf) | Notes and answers | Apache 2.0 |
 | [Silero VAD](https://github.com/snakers4/silero-vad), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/silero-vad-coreml) | Finding speech | MIT |
 | [pyannote speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) with WeSpeaker and BUT Speech@FIT, [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/speaker-diarization-coreml) | Speaker embeddings and separation | CC BY 4.0 |
-| [NVIDIA Streaming Sortformer](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/diar-streaming-sortformer-coreml) | Speaker separation | NVIDIA Open Model License |
+| [NVIDIA Nemotron 3 Diarization](https://huggingface.co/nvidia/Nemotron-3-Diarization), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/nemotron-3-diarization-coreml) | Speaker separation | OpenMDW 1.1 |
+| [NVIDIA Streaming Sortformer](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/diar-streaming-sortformer-coreml) | Speaker separation where Nemotron's model can't be downloaded | NVIDIA Open Model License |
 
 Thanks to ivrit.ai for open Hebrew speech models, to the ggml authors for whisper.cpp and llama.cpp, to Fluid Inference for FluidAudio and its Core ML conversions, and to OpenAI, Google, pyannote, WeSpeaker, BUT Speech@FIT, Silero, and NVIDIA for releasing their models.
 
