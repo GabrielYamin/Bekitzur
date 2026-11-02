@@ -1208,6 +1208,20 @@ final class AppModel {
         conversations = library.all()
     }
 
+    /// Reads the Conversations folder again, for Conversations added, changed, or removed outside the app; one left
+    /// recording or processing there is processed, as at launch.
+    func refresh() {
+        conversations = library.all()
+        let ids = Set(conversations.map(\.id))
+        results = Dictionary(uniqueKeysWithValues: results.keys.filter(ids.contains).compactMap { id in library.result(for: id).map { (id, $0) } })
+        flags = Dictionary(uniqueKeysWithValues: flags.keys.filter(ids.contains).map { ($0, library.flags(for: $0)) })
+        if let selected = selection, !ids.contains(selected) { selection = nil }
+        for info in conversations.reversed() where (info.status == .recording || info.status == .processing) && info.id != recordingID && info.id != processingID {
+            enqueue(info.id)
+        }
+        AppLog.write("Read the Conversations folder again: \(conversations.count) Conversations")
+    }
+
     // MARK: Asking
 
     /// Asks about a Conversation, answered from its Transcript with the user's fixes; nothing outside it.

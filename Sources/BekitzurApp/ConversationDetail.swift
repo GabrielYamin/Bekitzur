@@ -141,7 +141,7 @@ struct ConversationDetail: View {
                         Text("Notes").tag(Tab.notes)
                         Text("Transcript").tag(Tab.transcript)
                         Text(speakersTabTitle(result)).tag(Tab.speakers)
-                        Text("Ask").tag(Tab.ask)
+                        Text("Ask (beta)").tag(Tab.ask)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()

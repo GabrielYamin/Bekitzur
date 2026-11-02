@@ -23,7 +23,7 @@ struct MainWindow: View {
                     ContentUnavailableView(
                         "No Conversations yet",
                         systemImage: "waveform",
-                        description: Text("Start a recording from the toolbar or the menu bar, or drop a recording here to import it.")
+                        description: Text("Record or import one above, or drop a recording here.")
                     )
                 }
             }
@@ -36,9 +36,11 @@ struct MainWindow: View {
                     PermissionsNote(model: model)
                     ModelsNote(model: model)
                     UpdateNote(model: model)
+                    StartButtons(model: model)
                 }
                 .padding(.horizontal, 10)
                 .padding(.top, 6)
+                .padding(.bottom, 4)
             }
             .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
         } detail: {
@@ -51,26 +53,21 @@ struct MainWindow: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    Task { await model.chooseRecordingsToImport() }
+                    model.refresh()
                 } label: {
-                    Label("Import recording", systemImage: "square.and.arrow.down")
+                    Label("Refresh", systemImage: "arrow.clockwise")
                 }
-                .help("Import a recording made elsewhere, like a voice memo")
+                .keyboardShortcut("r", modifiers: .command)
+                .help("Read the Conversations folder again, for Conversations added or changed outside Bekitzur (⌘R)")
             }
             ToolbarItem(placement: .primaryAction) {
-                if model.isRecording {
-                    Button {
-                        model.stopRecording()
-                    } label: {
-                        Label("Stop and write Notes", systemImage: "stop.fill")
-                    }
-                } else {
-                    Button {
-                        Task { await model.startRecording() }
-                    } label: {
-                        Label("Start recording", systemImage: "record.circle")
-                    }
+                Button {
+                    model.showSettings()
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
                 }
+                .keyboardShortcut(",", modifiers: .command)
+                .help("Settings (⌘,)")
             }
         }
         .alert("Bekitzur", isPresented: Binding(get: { model.alert != nil }, set: { if !$0 { model.alert = nil } })) {
@@ -79,6 +76,69 @@ struct MainWindow: View {
             Text(model.alert ?? "")
         }
         .task { await model.refreshPermissions() }
+    }
+}
+
+/// Recording and importing, each in a box of its own at the top of the list; as toolbar icons, people didn't find them.
+private struct StartButtons: View {
+    let model: AppModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let startedAt = model.recordingStartedAt {
+                BoxButton(title: "Stop", systemImage: "stop.fill", tint: .red) {
+                    model.stopRecording()
+                } subtitle: {
+                    HStack(spacing: 4) {
+                        Text("Recording")
+                        RecordingTimer(since: startedAt)
+                    }
+                }
+                .help("Stop recording and write the Notes")
+            } else {
+                BoxButton(title: "Record", systemImage: "record.circle", tint: .red) {
+                    Task { await model.startRecording() }
+                } subtitle: {
+                    Text("A call or a meeting")
+                }
+                .disabled(model.voiceSample != .idle && !model.voiceSample.isFinished)
+                .help("Record your microphone and what your Mac plays")
+            }
+            BoxButton(title: "Import", systemImage: "square.and.arrow.down", tint: .accentColor) {
+                Task { await model.chooseRecordingsToImport() }
+            } subtitle: {
+                Text("A recording from elsewhere")
+            }
+            .help("Import a recording made elsewhere, like a voice memo")
+        }
+    }
+}
+
+private struct BoxButton<Subtitle: View>: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+    let action: () -> Void
+    @ViewBuilder let subtitle: Subtitle
+    @Environment(\.isEnabled) private var isEnabled
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 4) {
+                Image(systemName: systemImage).font(.title2).foregroundStyle(tint)
+                Text(title).font(.headline)
+                subtitle.font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+            .padding(10)
+            .background(tint.opacity(hovering && isEnabled ? 0.18 : 0.1), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.3)))
+            .contentShape(RoundedRectangle(cornerRadius: 10))
+            .opacity(isEnabled ? 1 : 0.5)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 
