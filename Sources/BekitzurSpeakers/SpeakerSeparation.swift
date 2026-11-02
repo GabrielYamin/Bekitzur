@@ -64,19 +64,29 @@ public enum SpeakerSeparation {
     /// user's side, but on laptop speakers the microphone also hears the other side, as loud as the system audio.
     /// Separated together, the sides mixed: in a 52-minute call a third of the speech went to a voice from the other side,
     /// and silencing the microphone while the other side spoke didn't change that. So each side is separated on its own:
-    /// the system audio, and the microphone with the other side's speech silenced. Words the user says while someone on
-    /// the other side speaks go to that person.
+    /// the system audio, and the microphone with the other side's speech silenced, except where the user talks over them
+    /// (`TalkingOver`): on November 2 two short replies said over the other person went to that person.
     ///
     /// Without speech in the system audio, as in a room, the tracks are separated together.
     /// - Parameters:
     ///   - mixed: Both tracks summed.
+    ///   - microphone: Lined up with `system`.
     ///   - people: How many people spoke on both sides together, when the user said.
-    public static func turns(in mixed: [Float], microphone: [Float], system: [Float], people: Int? = nil, timeline: Timeline = .nemotron) async throws -> [SpeakerTurn] {
+    ///   - keepingTalkingOver: False silences all of the other side's speech, as before November 2, for comparing.
+    public static func turns(
+        in mixed: [Float],
+        microphone: [Float],
+        system: [Float],
+        people: Int? = nil,
+        timeline: Timeline = .nemotron,
+        keepingTalkingOver: Bool = true
+    ) async throws -> [SpeakerTurn] {
         let otherSide = try await SpeechDetector().speech(in: system)
         guard otherSide.map({ $0.upperBound - $0.lowerBound }).reduce(0, +) >= minimumCallSpeech else {
             return try await turns(in: mixed, people: people, timeline: timeline)
         }
-        let userSide = silencing(microphone, during: otherSide)
+        let over = keepingTalkingOver ? TalkingOver.stretches(microphone: microphone, system: system) : []
+        let userSide = silencing(microphone, during: removing(over, from: otherSide))
         let user = userSide.allSatisfy({ abs($0) < 0.0005 }) ? [] : try await turns(in: userSide, timeline: timeline)
         let other = try await turns(in: system, people: people.map { max(1, $0 - Set(user.map(\.voice)).count) }, timeline: timeline)
         return sides(user: user, other: other)
@@ -84,6 +94,19 @@ public enum SpeakerSeparation {
 
     /// Seconds of speech in the system audio that make a Recording a call.
     static let minimumCallSpeech = 10.0
+
+    /// `stretches` without the parts in `holes`.
+    static func removing(_ holes: [ClosedRange<Double>], from stretches: [ClosedRange<Double>]) -> [ClosedRange<Double>] {
+        stretches.flatMap { stretch in
+            holes.filter { $0.overlaps(stretch) }.reduce([stretch]) { pieces, hole in
+                pieces.flatMap { piece -> [ClosedRange<Double>] in
+                    guard hole.overlaps(piece) else { return [piece] }
+                    return (piece.lowerBound < hole.lowerBound ? [piece.lowerBound...hole.lowerBound] : [])
+                        + (hole.upperBound < piece.upperBound ? [hole.upperBound...piece.upperBound] : [])
+                }
+            }
+        }
+    }
 
     /// The samples, 16 kHz, with silence in the given stretches.
     static func silencing(_ samples: [Float], during stretches: [ClosedRange<Double>]) -> [Float] {
