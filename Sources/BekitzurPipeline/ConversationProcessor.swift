@@ -55,6 +55,14 @@ public struct CallTracks: Sendable {
         Self.mixing(microphone: microphone, system: TrackAlignment.placing(system, by: delays))
     }
 
+    /// The tracks with the speakers' copy of the other side taken out of the microphone, and what's left of it silenced
+    /// where the microphone has no speech of its own (`EchoCanceller`), their sum, and where the microphone has speech.
+    public func removingEcho() -> (tracks: CallTracks, mixed: [Float], microphoneSpeech: [ClosedRange<Double>]) {
+        let echo = EchoCanceller.cancel(microphone: microphone, system: system)
+        let lined = Self.mixing(microphone: echo.ownSpeechOnly(), system: system)
+        return (lined.tracks, lined.mixed, echo.speech())
+    }
+
     private static func mixing(microphone: [Float], system: [Float]) -> (tracks: CallTracks, mixed: [Float]) {
         var mixed = [Float](repeating: 0, count: max(microphone.count, system.count))
         for i in microphone.indices { mixed[i] += microphone[i] }
@@ -90,6 +98,50 @@ public enum ConversationProcessor {
     public static func systemAudioDelays(microphone: URL, system: URL, microphoneDelay: Double) throws -> [TrackDelay] {
         let tracks = CallTracks(microphone: try AudioLoader.loadMono16k(microphone), system: try AudioLoader.loadMono16k(system))
         return (microphoneDelay > 0 ? tracks.delayingMicrophone(by: microphoneDelay).tracks : tracks).measuredSystemAudioDelays
+    }
+
+    /// A call's tracks transcribed each on its own, as one Transcript: each stretch tagged with its track, so its words go
+    /// to the voices heard there, and without what's left of the other side in the microphone: words that repeat the
+    /// system audio's within 0.4 seconds, next to another that does, since two people can say the same word at once.
+    /// Nor the microphone's words more than 0.25 seconds from its speech, which speech recognition wrote into silence.
+    /// Transcribed together, two people talking at once came out as one: on November 2 the other person's words under the
+    /// user's never made it into the Transcript.
+    public static func merging(microphone: Transcript, system: Transcript, microphoneSpeech: [ClosedRange<Double>]) -> Transcript {
+        let heard = system.segments.flatMap { $0.words ?? [] }.map { (start: $0.start, text: normalized($0.text)) }
+        let spoken = { (start: Double, end: Double) in microphoneSpeech.contains { $0.lowerBound <= end + 0.25 && start - 0.25 <= $0.upperBound } }
+        let microphoneSegments = microphone.segments.compactMap { segment -> TranscriptSegment? in
+            var segment = segment
+            segment.input = .microphone
+            guard let words = segment.words else { return spoken(segment.start, segment.end) ? segment : nil }
+            let repeats = words.map { word in
+                let text = normalized(word.text)
+                return !text.isEmpty && heard.contains { abs($0.start - word.start) < 0.4 && $0.text == text }
+            }
+            let kept = words.indices.filter { i in
+                // A word's last token can be timed seconds late, so no word counts as longer than 0.6 seconds.
+                spoken(words[i].start, min(words[i].end, words[i].start + 0.6))
+                    && !(repeats[i] && ((i > 0 && repeats[i - 1]) || (i + 1 < words.count && repeats[i + 1])))
+            }.map { words[$0] }
+            guard let first = kept.first, let last = kept.last else { return nil }
+            if kept.count < words.count {
+                segment.words = kept
+                segment.text = kept.map(\.text).joined(separator: " ")
+                segment.start = first.start
+                segment.end = last.end
+            }
+            return segment
+        }
+        let systemSegments = system.segments.map { segment -> TranscriptSegment in
+            var segment = segment
+            segment.input = .systemAudio
+            return segment
+        }
+        return Transcript(language: system.language, segments: (microphoneSegments + systemSegments).sorted { $0.start < $1.start })
+    }
+
+    /// A word without case or punctuation, for telling whether two tracks heard the same one.
+    static func normalized(_ word: String) -> String {
+        String(String.UnicodeScalarView(word.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }))
     }
 
     /// Loads the tracks that exist and sums them into one signal.

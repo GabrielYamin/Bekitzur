@@ -852,6 +852,7 @@ final class AppModel {
                         microphoneDelay: info.microphoneDelay,
                         systemAudioDelays: info.systemAudioDelays,
                         transcript: transcript,
+                        givenIsLive: kept == nil && live != nil,
                         salvage: salvage,
                         flags: flags
                     ) { step in
@@ -925,6 +926,7 @@ final class AppModel {
     ///   - systemAudioDelays: How much later to play the system audio track along a call; measured here when nil, and
     ///     returned.
     ///   - transcript: A Transcript already made, used if it's in `language`.
+    ///   - givenIsLive: `transcript` is the live Transcript, from both tracks summed, which a call doesn't use.
     ///   - salvage: A live Transcript to write the Notes from if the audio can't be read, as when the app quit before it
     ///     finished the files.
     @concurrent
@@ -937,6 +939,7 @@ final class AppModel {
         microphoneDelay: Double?,
         systemAudioDelays: [TrackDelay]?,
         transcript given: Transcript?,
+        givenIsLive: Bool,
         salvage: Transcript?,
         flags: TranscriptFlags,
         progress: @escaping @Sendable (ProcessingStep) -> Void
@@ -997,9 +1000,25 @@ final class AppModel {
                 samples = lined.mixed
             }
         }
+        var microphoneSpeech: [ClosedRange<Double>] = []
+        if let tracks = call {
+            let cleaned = tracks.removingEcho()
+            call = cleaned.tracks
+            samples = cleaned.mixed
+            microphoneSpeech = cleaned.microphoneSpeech
+        }
+        // A call's tracks are transcribed each on its own, so two people talking at once both make it into the
+        // Transcript; the live Transcript, from both tracks summed, doesn't do for a call.
+        var eachTrack: CallTracks?
+        if let tracks = call, try await SpeakerSeparation.isCall(system: tracks.system) { eachTrack = tracks }
         let transcript: Transcript
-        if let given, language == nil || given.language == language {
+        if let given, language == nil || given.language == language, !(givenIsLive && eachTrack != nil) {
             transcript = given
+        } else if let tracks = eachTrack {
+            progress(.transcribing)
+            let system = try await transcribeInHelper(tracks.system, language: language ?? given?.language, assumed: assumed)
+            let microphone = try await transcribeInHelper(tracks.microphone, language: system.language, assumed: assumed)
+            transcript = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: microphoneSpeech)
         } else {
             progress(.transcribing)
             transcript = try await transcribeInHelper(samples, language: language, assumed: assumed)

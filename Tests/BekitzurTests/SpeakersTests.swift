@@ -197,4 +197,11 @@ struct SpeakersTests {
         #expect(result.map(\.speaker) == ["Speaker 2"])
         #expect(result.map(\.text) == ["שלום לכולם"])
     }
+
+    /// A voice without a fingerprint gets one from where it talks alone, so no one else's voice mixes in.
+    @Test func aVoicesOwnSpeechLeavesOutWhereOthersTalkAndBriefRemnants() {
+        let turns = [turn("A", 0, 5), turn("B", 1, 2, guest), turn("A", 6, 6.3), turn("B", 4.8, 7, guest)]
+
+        #expect(SpeakerSeparation.alone("A", in: turns) == [0...1, 2...4.8])
+    }
 }

@@ -14,8 +14,14 @@ struct SpeakersCommand: AsyncParsableCommand {
     @Option(help: "A Conversation's folder instead: its tracks are lined up and separated as the app does, and each word of its Transcript is printed with its time, side (user or other), and Speaker.")
     var conversation: String?
 
-    @Flag(help: "With --conversation: silence the microphone through all of the other side's speech, as before November 2, to compare.")
-    var silencingAll = false
+    @Flag(help: "With --conversation: keep the other side in the microphone and silence it while they talk, except where the user talks over them, as before, to compare.")
+    var silencing = false
+
+    @Flag(help: "With --conversation: also separate each input on its own and print how alike each microphone voice is to each system audio voice.")
+    var similarities = false
+
+    @Flag(help: "With --conversation: for a call, transcribe each input on its own as the app does, instead of using the saved Transcript.")
+    var transcribe = false
 
     @Option(help: "Voiceprints file.")
     var voiceprints: String = BekitzurPaths.voiceprints.path
@@ -86,21 +92,66 @@ struct SpeakersCommand: AsyncParsableCommand {
             system: try AudioLoader.loadMono16k(folder.appending(path: "system.m4a"))
         ).delayingMicrophone(by: info.microphoneDelay ?? 0)
         if let delays = info.systemAudioDelays, !delays.isEmpty { lined = lined.tracks.placingSystemAudio(by: delays) }
+        var microphoneSpeech: [ClosedRange<Double>] = []
+        if !silencing {
+            let cleaned = lined.tracks.removingEcho()
+            lined = (cleaned.tracks, cleaned.mixed)
+            microphoneSpeech = cleaned.microphoneSpeech
+        }
+        let known = try VoiceprintStore(url: URL(filePath: voiceprints)).load()
+        if similarities {
+            let user = Speakers.speakers(from: try await SpeakerSeparation.turns(in: lined.tracks.microphone))
+            let other = Speakers.speakers(from: try await SpeakerSeparation.turns(in: lined.tracks.system))
+            func cosine(_ a: [Float], _ b: [Float]) -> Float {
+                guard a.count == b.count, !a.isEmpty else { return 0 }
+                let dot = zip(a, b).reduce(0) { $0 + $1.0 * $1.1 }
+                let norms = (a.reduce(0) { $0 + $1 * $1 } * b.reduce(0) { $0 + $1 * $1 }).squareRoot()
+                return norms > 0 ? dot / norms : 0
+            }
+            for u in user {
+                let row = other.map { String(format: "%@ %.2f", $0.label, cosine(u.centroid, $0.centroid)) }.joined(separator: ", ")
+                let name = Speakers.name([u], with: known).first.map(describe) ?? u.label
+                log(String(format: "microphone %@ (%.0f s): system %@ | %@", u.label, u.speechSeconds, row, name))
+            }
+            for o in other { log("system " + (Speakers.name([o], with: known).first.map(describe) ?? o.label)) }
+        }
         let turns = try await SpeakerSeparation.turns(
             in: lined.mixed,
             microphone: lined.tracks.microphone,
             system: lined.tracks.system,
             people: info.people,
-            keepingTalkingOver: !silencingAll
+            silencingOtherSide: silencing
         )
-        let found = Speakers.name(Speakers.speakers(from: turns), with: try VoiceprintStore(url: URL(filePath: voiceprints)).load())
+        let found = Speakers.name(Speakers.speakers(from: turns), with: known)
         let sides = Dictionary(found.map { ($0.displayName, $0.voice.hasPrefix("microphone") ? "user " : "other") }, uniquingKeysWith: { first, _ in first })
-        for segment in Speakers.attribute(result.transcript.segments, turns: turns, speakers: found) {
+        var segments = result.transcript.segments
+        if transcribe, !silencing, try await SpeakerSeparation.isCall(system: lined.tracks.system) {
+            let language = info.language ?? result.transcript.language
+            let system = try await transcribedLikeTheApp(lined.tracks.system, language: language)
+            let microphone = try await transcribedLikeTheApp(lined.tracks.microphone, language: language)
+            segments = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: microphoneSpeech).segments
+        }
+        for segment in Speakers.attribute(segments, turns: turns, speakers: found) {
+            let input = segment.input.map { $0 == .microphone ? "mic" : "sys" } ?? "-  "
             for word in segment.words ?? [] {
-                print(String(format: "%8.2f  %@  %@  %@", word.start, sides[segment.speaker ?? ""] ?? "?    ", segment.speaker ?? "?", word.text))
+                print(String(format: "%8.2f  %@  %@  %@  %@", word.start, input, sides[segment.speaker ?? ""] ?? "?    ", segment.speaker ?? "?", word.text))
             }
         }
         log(String(format: "%d turns, %d Speakers in %.1f s", turns.count, found.count, Date().timeIntervalSince(started)))
+    }
+
+    /// Transcribed as the app does, in chunks through a helper process: whisper.cpp's word timing aborts on short speech
+    /// in a long silence, as in a microphone with the other side silenced, when it gets the whole track at once.
+    private func transcribedLikeTheApp(_ samples: [Float], language: ConversationLanguage) async throws -> Transcript {
+        let helper = HelperChunkTranscriber(executable: Bundle.main.executableURL ?? URL(filePath: CommandLine.arguments[0]), arguments: ["live-helper", language.rawValue])
+        let transcriber = LiveTranscriber(language: language, chunks: helper, tracks: 1) { _ in }
+        samples.withUnsafeBufferPointer { buffer in
+            for start in stride(from: 0, to: buffer.count, by: 4_096) {
+                transcriber.receive(UnsafeBufferPointer(rebasing: buffer[start..<min(start + 4_096, buffer.count)]), sampleRate: AudioLoader.sampleRate, track: 0)
+            }
+        }
+        guard let transcript = await transcriber.finish() else { throw ValidationError("Transcription failed") }
+        return transcript
     }
 }
 

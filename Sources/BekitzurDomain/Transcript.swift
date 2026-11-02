@@ -16,6 +16,11 @@ public struct TranscriptWord: Codable, Sendable, Equatable {
     }
 }
 
+/// Which of a call's two tracks something was heard in.
+public enum RecordingInput: String, Codable, Sendable, Hashable {
+    case microphone, systemAudio
+}
+
 /// A stretch of a Transcript with its timing, in seconds from the start of the Recording.
 public struct TranscriptSegment: Codable, Sendable, Equatable {
     public var start: Double
@@ -25,13 +30,17 @@ public struct TranscriptSegment: Codable, Sendable, Equatable {
     public var speaker: String?
     /// The words with their own timing, so a segment can be split where the Speaker changes.
     public var words: [TranscriptWord]?
+    /// The track it was transcribed from, when a call's tracks are transcribed each on its own; its words go to a voice
+    /// heard there.
+    public var input: RecordingInput?
 
-    public init(start: Double, end: Double, text: String, speaker: String? = nil, words: [TranscriptWord]? = nil) {
+    public init(start: Double, end: Double, text: String, speaker: String? = nil, words: [TranscriptWord]? = nil, input: RecordingInput? = nil) {
         self.start = start
         self.end = end
         self.text = text
         self.speaker = speaker
         self.words = words
+        self.input = input
     }
 
     /// The segment with its times and its words' times moved later by `seconds`, for a stretch transcribed on its own.
@@ -107,7 +116,8 @@ public struct Transcript: Codable, Sendable, Equatable {
                     end: last.end,
                     text: run.map(\.text).joined(separator: " "),
                     speaker: runSpeaker,
-                    words: run
+                    words: run,
+                    input: segment.input
                 ))
                 run = []
             }

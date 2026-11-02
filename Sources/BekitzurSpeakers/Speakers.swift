@@ -72,10 +72,17 @@ public enum Speakers {
     /// Gives each stretch of the Transcript the Speaker talking at that moment, splitting a segment wherever the
     /// Speaker changes between its words. A word between turns goes to the nearest turn within a second, or else
     /// keeps the Speaker of the words around it. Segments without word times go to whoever talks most during them.
-    public static func attribute(_ segments: [TranscriptSegment], turns: [SpeakerTurn], speakers: [Speaker]) -> [TranscriptSegment] {
+    /// A stretch transcribed from one of a call's tracks goes to the voices heard in that track, and one from the
+    /// microphone that goes to a voice also in the system audio is left out: the system audio's Transcript has that
+    /// person's words, and what the microphone made of them was what's left of their voice, sometimes misheard ("שתי
+    /// האוות" for "שתי הערות" on November 1), or speech recognition's "תודה רבה" over near silence.
+    public static func attribute(_ segments: [TranscriptSegment], turns allTurns: [SpeakerTurn], speakers: [Speaker]) -> [TranscriptSegment] {
         let names = Dictionary(uniqueKeysWithValues: speakers.map { ($0.voice, $0.displayName) })
+        let byInput = Dictionary(grouping: allTurns.filter { $0.input != nil }, by: { $0.input! })
+        let inSystemAudio = Set((byInput[.systemAudio] ?? []).compactMap { names[$0.voice] })
         var result: [TranscriptSegment] = []
         for segment in segments {
+            let turns = segment.input.flatMap { byInput[$0] } ?? allTurns
             guard let words = segment.words, !words.isEmpty else {
                 var attributed = segment
                 attributed.speaker = mostTalking(from: segment.start, to: segment.end, in: turns).flatMap { names[$0] }
@@ -83,7 +90,7 @@ public enum Speakers {
                 continue
             }
             var labels = words.map { talking(at: moment(of: $0), in: turns).flatMap { names[$0] } }
-            var previous = result.last?.speaker
+            var previous = result.last { $0.input == segment.input }?.speaker
             for i in labels.indices {
                 if let label = labels[i] { previous = label } else { labels[i] = previous }
             }
@@ -95,14 +102,16 @@ public enum Speakers {
             var runStart = 0
             for i in 1...words.count where i == words.count || labels[i] != labels[runStart] {
                 let run = Array(words[runStart..<i])
+                defer { runStart = i }
+                if segment.input == .microphone, let label = labels[runStart], inSystemAudio.contains(label) { continue }
                 result.append(TranscriptSegment(
                     start: run.first!.start,
                     end: run.last!.end,
                     text: run.count == words.count ? segment.text : run.map(\.text).joined(separator: " "),
                     speaker: labels[runStart],
-                    words: run
+                    words: run,
+                    input: segment.input
                 ))
-                runStart = i
             }
         }
         return result

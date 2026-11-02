@@ -57,36 +57,67 @@ public enum SpeakerSeparation {
         }
         let model = try await timeline.load()
         guard voices <= model.maximumVoices else { return identities }
-        return Speakers.combine(timeline: try model.separate(samples), identities: identities, people: people)
+        let combined = Speakers.combine(timeline: try model.separate(samples), identities: identities, people: people)
+        return await fingerprinted(combined, in: samples, with: pyannote)
+    }
+
+    /// Voices only the timeline model heard come without a fingerprint, so they can't be recognized next time: on
+    /// November 2, in 34 seconds of two people in a room, pyannote heard one voice where Nemotron heard both. Each gets one
+    /// from pyannote on that voice's own speech, the stretches where no other voice talks put together, so it's comparable
+    /// with the Voiceprints, which come from pyannote too.
+    static func fingerprinted(_ turns: [SpeakerTurn], in samples: [Float], with pyannote: SpeakerSeparator) async -> [SpeakerTurn] {
+        var fingerprints: [String: [Float]] = [:]
+        for voice in Set(turns.filter { $0.embedding.isEmpty }.map(\.voice)) {
+            var audio: [Float] = []
+            for stretch in alone(voice, in: turns) {
+                let start = max(0, Int(stretch.lowerBound * 16_000)), end = min(samples.count, Int(stretch.upperBound * 16_000))
+                if start < end { audio += samples[start..<end] + [Float](repeating: 0, count: 3_200) }
+            }
+            guard audio.count >= 3 * 16_000, let heard = try? await pyannote.separate(audio) else { continue }
+            let main = Dictionary(grouping: heard, by: \.voice).values.max { $0.map(\.duration).reduce(0, +) < $1.map(\.duration).reduce(0, +) }
+            if let main, !Speakers.weightedMean(main).isEmpty { fingerprints[voice] = Speakers.weightedMean(main) }
+        }
+        return turns.map { turn in
+            guard turn.embedding.isEmpty, let fingerprint = fingerprints[turn.voice] else { return turn }
+            return SpeakerTurn(voice: turn.voice, start: turn.start, end: turn.end, embedding: fingerprint, input: turn.input)
+        }
+    }
+
+    /// Where `voice` talks and no other voice does, in stretches of at least 0.4 seconds.
+    static func alone(_ voice: String, in turns: [SpeakerTurn]) -> [ClosedRange<Double>] {
+        let others = turns.filter { $0.voice != voice }.map { $0.start...$0.end }
+        return removing(others, from: turns.filter { $0.voice == voice }.map { $0.start...$0.end }).filter { $0.upperBound - $0.lowerBound >= 0.4 }
     }
 
     /// Who spoke when in a call recorded as two tracks. The system audio holds the other side, and the microphone the
-    /// user's side, but on laptop speakers the microphone also hears the other side, as loud as the system audio.
-    /// Separated together, the sides mixed: in a 52-minute call a third of the speech went to a voice from the other side,
-    /// and silencing the microphone while the other side spoke didn't change that. So each side is separated on its own:
-    /// the system audio, and the microphone with the other side's speech silenced, except where the user talks over them
-    /// (`TalkingOver`): on November 2 two short replies said over the other person went to that person.
+    /// room, but on laptop speakers the microphone also hears the other side, as loud as the system audio. Separated
+    /// together, the sides mixed: in a 52-minute call a third of the speech went to a voice from the other side, and
+    /// silencing the microphone while the other side spoke didn't change that, but lost what the user said over them.
+    /// So each input is separated on its own, the microphone with the other side taken out (`EchoCanceller`), and a voice
+    /// heard in both is one person (`sides(user:other:)`).
     ///
     /// Without speech in the system audio, as in a room, the tracks are separated together.
     /// - Parameters:
     ///   - mixed: Both tracks summed.
-    ///   - microphone: Lined up with `system`.
+    ///   - microphone: Lined up with `system`, and without the other side when they came through speakers.
     ///   - people: How many people spoke on both sides together, when the user said.
-    ///   - keepingTalkingOver: False silences all of the other side's speech, as before November 2, for comparing.
+    ///   - silencingOtherSide: True for a microphone that still has the other side: it's silenced while they talk,
+    ///     except where the user talks over them (`TalkingOver`), as before, for comparing.
     public static func turns(
         in mixed: [Float],
         microphone: [Float],
         system: [Float],
         people: Int? = nil,
         timeline: Timeline = .nemotron,
-        keepingTalkingOver: Bool = true
+        silencingOtherSide: Bool = false
     ) async throws -> [SpeakerTurn] {
         let otherSide = try await SpeechDetector().speech(in: system)
         guard otherSide.map({ $0.upperBound - $0.lowerBound }).reduce(0, +) >= minimumCallSpeech else {
             return try await turns(in: mixed, people: people, timeline: timeline)
         }
-        let over = keepingTalkingOver ? TalkingOver.stretches(microphone: microphone, system: system) : []
-        let userSide = silencing(microphone, during: removing(over, from: otherSide))
+        let userSide = silencingOtherSide
+            ? silencing(microphone, during: removing(TalkingOver.stretches(microphone: microphone, system: system), from: otherSide))
+            : microphone
         let user = userSide.allSatisfy({ abs($0) < 0.0005 }) ? [] : try await turns(in: userSide, timeline: timeline)
         let other = try await turns(in: system, people: people.map { max(1, $0 - Set(user.map(\.voice)).count) }, timeline: timeline)
         return sides(user: user, other: other)
@@ -94,6 +125,12 @@ public enum SpeakerSeparation {
 
     /// Seconds of speech in the system audio that make a Recording a call.
     static let minimumCallSpeech = 10.0
+
+    /// Whether the system audio has enough speech for the Recording to be a call, whose tracks are separated and
+    /// transcribed each on its own.
+    public static func isCall(system: [Float]) async throws -> Bool {
+        try await SpeechDetector().speech(in: system).map { $0.upperBound - $0.lowerBound }.reduce(0, +) >= minimumCallSpeech
+    }
 
     /// `stretches` without the parts in `holes`.
     static func removing(_ holes: [ClosedRange<Double>], from stretches: [ClosedRange<Double>]) -> [ClosedRange<Double>] {
@@ -119,10 +156,23 @@ public enum SpeakerSeparation {
         return result
     }
 
-    /// Both sides' turns as one timeline. Each separator names its voices "S1", "S2", …, which aren't the same people.
+    /// Both sides' turns as one timeline. Each separator names its voices "S1", "S2", …, which aren't the same people,
+    /// but a voice in the microphone whose fingerprint is a voice in the system audio is that person: someone in the
+    /// room who also joined the call, or what's left of the other side in the microphone. On four calls, voices left
+    /// from the other side matched theirs at 0.64 to 0.96, and the user matched no one on the other side above 0.36.
     static func sides(user: [SpeakerTurn], other: [SpeakerTurn]) -> [SpeakerTurn] {
-        let relabeled = user.map { SpeakerTurn(voice: "microphone \($0.voice)", start: $0.start, end: $0.end, embedding: $0.embedding) }
-            + other.map { SpeakerTurn(voice: "system \($0.voice)", start: $0.start, end: $0.end, embedding: $0.embedding) }
+        let otherVoices = Dictionary(grouping: other, by: \.voice).mapValues(Speakers.weightedMean)
+        let same = Dictionary(grouping: user, by: \.voice).compactMapValues { turns -> String? in
+            let fingerprint = Speakers.weightedMean(turns)
+            let best = otherVoices.map { ($0.key, Speakers.cosine(fingerprint, $0.value)) }.max { $0.1 < $1.1 }
+            return best.flatMap { $0.1 >= sameVoice ? $0.0 : nil }
+        }
+        let relabeled = user.map {
+            SpeakerTurn(voice: same[$0.voice].map { "system \($0)" } ?? "microphone \($0.voice)", start: $0.start, end: $0.end, embedding: $0.embedding, input: .microphone)
+        } + other.map { SpeakerTurn(voice: "system \($0.voice)", start: $0.start, end: $0.end, embedding: $0.embedding, input: .systemAudio) }
         return relabeled.sorted { $0.start < $1.start }
     }
+
+    /// The fingerprint similarity from which a voice in each input is one person.
+    static let sameVoice: Float = 0.55
 }

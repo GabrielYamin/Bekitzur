@@ -1,3 +1,4 @@
+import BekitzurDomain
 import FluidAudio
 import Foundation
 
@@ -8,6 +9,8 @@ public struct SpeakerTurn: Sendable {
     public let start: Double
     public let end: Double
     public let embedding: [Float]
+    /// The track of a call it was heard in, when each track is separated on its own.
+    public var input: RecordingInput? = nil
 
     public var duration: Double { end - start }
 }
