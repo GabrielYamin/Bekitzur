@@ -7,46 +7,8 @@ struct MainWindow: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $model.selection) {
-                ForEach(model.conversations) { info in
-                    ConversationRow(info: info)
-                        .tag(info.id)
-                        .contextMenu {
-                            Button("Rename…") { model.renaming = info.id }
-                            Button("Export…") { Task { await model.export(info.id) } }
-                                .disabled(info.status == .recording || info.status == .processing)
-                            Button("Show in Finder") { model.showInFinder(info.id) }
-                            Divider()
-                            Button("Delete", role: .destructive) { model.delete(info.id) }
-                                .disabled(info.status == .recording || info.status == .processing)
-                        }
-                }
-            }
-            .overlay {
-                if model.conversations.isEmpty {
-                    ContentUnavailableView(
-                        "No Conversations yet",
-                        systemImage: "waveform",
-                        description: Text("Record or import one above, or drop a recording or an exported Conversation here.")
-                    )
-                }
-            }
-            .dropDestination(for: URL.self) { urls, _ in
-                Task { await model.importRecordings(urls) }
-                return !urls.isEmpty
-            }
-            .alert("Rename Conversation", isPresented: Binding(get: { model.renaming != nil }, set: { if !$0 { model.renaming = nil } })) {
-                TextField("Title", text: $newTitle)
-                Button("Rename") {
-                    if let id = model.renaming { model.rename(id, to: newTitle) }
-                }
-                .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button("Cancel", role: .cancel) {}
-            }
-            .onChange(of: model.renaming) { _, id in
-                newTitle = id.flatMap { id in model.conversations.first { $0.id == id }?.displayTitle } ?? ""
-            }
-            .safeAreaInset(edge: .top) {
+            // Above the list rather than in its safe area, where rows scrolled under the boxes and showed through them.
+            VStack(spacing: 0) {
                 VStack(spacing: 6) {
                     PermissionsNote(model: model)
                     ModelsNote(model: model)
@@ -55,7 +17,12 @@ struct MainWindow: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.top, 6)
-                .padding(.bottom, 4)
+                .padding(.bottom, 8)
+                conversationList
+            }
+            .dropDestination(for: URL.self) { urls, _ in
+                Task { await model.importRecordings(urls) }
+                return !urls.isEmpty
             }
             .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
         } detail: {
@@ -104,6 +71,44 @@ struct MainWindow: View {
         }
         .task { await model.refreshPermissions() }
     }
+
+    private var conversationList: some View {
+        List(selection: $model.selection) {
+            ForEach(model.conversations) { info in
+                ConversationRow(info: info)
+                    .tag(info.id)
+                    .contextMenu {
+                        Button("Rename…") { model.renaming = info.id }
+                        Button("Export…") { Task { await model.export(info.id) } }
+                            .disabled(info.status == .recording || info.status == .processing)
+                        Button("Show in Finder") { model.showInFinder(info.id) }
+                        Divider()
+                        Button("Delete", role: .destructive) { model.delete(info.id) }
+                            .disabled(info.status == .recording || info.status == .processing)
+                    }
+            }
+        }
+        .overlay {
+            if model.conversations.isEmpty {
+                ContentUnavailableView(
+                    "No Conversations yet",
+                    systemImage: "waveform",
+                    description: Text("Record or import one above, or drop a recording or an exported Conversation here.")
+                )
+            }
+        }
+        .alert("Rename Conversation", isPresented: Binding(get: { model.renaming != nil }, set: { if !$0 { model.renaming = nil } })) {
+            TextField("Title", text: $newTitle)
+            Button("Rename") {
+                if let id = model.renaming { model.rename(id, to: newTitle) }
+            }
+            .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Cancel", role: .cancel) {}
+        }
+        .onChange(of: model.renaming) { _, id in
+            newTitle = id.flatMap { id in model.conversations.first { $0.id == id }?.displayTitle } ?? ""
+        }
+    }
 }
 
 /// Recording and importing, each in a box of its own at the top of the list; as toolbar icons, people didn't find them.
@@ -138,6 +143,8 @@ private struct StartButtons: View {
             }
             .help("Import a recording made elsewhere, like a voice memo, or a Conversation exported from Bekitzur")
         }
+        // As tall as the taller box, whose line of text wraps, so both boxes are the same size.
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -157,7 +164,7 @@ private struct BoxButton<Subtitle: View>: View {
                 Text(title).font(.headline)
                 subtitle.font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
-            .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(10)
             .background(tint.opacity(hovering && isEnabled ? 0.18 : 0.1), in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.3)))
