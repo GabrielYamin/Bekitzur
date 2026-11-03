@@ -104,6 +104,8 @@ final class AppModel {
     private(set) var availableUpdate: UpdateManifest?
     /// What the updater is doing, while it checks or downloads.
     private(set) var updateStep: String?
+    /// How much of an update has downloaded, from 0 to 1, while it downloads.
+    private(set) var updateProgress: Double?
     @ObservationIgnored private let updater = Updater(
         feed: Bundle.main.object(forInfoDictionaryKey: "BekitzurUpdateFeed") as? String,
         publicKey: Bundle.main.object(forInfoDictionaryKey: "BekitzurUpdatePublicKey") as? String,
@@ -231,18 +233,29 @@ final class AppModel {
         guard ask("Install Bekitzur \(manifest.version)?", message, confirm: "Install", cancel: "Later"), allowInterruption() else { return }
         let wasBusy = isRecording || processingID != nil
         updateStep = "Downloading Bekitzur \(manifest.version)…"
+        updateProgress = 0
         AppLog.write("Downloading update \(manifest.version)")
         Task {
             do {
-                let app = try await updater.download(manifest)
-                updateStep = nil
+                let app = try await updater.download(manifest) { fraction in
+                    Task { @MainActor in
+                        guard let current = AppModel.shared.updateProgress, fraction > current else { return }
+                        AppModel.shared.updateProgress = fraction
+                    }
+                }
+                updateProgress = nil
+                updateStep = "Installing Bekitzur \(manifest.version)…"
                 // A recording may have started during the download.
-                if !wasBusy, isRecording || processingID != nil, !allowInterruption() { return }
+                if !wasBusy, isRecording || processingID != nil, !allowInterruption() {
+                    updateStep = nil
+                    return
+                }
                 try Updater.replace(Bundle.main.bundleURL, with: app)
                 AppLog.write("Installed update \(manifest.version); restarting")
                 relaunch()
             } catch {
                 updateStep = nil
+                updateProgress = nil
                 AppLog.write("Update \(manifest.version) failed: \(error)")
                 inform("Couldn't install Bekitzur \(manifest.version)", String(describing: error))
             }
@@ -497,6 +510,8 @@ final class AppModel {
     var menuBarSymbol: String? {
         if isRecording { return endedCall == nil ? "record.circle.fill" : "stop.circle" }
         if callToRecord != nil { return "record.circle" }
+        // Confirming the update closes the menu bar's panel, which had the only sign it was downloading.
+        if updateProgress != nil { return "arrow.down.circle" }
         if processingID != nil { return "hourglass" }
         if let modelDownload, modelDownload.failure == nil { return "arrow.down.circle" }
         return nil
