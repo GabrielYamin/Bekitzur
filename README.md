@@ -68,7 +68,7 @@ To bring your data along, copy `~/Library/Application Support/Bekitzur` (its Mod
 
 Builds are signed ad hoc as `app.bekitzur.mac`, which needs no developer certificate and keeps macOS permissions across updates. Build numbers are the build's time in UTC, and updates compare only those. Builds made here show version 9.9.9, from `App/Info.plist`, so they're never mistaken for a release; releases show their tag's version.
 
-Releases are built, tested, and signed by the Release workflow on GitHub's macOS 26 runner, which only the repository's owner can run. The app installs only releases signed with the key whose public half is `BekitzurUpdatePublicKey` in `App/Info.plist`.
+Changes reach `main` through pull requests, which CI builds, tests, and packages on GitHub's macOS 26 runner before they can be merged. Releases are built, tested, and signed by the Release workflow on the same runner, which only the repository's owner can run. The app installs only releases signed with the key whose public half is `BekitzurUpdatePublicKey` in `App/Info.plist`.
 
 `scripts/make-icon.swift` draws the icon and the menu bar images into `App/Resources`, and `scripts/generate-built-in-vocabulary.py` turns `eval/vocabulary/built-in.txt` into the built-in list of English terms.
 
@@ -107,7 +107,7 @@ Its commands are `process` (Transcript, Speakers, and Notes for one recording), 
 | `spikes` | Experiments: the comparison that chose Gemma for the Notes (`llm-bakeoff`), and questions to try Ask with (`ask-eval`) |
 | `docs` | The plan, the architecture decisions, and research on the models |
 | `release` | Release notes (`notes/<version>.md`), and the README of Bekitzur-releases, where versions up to 0.6.4 look for updates |
-| `.github/workflows` | The Release workflow |
+| `.github/workflows` | CI, which builds, tests, and packages each pull request, and the Release workflow |
 
 ## Credits
 
