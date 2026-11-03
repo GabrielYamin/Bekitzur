@@ -3,7 +3,6 @@ import SwiftUI
 
 /// Above the Conversation list: its title, which a magnifying glass (⌥⌘F; ⌘F is Find in the Transcript) turns into a
 /// search of titles, Notes, and Transcripts, and the People menu, which shows only Conversations with everyone picked.
-/// Picked from a prototype of seven ways to do both, on the branch prototype/people-filter.
 struct ConversationListHeader: View {
     @Bindable var model: AppModel
     @ViewState private var searching = false

@@ -26,8 +26,7 @@ public struct TrackReport: Sendable {
 
 /// Writes a track to a compressed file, keeping it in time. On the device's thread a block is only copied into a ring;
 /// a writing thread takes it out, places it by `TrackTimeline`, encodes it, and hands it to the listener. Encoding and
-/// writing on the device's thread made Core Audio drop blocks whenever the Mac was busy, and every block dropped moved
-/// the rest of the track earlier.
+/// writing on the device's thread would make Core Audio drop blocks whenever the Mac is busy.
 final class AudioFileWriter: @unchecked Sendable {
     let format: AVAudioFormat
     private let file: AVAudioFile

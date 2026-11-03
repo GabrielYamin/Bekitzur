@@ -1,8 +1,8 @@
 import Accelerate
 
-/// Takes the other side of a call out of the microphone, where laptop speakers put a copy of it: on November 2 the copy
-/// was only 2 dB quieter than the system audio, and silencing the microphone whenever the other side talked lost what
-/// the user said over them.
+/// Takes the other side of a call out of the microphone, where laptop speakers put a copy of it that can be nearly as
+/// loud as the system audio. Silencing the microphone whenever the other side talks would lose what the user says over
+/// them.
 ///
 /// The copy is predicted from the system audio, frequency by frequency, through each frequency's echo path over the last
 /// 128 ms, fitted to the call by least squares where the other side talks, then fitted again on the moments the first fit
@@ -32,8 +32,7 @@ public enum EchoCanceller {
 
         /// The microphone silenced where the other side talks and it has no speech of its own (9 dB above what's left of
         /// the copy and 20 dB above the noise), with 50 ms more on each side of its own speech so words keep their edges.
-        /// What's left of the copy is quiet but still a voice to a speaker separator: separated on its own, the cleaned
-        /// microphone of the November 2 call had 42 seconds of the other person.
+        /// What's left of the copy is quiet but still a voice to a speaker separator.
         public func ownSpeechOnly() -> [Float] {
             let silenced = silenced()
             guard !silenced.isEmpty else { return microphone }
@@ -51,8 +50,8 @@ public enum EchoCanceller {
         }
 
         /// Where `ownSpeechOnly()` has speech left, in seconds: above what's left of the copy and 10 dB above the noise,
-        /// outside what it silences. Speech recognition writes words into silence and near silence: "תודה רבה לך, אדוני
-        /// היושב-ראש" where the microphone was silenced on November 2, and in a quiet moment on November 1.
+        /// outside what it silences. Speech recognition writes words into silence and near silence, like "תודה רבה לך,
+        /// אדוני היושב-ראש".
         public func speech() -> [ClosedRange<Double>] {
             let own = ownSpeech(), silenced = silenced()
             var stretches: [ClosedRange<Double>] = []
@@ -80,8 +79,7 @@ public enum EchoCanceller {
     private static let modelled = 1..<(frame / 2)
     /// Where speech is, for the powers: 218 Hz to 4 kHz.
     private static let speech = 7...128
-    /// What's left of the copy after subtracting it, as a share of the prediction (the subtraction took 7 to 10 dB off on
-    /// three calls), and how far it's turned down.
+    /// What's left of the copy after subtracting it, as a share of the prediction, and how far it's turned down.
     private static let leftover: Float = 0.35, floor: Float = 0.1
 
     /// - Parameters:

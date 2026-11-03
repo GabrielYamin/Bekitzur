@@ -37,7 +37,7 @@ struct VocabularyTests {
         #expect(VocabularyStore.spelling(of: "מרצה", correctedTo: "מעדיף") == nil)
     }
 
-    /// A project's name ("Atlas" typed for "ב-atlasing") taught "ב", which then rewrote "ב-GRPC" as "Atlas-GRPC".
+    /// A name ("Atlas" typed for "ב-atlasing") would teach "ב", which would then rewrite "ב-GRPC" as "Atlas-GRPC".
     @Test func aWordThatIsOnlyAPrefixTeachesNothingAndOldSuchSpellingsAreDropped() throws {
         #expect(VocabularyStore.spelling(of: "ב", correctedTo: "Atlas") == nil)
 
@@ -82,7 +82,7 @@ struct VocabularyTests {
     }
 
     @Test func rewritingAgainStartsFromWhatWasTranscribed() {
-        // Rewritten before the user taught "skill" and before the prefix-only spelling "ב" was dropped.
+        // Rewritten before the user taught "skill", and with the prefix-only spelling "ב".
         let words = [
             TranscriptWord(start: 1, end: 1.4, text: "scale", transcribed: "סקיל"),
             TranscriptWord(start: 1.5, end: 1.9, text: "Atlas-GRPC", transcribed: "ב-GRPC"),

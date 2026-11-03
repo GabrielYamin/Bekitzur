@@ -1,9 +1,8 @@
 import Foundation
 
 /// An Action Item as an event in the iCalendar format (RFC 5545), which every calendar app reads, so it goes to whichever
-/// one opens .ics files: Apple's calendar API reaches only the accounts in Calendar, and on a Mac whose calendar is Outlook
-/// it would have put the event elsewhere. The event is on the due day, at the time the due phrase says or 9:00, for half
-/// an hour, and shows as free, since it's a reminder rather than a meeting.
+/// app opens calendar files: Apple's calendar API reaches only the accounts in Calendar. The event is on the due day, at
+/// the time the due phrase says or 9:00, for half an hour, and shows as free, since it's a reminder rather than a meeting.
 public struct CalendarEvent: Equatable, Sendable {
     /// The same for the same Action Item of a Conversation, so a calendar app updates the event added before.
     public var id: String

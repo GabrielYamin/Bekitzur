@@ -60,7 +60,7 @@ struct ConversationTransferTests {
         #expect(library.all().first { $0.id == info.id + "-2" }?.title == "Planning")
     }
 
-    /// How Conversations went over before: a zip of the folder from Finder's Compress, or the folder unzipped.
+    /// Conversations sent without exporting: a zip of the folder from Finder's Compress, or the folder unzipped.
     @Test func aZipFromFinderAndAFolderComeInToo() throws {
         let here = temporary(), there = temporary(), zip = temporary("zip")
         defer { remove(here, there, zip) }

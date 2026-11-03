@@ -8,9 +8,8 @@ public enum TrackAlignment {
     /// wherever it moves by more than 3 ms, in the quietest moment around. Empty without a clear copy, as with headphones.
     ///
     /// The copy comes after the system audio by however long the speakers take to play it, and a recording that lost
-    /// audio on the way drifts: on November 1 the system audio track lost seven blocks while the Mac was busy, and the
-    /// copy went from 66 ms after it to 237 ms, an echo by the end. Measured over 8 seconds alone, where blocks went
-    /// missing every few seconds, a change came seconds away from the loss, and three half-minutes stayed 6 to 19 ms off.
+    /// audio on the way drifts. Eight-second windows alone would place a change seconds away from the loss, so the
+    /// 2-second pass finds where it is.
     /// - Parameters:
     ///   - microphone: 16 kHz mono, like `system`.
     public static func systemAudioDelays(microphone: [Float], system: [Float], sampleRate: Double = 16_000) -> [TrackDelay] {
@@ -105,8 +104,8 @@ public enum TrackAlignment {
     /// Seconds to play the microphone later so its copy of the system audio lines up with the system audio; 0 when the
     /// copy already comes after it, as sound from a speaker does, and nil without a clear copy, as with headphones.
     ///
-    /// Before tracks were lined up while recording, each file started at its own first sound and the microphone started
-    /// second, so its copy came 9 to 212 ms before the call itself in three calls, and the other side echoed in playback.
+    /// In a recording whose files each start at their own first sound, the microphone, started second, runs ahead, so
+    /// its copy comes before the call itself and the other side echoes in playback.
     /// - Parameters:
     ///   - microphone: 16 kHz mono, like `system`.
     public static func microphoneDelay(microphone: [Float], system: [Float], sampleRate: Double = 16_000) -> Double? {

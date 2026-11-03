@@ -2,8 +2,7 @@ import BekitzurDomain
 import Foundation
 
 /// A Conversation as one file, to give to someone with Bekitzur: its folder, zipped, named with `fileExtension` so that
-/// opening it imports it. Before, a Conversation went over as a zip of its folder made in Finder, which had to be
-/// unzipped into the Conversations folder by hand before restarting the app.
+/// opening it imports it.
 extension ConversationLibrary {
     public static let fileExtension = "bekitzur"
 

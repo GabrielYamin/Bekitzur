@@ -63,7 +63,7 @@ struct EchoCancellerTests {
         #expect(abs((speech.first?.upperBound ?? 0) - 9) < 0.06)
     }
 
-    /// November 2: the speakers' copy was only 2 dB quieter than the system audio.
+    /// The speakers' copy can be only 2 dB quieter than the system audio.
     @Test func theSpeakersCopyIsTakenOut() {
         let system = otherSide()
         let microphone = copy(of: system, gain: 0.7)

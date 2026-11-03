@@ -2,8 +2,7 @@ import Foundation
 
 /// Whether a Mac has the memory Bekitzur is made for. The Notes model alone is about 15 GB, held in memory while it
 /// writes: with less than 32 GB, writing the Notes can take very long, or fail for a long Conversation, and under 24 GB
-/// it can't work, so the models aren't downloaded. Nothing checked this before: a 16 GB Mac downloaded the 18 GB of
-/// models and recorded, then couldn't write the Notes.
+/// it can't work, so the models aren't downloaded.
 public enum MemoryRequirement: Equatable, Sendable {
     case enough
     case low(gigabytes: Int)

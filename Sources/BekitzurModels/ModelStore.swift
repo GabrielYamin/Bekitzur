@@ -12,13 +12,12 @@ public struct ModelStore: Sendable {
         folder.appending(path: file.path)
     }
 
-    /// Where a download collects before it's checked, the name install.sh used, so either continues the other's.
+    /// Where a download collects before it's checked.
     public func partialURL(of file: ModelFile) -> URL {
         url(of: file).appendingPathExtension("partial")
     }
 
-    /// The file is in, by install.sh's rule: the pinned download, or any large file in its place, which is a copy this
-    /// Mac already uses.
+    /// The file is in: the pinned download, or any large file in its place, which is a copy this Mac already uses.
     public func has(_ file: ModelFile) -> Bool {
         guard let size = Self.size(of: url(of: file)) else { return false }
         return size == file.bytes || size > 100_000_000

@@ -35,7 +35,7 @@ struct RecordingTimingTests {
         #expect(timeline.position == 5 * 512)
     }
 
-    /// November 1: seven blocks went missing from the system audio while the Mac was busy, and each moved the rest of
+    /// Blocks can go missing from the system audio while the Mac is busy, and each would move the rest of
     /// the track earlier.
     @Test func aBlockCountedPastAMissingOneLeavesSilenceInItsPlace() {
         var timeline = TrackTimeline(sampleRate: Self.rate, origin: nil)

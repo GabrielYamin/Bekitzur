@@ -58,8 +58,8 @@ public final class ConversationQuestions {
     }
 
     /// Asked when nothing answered the question as it was put. Told in one message to answer what the question means, the
-    /// model still gave nothing for "What feature is the design doc for?" where no feature is named but the design
-    /// document is described; asked to look again, it can say what the transcript does say.
+    /// model can still give nothing for a question that takes for granted what the transcript doesn't say; asked to look
+    /// again, it can say what the transcript does say.
     static let lookAgain = """
     Nothing in the transcript answers that as asked. Look again for what the question means, which may be called \
     something else there, or not be what the question takes for granted: a design document asked about as a PoC, or a \
@@ -124,7 +124,7 @@ public final class ConversationQuestions {
     }
 
     /// The conversation's language is named: told only that a question can be in another language than the
-    /// conversation's, the model answered most English questions about a Hebrew conversation in Hebrew.
+    /// conversation's, the model answers most English questions about a Hebrew conversation in Hebrew.
     static func instructions(for language: ConversationLanguage) -> String {
         let spoken = language.name
         return """

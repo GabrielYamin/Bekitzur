@@ -1,15 +1,13 @@
 import Accelerate
 
 /// Where the user talks over the other side of a call on laptop speakers, which the microphone's copy of the other side
-/// hides from a simple comparison: on November 2 the copy was only 2 dB quieter than the system audio, and 20 ms at a
-/// time the microphone strayed 7 to 13 dB from any one level for it while only the other side talked.
+/// hides from a simple comparison: the copy is nearly as loud as the system audio, and from moment to moment no single
+/// gain from the system audio predicts it.
 ///
 /// The copy is predicted from the system audio, frequency by frequency, through each frequency's echo path over the
 /// last 128 ms, fitted to the call by least squares where the other side talks, then fitted again on just the moments
 /// the first fit explains, since the others hold the user. A moment is the user's when what's left of the microphone is
-/// 15 dB above the predicted copy and 25 dB above the room's noise, in most of the five 16 ms frames around it. On the
-/// November 2 call that kept 3 of the user's 4 words said over the other person; on the October 28 call, 39 of 70, with
-/// 26 of the other side's 1,206 words said meanwhile in what counted as the user.
+/// 15 dB above the predicted copy and 25 dB above the room's noise, in most of the five 16 ms frames around it.
 enum TalkingOver {
     private static let frame = 512, hop = 256, taps = 8
     /// 218 Hz to 4 kHz, where speech is.

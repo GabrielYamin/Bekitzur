@@ -16,8 +16,8 @@ public enum TranscriberError: Error, CustomStringConvertible {
 
 /// Transcribes 16 kHz mono audio with a Whisper-family model through whisper.cpp.
 ///
-/// The settings match what the scripted read was scored with: beam search, the language forced, no text carried
-/// between 30-second windows (which prevents Whisper's repetition loops), and non-speech tokens suppressed.
+/// It decodes with beam search, the language forced, no text carried between 30-second windows (which prevents
+/// Whisper's repetition loops), and non-speech tokens suppressed.
 ///
 /// Word times come from DTW alignment on large-v3-turbo's attention heads, which the ivrit.ai model shares. Whisper's
 /// own token times can be a second off, enough to put a quick reply in the wrong Speaker's mouth.

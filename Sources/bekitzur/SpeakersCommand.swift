@@ -14,7 +14,7 @@ struct SpeakersCommand: AsyncParsableCommand {
     @Option(help: "A Conversation's folder instead: its tracks are lined up and separated as the app does, and each word of its Transcript is printed with its time, side (user or other), and Speaker.")
     var conversation: String?
 
-    @Flag(help: "With --conversation: keep the other side in the microphone and silence it while they talk, except where the user talks over them, as before, to compare.")
+    @Flag(help: "With --conversation: keep the other side in the microphone and silence it while they talk, except where the user talks over them, to compare.")
     var silencing = false
 
     @Flag(help: "With --conversation: also separate each input on its own and print how alike each microphone voice is to each system audio voice.")

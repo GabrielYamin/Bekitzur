@@ -104,8 +104,7 @@ public enum ConversationProcessor {
     /// to the voices heard there, and without what's left of the other side in the microphone: words that repeat the
     /// system audio's within 0.4 seconds, next to another that does, since two people can say the same word at once.
     /// Nor the microphone's words more than 0.25 seconds from its speech, which speech recognition wrote into silence.
-    /// Transcribed together, two people talking at once came out as one: on November 2 the other person's words under the
-    /// user's never made it into the Transcript.
+    /// Transcribed together, two people talking at once come out as one, and one person's words are lost.
     public static func merging(microphone: Transcript, system: Transcript, microphoneSpeech: [ClosedRange<Double>]) -> Transcript {
         let heard = system.segments.flatMap { $0.words ?? [] }.map { (start: $0.start, text: normalized($0.text)) }
         let spoken = { (start: Double, end: Double) in microphoneSpeech.contains { $0.lowerBound <= end + 0.25 && start - 0.25 <= $0.upperBound } }

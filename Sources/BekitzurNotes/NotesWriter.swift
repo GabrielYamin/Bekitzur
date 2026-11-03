@@ -47,13 +47,13 @@ public struct NotesWriter {
 
     /// Room for the checks after the draft: the decisions and action items, then each open question, whose message shows
     /// up to 900 words said after it, about 4,000 tokens in Hebrew, so this covers about two of them. Checks that don't
-    /// fit leave their items as drafted. More room grew the context past its first 32K for a 3,000-token Transcript,
-    /// for the same Notes, where this keeps it there up to about an hour of Hebrew.
+    /// fit leave their items as drafted. More room would grow the context past its first 32K for a shorter Transcript
+    /// without changing the Notes; this keeps it there up to about an hour of Hebrew.
     static let reviewTokens = 12_288
 
     /// The draft checked in the same chat, which still holds the transcript, since one pass over a long transcript leaves
     /// items like "We'll do it tomorrow" as they were said and lists questions that were answered later on. Decisions and
-    /// action items are checked first, then each open question on its own: asked together, wording for one changed the
+    /// action items are checked first, then each open question on its own: asked together, wording for one changes the
     /// model's answers about the other. The draft stands where the context is full or a reply doesn't decode.
     private func reviewed(_ draft: Notes, turns: [Turn]) -> Notes {
         var notes = draft
@@ -128,7 +128,7 @@ public struct NotesWriter {
 
     /// One open question with what was said from where it was asked on, in the message itself: Gemma's sliding-window
     /// layers see only the last 1,024 tokens, so in a later message the transcript reaches only its few global layers, and
-    /// asked from there the model rarely found an answer that came from another speaker in other words.
+    /// asked from there the model rarely finds an answer that comes from another speaker in other words.
     static func questionRequest(_ question: OpenQuestion, number: Int, of count: Int, turns: [Turn]) -> String {
         let position = Dictionary(turns.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
         let asked = question.sourceTurns.compactMap { position[$0] }.min() ?? 0

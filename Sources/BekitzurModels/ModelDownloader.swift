@@ -21,10 +21,9 @@ public enum DownloadProgress: Sendable, Equatable {
     case checking
 }
 
-/// Downloads a model file from its pinned URL as install.sh did: into its partial file, continuing whatever is there,
-/// then checks the SHA-256 and moves the file into place. A dropped connection or a server error is retried, from
-/// where it stopped, five times, as install.sh's curl did. Cancelling the task stops the download and keeps what
-/// arrived.
+/// Downloads a model file from its pinned URL into its partial file, continuing whatever is there, then checks the
+/// SHA-256 and moves the file into place. A dropped connection or a server error is retried, from where it stopped,
+/// five times. Cancelling the task stops the download and keeps what arrived.
 public final class ModelDownloader: @unchecked Sendable {
     private let configuration: URLSessionConfiguration
     private let retryDelay: Duration

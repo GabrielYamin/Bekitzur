@@ -26,7 +26,7 @@ public struct ConversationInfo: Codable, Identifiable, Sendable, Hashable {
     /// Something the user should check, like a track that recorded only silence.
     public var warning: String?
     /// Seconds the microphone track plays later than the system audio track so a call's two tracks line up: 0 for
-    /// recordings lined up while recording, measured once for earlier ones, nil until then.
+    /// recordings lined up while recording, measured once for the others, nil until then.
     public var microphoneDelay: Double?
     /// How much later the system audio track plays, along the call, so the other side lines up with the copy the
     /// microphone heard: measured after recording, on the microphone as `microphoneDelay` places it. Empty when the

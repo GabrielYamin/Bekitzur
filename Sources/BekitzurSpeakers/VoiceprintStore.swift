@@ -20,7 +20,7 @@ public struct VoiceprintStore {
     }
 
     /// Strengthens a Participant's Voiceprint with another sample of their voice, or adds it if they're new.
-    /// A Speaker heard only by Sortformer has no embedding, and adds nothing.
+    /// A Speaker heard only by the timeline model can lack an embedding, and then adds nothing.
     public func add(_ embedding: [Float], to name: String) throws {
         guard !embedding.isEmpty else { return }
         let existing = try load().first { $0.name == name }

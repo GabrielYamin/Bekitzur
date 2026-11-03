@@ -1,6 +1,6 @@
 import SwiftUI
 
-// The menu bar's panel had no hover effect at all, so nothing in it looked clickable until it was clicked.
+// The menu bar's panel has no hover effect of its own, so nothing in it would look clickable.
 
 /// A row of the menu bar's panel, lit up under the pointer like a menu item, across the panel and without moving its text.
 struct PanelRowStyle: ButtonStyle {

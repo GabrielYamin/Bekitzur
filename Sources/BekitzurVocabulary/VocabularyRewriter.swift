@@ -158,11 +158,10 @@ public struct VocabularyRewriter {
 
 /// Asks the language model which of each word's matched terms it is, if any.
 ///
-/// The model answers every item, "none" included: asked to list only the terms, it missed clear terms and let
-/// ordinary words through (scripted read: 43 of 72 terms in English letters instead of 56). Each answer is keyed by its
-/// item's id, which the grammar puts in order, and may only be "none" or that item's own candidates, so the model can't
-/// put a term on a word that doesn't sound like it. Repeating each Hebrew word made the answers four times longer; with
-/// no key at all, answers slid onto neighboring items (in a 32-minute meeting: "ראשונה" as "version", "קפקא" left as is).
+/// The model answers every item, "none" included: asked to list only the terms, it misses clear terms and lets
+/// ordinary words through. Each answer is keyed by its item's id, which the grammar puts in order, and may only be
+/// "none" or that item's own candidates, so the model can't put a term on a word that doesn't sound like it. Repeating
+/// each Hebrew word makes the answers several times longer; with no key at all, answers slide onto neighboring items.
 struct TermVerifier {
     let model: LanguageModel
 

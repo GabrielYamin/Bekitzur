@@ -17,8 +17,8 @@ public struct SpeakerTurn: Sendable {
 
 /// Separates the voices in 16 kHz mono audio with FluidAudio's offline pipeline (pyannote community-1 on Core ML).
 ///
-/// It folds quick replies into the surrounding speaker, and none of its settings for short speech changed that on the
-/// two-person call, so ``SpeakerSeparation`` takes the timeline from Sortformer and only the embeddings from here.
+/// It folds quick replies into the surrounding speaker, and none of its settings for short speech change that, so
+/// ``SpeakerSeparation`` takes who spoke when from a timeline model and only the embeddings from here.
 public final class SpeakerSeparator {
     private let manager: OfflineDiarizerManager
 

@@ -10,7 +10,7 @@ struct EachTrackTests {
         return TranscriptSegment(start: timed[0].start, end: timed.last!.end, text: timed.map(\.text).joined(separator: " "), words: timed, input: input)
     }
 
-    /// November 2: the user said "בא לי לישון" while the other person spoke, and only the user's words were written.
+    /// The user says "בא לי לישון" over the other person; from both tracks summed, only one of them is transcribed.
     @Test func bothTracksWordsAreKeptEachTaggedWithItsTrack() {
         let system = Transcript(language: .hebrew, segments: [segment([(5.6, "גם"), (5.8, "לי,")]), segment([(7.2, "אבל"), (7.5, "יש"), (7.8, "קפה")])])
         let microphone = Transcript(language: .hebrew, segments: [segment([(5.66, "בא"), (5.8, "לי"), (6.0, "לישון")])])
@@ -30,7 +30,7 @@ struct EachTrackTests {
         #expect(merged.segments.filter { $0.input == .microphone }.flatMap { $0.words ?? [] }.map(\.text) == ["כן", "הבנתי"])
     }
 
-    /// November 2: speech recognition wrote "תודה רבה לך, אדוני היושב-ראש" where the microphone was silenced.
+    /// Speech recognition can write "תודה רבה לך, אדוני היושב-ראש" where the microphone is silent.
     @Test func microphoneWordsAwayFromItsSpeechGo() {
         let system = Transcript(language: .hebrew, segments: [segment([(55.6, "וקצת"), (56.0, "אג'נדה,"), (57.7, "וכל")])])
         let microphone = Transcript(language: .hebrew, segments: [
@@ -55,7 +55,7 @@ struct EachTrackTests {
         #expect(attributed.map(\.speaker) == ["Speaker 1", "Speaker 2"])
     }
 
-    /// November 1: what the microphone made of the other side's voice came out as words of theirs, misheard.
+    /// What the microphone makes of the other side's voice comes out as words of theirs, misheard.
     @Test func microphoneWordsOfAVoiceInTheSystemAudioAreLeftOut() {
         let turns = [
             SpeakerTurn(voice: "system S1", start: 0, end: 10, embedding: [1, 0], input: .systemAudio),

@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 /// What a fix in the Transcript took the place of, in a window of its own just above the word, like a tooltip. Drawn
-/// inside the Transcript, it sat on the words around it and mixed with them, and SwiftUI's tooltips don't show on the
-/// words at all.
+/// inside the Transcript, it would sit on the words around it and mix with them, and SwiftUI's tooltips don't show on
+/// the words at all.
 @MainActor
 final class WordTooltip {
     static let shared = WordTooltip()

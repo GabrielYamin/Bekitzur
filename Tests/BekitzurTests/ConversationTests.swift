@@ -132,8 +132,7 @@ struct ConversationTests {
         #expect(!Notes().actionItemsDone)
     }
 
-    /// A build from before October 28 wrote null as text for each of a meeting's five Action Items, which showed as a due
-    /// date of "null", in the Notes and in a Conversation imported from it.
+    /// The model can write null as text, which would show as a due date of "null", in new Notes and in saved ones.
     @Test func nullWrittenAsTextIsNoOwnerOrDueDate() throws {
         let fromTheModel = #"{"text": "Send the report", "owner": "null", "due_phrase": " NULL ", "source_turns": ["T001"], "quote": "אשלח"}"#
         let saved = #"{"text": "Fix the build", "owner": "Speaker 1", "duePhrase": "null", "sourceTurns": [], "quote": ""}"#

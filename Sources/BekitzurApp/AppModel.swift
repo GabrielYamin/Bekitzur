@@ -399,9 +399,9 @@ final class AppModel {
         alert.runModal()
     }
 
-    /// Lines up calls processed before they were measured, once, for playback: calls recorded before tracks were lined
-    /// up while recording by how much later their microphone plays, then every call by how much later its system audio
-    /// plays along the call. Waits while recording, so measuring never competes with it.
+    /// Lines up calls processed without measured delays, once, for playback: by how much later the microphone plays,
+    /// for a call whose tracks weren't lined up while recording, then by how much later the system audio plays along
+    /// the call. Waits while recording, so measuring never competes with it.
     private func lineUpCalls() async {
         for info in conversations where (info.microphoneDelay == nil || info.systemAudioDelays == nil) && info.status != .recording && info.status != .processing {
             while isRecording { try? await Task.sleep(for: .seconds(10)) }
@@ -592,7 +592,7 @@ final class AppModel {
     var menuBarSymbol: String? {
         if isRecording { return endedCall == nil ? "record.circle.fill" : "stop.circle" }
         if callToRecord != nil { return "record.circle" }
-        // Confirming the update closes the menu bar's panel, which had the only sign it was downloading.
+        // Confirming the update closes the menu bar's panel, and with it the only sign it's downloading.
         if updateProgress != nil { return "arrow.down.circle" }
         if processingID != nil { return "hourglass" }
         if let modelDownload, modelDownload.failure == nil { return "arrow.down.circle" }
@@ -602,11 +602,11 @@ final class AppModel {
     // MARK: Recording
 
     /// Live chunks are transcribed by a helper process, this app run with `Entry.liveTranscriptionArgument`, so a crash
-    /// in whisper.cpp ends only live transcription; one took the whole app down mid-recording.
+    /// in whisper.cpp ends only live transcription, not the whole app mid-recording.
     static let transcribesLive = true
 
-    /// Free space under which a recording starts only after a warning: a call takes under 100 MB an hour (77 to 78 MB
-    /// for two calls, 31 for a room), so this is room for twenty hours.
+    /// Free space under which a recording starts only after a warning: a call takes under 100 MB an hour, so this is
+    /// room for twenty hours.
     static let lowDiskSpace: Int64 = 2_000_000_000
 
     /// - Parameter automatically: For a call that started, where nobody's there to answer a question, so low disk space
@@ -1305,7 +1305,7 @@ final class AppModel {
         }
     }
 
-    /// A Conversation's file, a zip, as Conversations were sent before there was one, or a folder.
+    /// A Conversation's file, a zip of Conversation folders, or a folder.
     private static func isExportedConversation(_ url: URL) -> Bool {
         ["bekitzur", "zip"].contains(url.pathExtension.lowercased()) || (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
     }
