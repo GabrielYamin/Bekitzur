@@ -128,7 +128,7 @@ struct MenuBarContent: View {
             }
         }
         .padding(14)
-        .frame(width: 320)
+        .frame(width: 380)
         .task { await model.refreshPermissions() }
     }
 }
