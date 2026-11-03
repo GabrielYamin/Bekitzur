@@ -118,7 +118,7 @@ private struct StartButtons: View {
     var body: some View {
         HStack(spacing: 8) {
             if let startedAt = model.recordingStartedAt {
-                BoxButton(title: "Stop", systemImage: "stop.fill", tint: .red) {
+                BoxButton(title: "Stop", systemImage: "stop.fill", tint: .red, filled: true) {
                     model.stopRecording()
                 } subtitle: {
                     HStack(spacing: 4) {
@@ -148,10 +148,13 @@ private struct StartButtons: View {
     }
 }
 
+/// A neutral box with its icon in `tint`, or, `filled`, the whole box in it, for a recording going on: a red Record box
+/// looked like recording while nothing was.
 private struct BoxButton<Subtitle: View>: View {
     let title: String
     let systemImage: String
     let tint: Color
+    var filled = false
     let action: () -> Void
     @ViewBuilder let subtitle: Subtitle
     @Environment(\.isEnabled) private var isEnabled
@@ -160,19 +163,27 @@ private struct BoxButton<Subtitle: View>: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 4) {
-                Image(systemName: systemImage).font(.title2).foregroundStyle(tint)
-                Text(title).font(.headline)
-                subtitle.font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Image(systemName: systemImage).font(.title2).foregroundStyle(filled ? .white : tint)
+                Text(title).font(.headline).foregroundStyle(filled ? .white : .primary)
+                subtitle
+                    .font(.caption)
+                    .foregroundStyle(filled ? AnyShapeStyle(.white.opacity(0.85)) : AnyShapeStyle(.secondary))
+                    .lineLimit(2)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(10)
-            .background(tint.opacity(hovering && isEnabled ? 0.18 : 0.1), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.3)))
+            .background(background, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(filled ? Color.clear : Color.primary.opacity(0.12)))
             .contentShape(RoundedRectangle(cornerRadius: 10))
             .opacity(isEnabled ? 1 : 0.5)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+    }
+
+    private var background: AnyShapeStyle {
+        let lit = hovering && isEnabled
+        return filled ? AnyShapeStyle(tint.opacity(lit ? 0.85 : 1)) : AnyShapeStyle(Color.primary.opacity(lit ? 0.09 : 0.05))
     }
 }
 
