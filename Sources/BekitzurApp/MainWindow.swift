@@ -6,7 +6,7 @@ struct MainWindow: View {
     @ViewState private var newTitle = ""
     // PROTOTYPE (people filter): the filter the variants share, and the variant shown.
     @ViewState private var people = PeopleFilter()
-    @AppStorage("peopleFilterVariant") private var variant = PeopleFilterVariant.menu
+    @AppStorage("peopleFilterVariant") private var variant = PeopleFilterVariant.toolbar
 
     var body: some View {
         NavigationSplitView {
@@ -21,26 +21,25 @@ struct MainWindow: View {
                 .padding(.horizontal, 10)
                 .padding(.top, 6)
                 .padding(.bottom, 8)
-                if PeopleFilterVariant.isOn, variant == .menu {
-                    PeopleMenuFilter(filter: $people)
-                        .padding(.horizontal, 10)
-                        .padding(.bottom, 6)
-                }
-                if PeopleFilterVariant.isOn, variant == .header {
-                    PeopleHeaderFilter(filter: $people)
+                if PeopleFilterVariant.isOn {
+                    if variant == .sidebar {
+                        SidebarSearchField(query: $people.query)
+                            .padding(.horizontal, 10)
+                            .padding(.bottom, 6)
+                    }
+                    PeopleHeaderFilter(filter: $people, searchInHeader: variant == .header)
                         .padding(.horizontal, 18)
                         .padding(.top, 2)
                         .padding(.bottom, 2)
                 }
                 conversationList
             }
-            .modifier(PeopleSearchIfShown(shown: PeopleFilterVariant.isOn && variant == .search, filter: $people))
             .task(id: model.conversations.map(\.id).joined() + model.userName) {
                 guard PeopleFilterVariant.isOn else { return }
                 people.index = await PeopleIndex.build(model.conversations, library: model.library, me: model.userName)
             }
-            .onChange(of: variant) { _, shown in
-                if shown != .search { people.query = "" }
+            .onChange(of: variant) {
+                people.query = ""
             }
             .dropDestination(for: URL.self) { urls, _ in
                 Task { await model.importRecordings(urls) }
@@ -93,6 +92,7 @@ struct MainWindow: View {
                 .help(model.hasNewSettings ? "Settings has something new (⌘,)" : "Settings (⌘,)")
             }
         }
+        .modifier(ToolbarSearchIfShown(shown: PeopleFilterVariant.isOn && variant == .toolbar, query: $people.query))
         .alert("Bekitzur", isPresented: Binding(get: { model.alert != nil }, set: { if !$0 { model.alert = nil } })) {
             Button("OK") { model.alert = nil }
         } message: {
@@ -120,7 +120,20 @@ struct MainWindow: View {
 
     @ViewBuilder private var rows: some View {
         ForEach(visibleConversations) { info in
-            ConversationRow(info: info)
+            VStack(alignment: .leading, spacing: 2) {
+                ConversationRow(info: info)
+                // PROTOTYPE (people filter): the line a search matched inside the Conversation.
+                if PeopleFilterVariant.isOn, let snippet = people.snippet(for: info) {
+                    Text(snippet)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .environment(\.layoutDirection, String(snippet.characters).isMostlyRightToLeft ? .rightToLeft : .leftToRight)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 16)
+                        .padding(.bottom, 3)
+                }
+            }
                 .tag(info.id)
                 .contextMenu {
                     Button("Rename…") { model.renaming = info.id }
@@ -136,12 +149,7 @@ struct MainWindow: View {
 
     private var conversationList: some View {
         List(selection: $model.selection) {
-            if PeopleFilterVariant.isOn, variant == .section {
-                PeopleSection(filter: $people)
-                Section("Conversations") { rows }
-            } else {
-                rows
-            }
+            rows
         }
         .overlay {
             if model.conversations.isEmpty {
@@ -150,8 +158,12 @@ struct MainWindow: View {
                     systemImage: "waveform",
                     description: Text("Record or import one above, or drop a recording or an exported Conversation here.")
                 )
-            } else if visibleConversations.isEmpty, variant != .section {
-                ContentUnavailableView("No Conversations with them", systemImage: "person.2.slash", description: Text("Each Conversation shown has everyone picked in it."))
+            } else if visibleConversations.isEmpty {
+                ContentUnavailableView(
+                    "No matching Conversations",
+                    systemImage: "magnifyingglass",
+                    description: Text("A Conversation shows when it has everyone picked in it and the search is in its title, Notes, or Transcript.")
+                )
             }
         }
         .alert("Rename Conversation", isPresented: Binding(get: { model.renaming != nil }, set: { if !$0 { model.renaming = nil } })) {

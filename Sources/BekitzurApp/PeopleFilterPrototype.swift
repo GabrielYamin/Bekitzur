@@ -1,30 +1,33 @@
-// PROTOTYPE, throwaway: three ways to filter the Conversation list by the people in it, on the branch
-// prototype/people-filter only. Switch with the bar at the bottom of the main window (⌘[ and ⌘]); it shows only with
-// `defaults write app.bekitzur.mac prototypes -bool true`. The people of a Conversation are its Speakers with a confirmed
-// name, without the user (Settings → Your name); Speakers with only a suggested name or none don't count.
+// PROTOTYPE, throwaway, on the branch prototype/people-filter only: searching Conversations alongside the People menu in
+// the list's header (D, picked from the first round: A, a People button with chips; B, people as search tokens; C, a
+// People section in the sidebar; all in this branch's history). Switch with the bar at the bottom of the main window
+// (⌘[ and ⌘]); it shows only with `defaults write app.bekitzur.mac prototypes -bool true`. The people of a Conversation
+// are its Speakers with a confirmed name, without the user (Settings → Your name). Search matches titles, Notes, and
+// Transcripts; a match inside a Conversation shows the line it's in under the row.
 
 import BekitzurDomain
 import BekitzurLibrary
 import SwiftUI
 
 enum PeopleFilterVariant: String, CaseIterable {
-    case menu = "A", search = "B", section = "C", header = "D"
+    case toolbar = "E", sidebar = "F", header = "G"
 
     var name: String {
         switch self {
-        case .menu: "Filter field, people as chips in it"
-        case .search: "People as search tokens"
-        case .section: "People section in the sidebar"
-        case .header: "People menu in the list's header"
+        case .toolbar: "Search in the toolbar"
+        case .sidebar: "Search field above the list"
+        case .header: "Search button in the list's header"
         }
     }
 
     static var isOn: Bool { UserDefaults.standard.bool(forKey: "prototypes") }
 }
 
-/// Who was in each Conversation, and everyone by how many Conversations they were in.
+/// Who was in each Conversation and what it says, and everyone by how many Conversations they were in.
 struct PeopleIndex: Sendable {
     var byConversation: [String: Set<String>] = [:]
+    /// The Notes' text, then the Transcript's lines.
+    var lines: [String: [String]] = [:]
     var people: [(name: String, count: Int)] = []
 
     static func build(_ conversations: [ConversationInfo], library: ConversationLibrary, me: String) async -> PeopleIndex {
@@ -37,6 +40,10 @@ struct PeopleIndex: Sendable {
                     guard case .named(let name, _) = speaker.naming else { return nil }
                     return name.caseInsensitiveCompare(me) == .orderedSame ? nil : name
                 })
+                let notes = result.notes
+                index.lines[info.id] = [notes.summary]
+                    + notes.decisions.map(\.text) + notes.actionItems.map(\.text) + notes.openQuestions.map(\.text)
+                    + result.transcript.segments.map(\.text)
             }
             var counts: [String: Int] = [:]
             for names in index.byConversation.values { for name in names { counts[name, default: 0] += 1 } }
@@ -46,131 +53,46 @@ struct PeopleIndex: Sendable {
     }
 }
 
-/// The filter all three variants share, so switching keeps what's picked.
+/// The People menu's picks and the search, which every variant shares.
 struct PeopleFilter {
     var index = PeopleIndex()
     var selected: [String] = []
-    /// Variant B's typed text, which also matches titles.
     var query = ""
 
-    var isActive: Bool { !selected.isEmpty || !query.isEmpty }
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
 
     func matches(_ info: ConversationInfo) -> Bool {
         let people = index.byConversation[info.id] ?? []
         guard selected.allSatisfy(people.contains) else { return false }
-        return query.isEmpty || info.displayTitle.localizedCaseInsensitiveContains(query)
+        let query = trimmedQuery
+        guard !query.isEmpty else { return true }
+        return Self.contains(info.displayTitle, query) || (index.lines[info.id] ?? []).contains { Self.contains($0, query) }
+    }
+
+    /// The line a search matched inside a Conversation, around the match, which is bold; nil when the title matched.
+    func snippet(for info: ConversationInfo) -> AttributedString? {
+        let query = trimmedQuery
+        guard !query.isEmpty, !Self.contains(info.displayTitle, query),
+              let line = index.lines[info.id]?.first(where: { Self.contains($0, query) }),
+              let match = line.range(of: query, options: [.caseInsensitive, .diacriticInsensitive])
+        else { return nil }
+        let start = line.index(match.lowerBound, offsetBy: -30, limitedBy: line.startIndex) ?? line.startIndex
+        let end = line.index(match.upperBound, offsetBy: 70, limitedBy: line.endIndex) ?? line.endIndex
+        let excerpt = (start > line.startIndex ? "…" : "") + line[start..<end] + (end < line.endIndex ? "…" : "")
+        var text = AttributedString(excerpt)
+        if let range = text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) {
+            text[range].font = .caption.bold()
+            text[range].foregroundColor = .primary
+        }
+        return text
     }
 
     mutating func toggle(_ name: String) {
         if let i = selected.firstIndex(of: name) { selected.remove(at: i) } else { selected.append(name) }
     }
-}
 
-struct PersonToken: Identifiable, Hashable {
-    let name: String
-    var id: String { name }
-}
-
-// MARK: Variant A: a full-width filter field in the boxes' style, with the people picked as chips inside it
-
-struct PeopleMenuFilter: View {
-    @Binding var filter: PeopleFilter
-    @ViewState private var picking = false
-    @ViewState private var hovering = false
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "person.2").foregroundStyle(.secondary)
-            if filter.selected.isEmpty {
-                Text("Filter by people").foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.down").font(.caption.bold()).foregroundStyle(.secondary)
-            } else {
-                FlowLayout(spacing: 4) {
-                    ForEach(filter.selected, id: \.self) { name in
-                        Button {
-                            filter.toggle(name)
-                        } label: {
-                            HStack(spacing: 3) {
-                                Text(name)
-                                Image(systemName: "xmark").font(.caption2.bold())
-                            }
-                            .font(.caption)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(.tint.opacity(0.18), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .help("Take \(name) out of the filter")
-                    }
-                }
-                Spacer(minLength: 0)
-                Button {
-                    filter.selected = []
-                } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Show everyone's Conversations")
-            }
-        }
-        .font(.callout)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
-        .background(Color.primary.opacity(hovering ? 0.08 : 0.05), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.12)))
-        .contentShape(RoundedRectangle(cornerRadius: 8))
-        .onTapGesture { picking.toggle() }
-        .onHover { hovering = $0 }
-        .popover(isPresented: $picking, arrowEdge: .bottom) {
-            PeopleChecklist(filter: $filter).frame(width: 240).padding(10)
-        }
-    }
-}
-
-// MARK: Variant D: a light People menu on the right of a "Conversations" header above the list
-
-struct PeopleHeaderFilter: View {
-    @Binding var filter: PeopleFilter
-    @ViewState private var picking = false
-
-    var body: some View {
-        HStack {
-            Text("Conversations").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-            Spacer()
-            Button {
-                picking.toggle()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: filter.selected.isEmpty ? "person.2" : "person.2.fill")
-                    Text(label)
-                    Image(systemName: "chevron.down").font(.caption2.bold())
-                }
-                .font(.subheadline)
-                .foregroundStyle(filter.selected.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .popover(isPresented: $picking, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 8) {
-                    PeopleChecklist(filter: $filter)
-                    if !filter.selected.isEmpty {
-                        Button("Show everyone's Conversations") { filter.selected = [] }.buttonStyle(.link)
-                    }
-                }
-                .frame(width: 240)
-                .padding(10)
-            }
-        }
-    }
-
-    private var label: String {
-        switch filter.selected.count {
-        case 0: "People"
-        case 1: "With \(filter.selected[0])"
-        default: "With \(filter.selected[0]) + \(filter.selected.count - 1)"
-        }
+    private static func contains(_ text: String, _ query: String) -> Bool {
+        text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
     }
 }
 
@@ -194,70 +116,122 @@ private struct PeopleChecklist: View {
                 .toggleStyle(.checkbox)
             }
             Text("With more than one picked, a Conversation has to have all of them.").font(.caption).foregroundStyle(.secondary)
+            if !filter.selected.isEmpty {
+                Button("Show everyone's Conversations") { filter.selected = [] }.buttonStyle(.link)
+            }
         }
     }
 }
 
-// MARK: Variant B: people as tokens in the search field, which also matches titles
+// MARK: D, the People menu on the right of the list's header, with G's search button beside it
 
-struct PeopleSearch: ViewModifier {
+struct PeopleHeaderFilter: View {
     @Binding var filter: PeopleFilter
-
-    func body(content: Content) -> some View {
-        content.searchable(
-            text: $filter.query,
-            tokens: Binding(get: { filter.selected.map(PersonToken.init) }, set: { filter.selected = $0.map(\.name) }),
-            suggestedTokens: .constant(suggestions),
-            placement: .sidebar,
-            prompt: "Search, or type a name"
-        ) { token in
-            Label(token.name, systemImage: "person")
-        }
-    }
-
-    private var suggestions: [PersonToken] {
-        filter.index.people
-            .filter { !filter.selected.contains($0.name) && (filter.query.isEmpty || $0.name.localizedCaseInsensitiveContains(filter.query)) }
-            .map { PersonToken(name: $0.name) }
-    }
-}
-
-struct PeopleSearchIfShown: ViewModifier {
-    let shown: Bool
-    @Binding var filter: PeopleFilter
-
-    func body(content: Content) -> some View {
-        if shown { content.modifier(PeopleSearch(filter: $filter)) } else { content }
-    }
-}
-
-// MARK: Variant C: a People section above the Conversations, one person at a time, like Mail's mailboxes
-
-struct PeopleSection: View {
-    @Binding var filter: PeopleFilter
+    /// G: a magnifying glass that turns the header's title into a search field.
+    let searchInHeader: Bool
+    @ViewState private var picking = false
+    @ViewState private var searching = false
+    @FocusState private var focused: Bool
 
     var body: some View {
-        Section("People") {
-            if filter.index.people.isEmpty {
-                Text("Name Speakers to see them here").foregroundStyle(.secondary)
-            }
-            ForEach(filter.index.people, id: \.name) { person in
-                let picked = filter.selected == [person.name]
-                Button {
-                    filter.selected = picked ? [] : [person.name]
-                } label: {
-                    HStack {
-                        Label(person.name, systemImage: picked ? "person.fill" : "person")
-                        Spacer()
-                        Text("\(person.count)").foregroundStyle(.secondary).monospacedDigit()
+        HStack(spacing: 10) {
+            if searchInHeader && searching {
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search Conversations", text: $filter.query)
+                        .textFieldStyle(.plain)
+                        .focused($focused)
+                        .onSubmit {}
+                    Button {
+                        filter.query = ""
+                        searching = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 2)
-                    .padding(.horizontal, 4)
-                    .background(picked ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 5))
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .help("Stop searching")
+                }
+                .font(.subheadline)
+                .onAppear { focused = true }
+            } else {
+                Text("Conversations").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                if searchInHeader {
+                    Button {
+                        searching = true
+                    } label: {
+                        Image(systemName: "magnifyingglass").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Search Conversations")
+                }
+            }
+            Button {
+                picking.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: filter.selected.isEmpty ? "person.2" : "person.2.fill")
+                    Text(label)
+                    Image(systemName: "chevron.down").font(.caption2.bold())
+                }
+                .font(.subheadline)
+                .foregroundStyle(filter.selected.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
+            .popover(isPresented: $picking, arrowEdge: .bottom) {
+                PeopleChecklist(filter: $filter).frame(width: 240).padding(10)
+            }
+        }
+    }
+
+    private var label: String {
+        switch filter.selected.count {
+        case 0: "People"
+        case 1: "With \(filter.selected[0])"
+        default: "With \(filter.selected[0]) + \(filter.selected.count - 1)"
+        }
+    }
+}
+
+// MARK: F, a search field between Record and Import and the list
+
+struct SidebarSearchField: View {
+    @Binding var query: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search Conversations", text: $query).textFieldStyle(.plain)
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
             }
+        }
+        .font(.callout)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.12)))
+    }
+}
+
+// MARK: E, the search field in the window's toolbar
+
+struct ToolbarSearchIfShown: ViewModifier {
+    let shown: Bool
+    @Binding var query: String
+
+    func body(content: Content) -> some View {
+        if shown {
+            content.searchable(text: $query, placement: .toolbar, prompt: "Search Conversations")
+        } else {
+            content
         }
     }
 }
