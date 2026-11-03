@@ -106,7 +106,7 @@ Its commands are `process` (Transcript, Speakers, and Notes for one recording), 
 | `eval` | Scoring scripts for word error rate, Speakers, and the Vocabulary |
 | `spikes` | Experiments: the comparison that chose Gemma for the Notes (`llm-bakeoff`), and questions to try Ask with (`ask-eval`) |
 | `docs` | The plan, the architecture decisions, and research on the models |
-| `release` | Release notes (`notes/<version>.md`), and the README of Bekitzur-releases, where versions up to 0.6.4 look for updates |
+| `release/notes` | Each release's notes, as `<version>.md` |
 | `.github/workflows` | CI, which builds, tests, and packages each pull request, and the Release workflow |
 
 ## Credits
