@@ -46,7 +46,7 @@ struct MainWindow: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You've edited this Conversation's Notes. Writing them again replaces your changes.")
+                Text("You've edited this Conversation's Notes or checked off its Action Items. Writing the Notes again replaces your changes and unchecks them.")
             }
         }
         .toolbar {

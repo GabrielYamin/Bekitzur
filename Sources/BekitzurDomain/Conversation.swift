@@ -20,6 +20,8 @@ public struct ConversationInfo: Codable, Identifiable, Sendable, Hashable {
     public var title: String?
     /// The user gave it its title, which writing the Notes again keeps.
     public var renamed: Bool?
+    /// With every Action Item done, the user said not now to deleting it; asked again from then.
+    public var suggestDeletingAfter: Date?
     public var error: String?
     /// Something the user should check, like a track that recorded only silence.
     public var warning: String?

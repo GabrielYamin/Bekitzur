@@ -1391,10 +1391,36 @@ final class AppModel {
         }
     }
 
+    /// Checks an Action Item off, or back on.
+    func setActionItem(_ index: Int, done: Bool, in id: String) {
+        guard var result = results[id] ?? library.result(for: id), result.notes.actionItems.indices.contains(index) else { return }
+        result.notes.actionItems[index].done = done ? true : nil
+        do {
+            try library.save(result, for: id)
+            results[id] = result
+        } catch {
+            alert = "Couldn't save the Action Item: \(error.localizedDescription)"
+        }
+    }
+
+    /// How long Not now puts off asking again to delete a Conversation whose Action Items are all done.
+    static let deletingAskedAgain: TimeInterval = 7 * 24 * 3_600
+
+    /// Every Action Item in the Conversation is done, and the user hasn't put off deleting it.
+    func suggestsDeleting(_ info: ConversationInfo) -> Bool {
+        guard info.status == .unreviewed || info.status == .reviewed, results[info.id]?.notes.actionItemsDone == true else { return false }
+        return (info.suggestDeletingAfter ?? .distantPast) <= Date()
+    }
+
+    func notNowForDeleting(_ id: String) {
+        update(id) { $0.suggestDeletingAfter = Date().addingTimeInterval(Self.deletingAskedAgain) }
+    }
+
     /// Runs `write`, which writes a Conversation's Notes again, at once, or once the user agrees when it would replace
-    /// their changes to the Notes.
+    /// their changes to the Notes or which Action Items they checked off.
     func replaceNotes(of id: String, _ write: @escaping @MainActor () -> Void) {
-        if (results[id] ?? library.result(for: id))?.notesEdited == true {
+        let result = results[id] ?? library.result(for: id)
+        if result?.notesEdited == true || result?.notes.actionItems.contains(where: { $0.done == true }) == true {
             replacingNotes = NotesReplacement(id: id, write: write)
         } else {
             write()

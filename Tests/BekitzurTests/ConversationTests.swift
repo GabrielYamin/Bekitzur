@@ -98,6 +98,25 @@ struct ConversationTests {
         #expect(markdown.contains("## Open Questions\n- Will Speaker 1 need help?"))
     }
 
+    @Test func doneActionItemsAreCheckedInTheMarkdownAndKeptInTheFile() throws {
+        var notes = conversation().notes
+        #expect(!notes.actionItemsDone)
+        notes.actionItems[0].done = true
+        let started = ISO8601DateFormatter().date(from: "2026-10-18T09:00:00Z")!
+
+        let markdown = NotesMarkdown.render(notes, startedAt: started, endedAt: nil)
+
+        #expect(markdown.contains("- [x] **Speaker 1**: Ship the fix"))
+        #expect(markdown.contains("- [ ] **Speaker 10**: Review what Speaker 1 shipped"))
+        #expect(!notes.actionItemsDone)
+        notes.actionItems[1].done = true
+        #expect(notes.actionItemsDone)
+        let saved = try JSONDecoder().decode(ActionItem.self, from: JSONEncoder().encode(notes.actionItems[0]))
+        #expect(saved.done == true)
+        #expect(try JSONDecoder().decode(ActionItem.self, from: Data(#"{"text": "Ship", "sourceTurns": [], "quote": ""}"#.utf8)).done == nil)
+        #expect(!Notes().actionItemsDone)
+    }
+
     /// A build from before October 28 wrote null as text for each of a meeting's five Action Items, which showed as a due
     /// date of "null", in the Notes and in a Conversation imported from it.
     @Test func nullWrittenAsTextIsNoOwnerOrDueDate() throws {

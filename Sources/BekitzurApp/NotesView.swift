@@ -9,6 +9,8 @@ struct NotesView: View {
     let save: (Notes) -> Void
     /// Opens an Action Item with a due day in the calendar app.
     let addToCalendar: (ActionItem) -> Void
+    /// Checks the Action Item at an index off, or back on.
+    let setDone: (Int, Bool) -> Void
     /// The Notes being changed while `editing`. It's never nil: the editor's fields still read it once more as editing
     /// ends, and an optional one set to nil on Save or Cancel crashed the app as SwiftUI unwrapped it.
     @ViewState private var draft = NotesDraft(Notes())
@@ -74,9 +76,17 @@ struct NotesView: View {
                 }
 
                 if !notes.actionItems.isEmpty {
-                    NotesSection(title: "Action Items", systemImage: "checklist") {
-                        ForEach(Array(notes.actionItems.enumerated()), id: \.offset) { _, item in
-                            NoteItem(text: item.text, quote: item.quote, sources: item.sourceTurns, turns: turns, play: play) {
+                    let done = notes.actionItems.filter { $0.done == true }.count
+                    NotesSection(title: "Action Items", systemImage: "checklist", detail: done > 0 ? "\(done) of \(notes.actionItems.count) done" : nil) {
+                        ForEach(Array(notes.actionItems.enumerated()), id: \.offset) { index, item in
+                            NoteItem(
+                                text: item.text,
+                                quote: item.quote,
+                                sources: item.sourceTurns,
+                                turns: turns,
+                                play: play,
+                                done: Binding(get: { item.done == true }, set: { setDone(index, $0) })
+                            ) {
                                 HStack(spacing: 6) {
                                     Chip(item.owner ?? "No Owner", systemImage: "person", prominent: item.owner != nil)
                                     if let due = NotesMarkdown.dueText(item) {
@@ -327,11 +337,23 @@ private struct ActionItemDetails: View {
 private struct NotesSection<Content: View>: View {
     let title: String
     let systemImage: String
+    /// Beside the title, like how many Action Items are done.
+    var detail: String?
     @ViewBuilder let content: Content
+
+    init(title: String, systemImage: String, detail: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.systemImage = systemImage
+        self.detail = detail
+        self.content = content()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label(title, systemImage: systemImage).font(.title3.bold())
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Label(title, systemImage: systemImage).font(.title3.bold())
+                if let detail { Text(detail).font(.callout).foregroundStyle(.secondary).monospacedDigit() }
+            }
             content
         }
     }
@@ -343,11 +365,44 @@ private struct NoteItem<Details: View>: View {
     let sources: [String]
     let turns: [String: Turn]
     let play: (Double) -> Void
+    /// An Action Item's check box; nil for a Decision or an Open Question.
+    var done: Binding<Bool>?
     @ViewBuilder let details: Details
 
+    init(text: String, quote: String?, sources: [String], turns: [String: Turn], play: @escaping (Double) -> Void, done: Binding<Bool>? = nil, @ViewBuilder details: () -> Details) {
+        self.text = text
+        self.quote = quote
+        self.sources = sources
+        self.turns = turns
+        self.play = play
+        self.done = done
+        self.details = details()
+    }
+
     var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            if let done {
+                Button {
+                    done.wrappedValue.toggle()
+                } label: {
+                    Image(systemName: done.wrappedValue ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(done.wrappedValue ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(done.wrappedValue ? "Mark as not done" : "Mark as done")
+            }
+            content.opacity(done?.wrappedValue == true ? 0.6 : 1)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(text).fontWeight(.medium)
+            Text(text).fontWeight(.medium).strikethrough(done?.wrappedValue == true)
             details
             if let quote, !quote.isEmpty {
                 DirectionalText("“\(quote)”").font(.callout).foregroundStyle(.secondary)
@@ -373,9 +428,7 @@ private struct NoteItem<Details: View>: View {
                 }
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

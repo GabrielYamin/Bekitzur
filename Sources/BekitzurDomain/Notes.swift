@@ -41,14 +41,17 @@ public struct ActionItem: Codable, Sendable, Equatable {
     public var dueDate: String?
     public var sourceTurns: [String]
     public var quote: String
+    /// The user checked it off.
+    public var done: Bool?
 
-    public init(text: String, owner: String? = nil, duePhrase: String? = nil, dueDate: String? = nil, sourceTurns: [String] = [], quote: String = "") {
+    public init(text: String, owner: String? = nil, duePhrase: String? = nil, dueDate: String? = nil, sourceTurns: [String] = [], quote: String = "", done: Bool? = nil) {
         self.text = text
         self.owner = owner
         self.duePhrase = duePhrase
         self.dueDate = dueDate
         self.sourceTurns = sourceTurns
         self.quote = quote
+        self.done = done
     }
 
     /// An Owner or due phrase of "null", or blank, is none, from the model and from saved Notes alike: a build from before
@@ -61,6 +64,7 @@ public struct ActionItem: Codable, Sendable, Equatable {
         dueDate = try container.decodeIfPresent(String.self, forKey: .dueDate)
         sourceTurns = try container.decode([String].self, forKey: .sourceTurns)
         quote = try container.decode(String.self, forKey: .quote)
+        done = try container.decodeIfPresent(Bool.self, forKey: .done)
     }
 
     private static func given(_ text: String?) -> String? {
@@ -97,5 +101,10 @@ public struct Notes: Codable, Sendable, Equatable {
         self.decisions = decisions
         self.actionItems = actionItems
         self.openQuestions = openQuestions
+    }
+
+    /// There are Action Items, and every one is checked off.
+    public var actionItemsDone: Bool {
+        !actionItems.isEmpty && actionItems.allSatisfy { $0.done == true }
     }
 }

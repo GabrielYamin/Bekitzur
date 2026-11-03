@@ -17,7 +17,7 @@ public enum NotesMarkdown {
             lines += ["", "## Action Items"] + notes.actionItems.map { item in
                 let owner = item.owner.map { "**\($0)**: " } ?? ""
                 let due = dueText(item).map { " (due \($0))" } ?? ""
-                return "- [ ] \(owner)\(item.text)\(due)"
+                return "- [\(item.done == true ? "x" : " ")] \(owner)\(item.text)\(due)"
             }
         }
         if !notes.openQuestions.isEmpty {

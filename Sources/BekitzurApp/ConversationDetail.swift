@@ -6,6 +6,7 @@ struct ConversationDetail: View {
     let info: ConversationInfo
     @ViewState private var tab = Tab.notes
     @ViewState private var playback = PlaybackModel()
+    @ViewState private var confirmingDelete = false
 
     enum Tab: Hashable {
         case notes, transcript, speakers, ask
@@ -45,6 +46,11 @@ struct ConversationDetail: View {
             }
         }
         .onDisappear { playback.stop() }
+        .confirmationDialog("Delete \u{201C}\(info.displayTitle)\u{201D}?", isPresented: $confirmingDelete) {
+            Button("Delete", role: .destructive) { model.delete(info.id) }
+        } message: {
+            Text("Its recording, Transcript, and Notes are deleted from this Mac. This can't be undone.")
+        }
     }
 
     private var header: some View {
@@ -140,6 +146,18 @@ struct ConversationDetail: View {
                         .padding(.vertical, 8)
                         .background(.yellow.opacity(0.12))
                     }
+                    if model.suggestsDeleting(info) {
+                        HStack {
+                            Label("All Action Items are done. Delete this Conversation?", systemImage: "checkmark.circle")
+                            Spacer()
+                            Button("Not now") { model.notNowForDeleting(info.id) }
+                                .help("Ask again in a week")
+                            Button("Delete…", role: .destructive) { confirmingDelete = true }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(.green.opacity(0.12))
+                    }
                     Picker("View", selection: $tab) {
                         Text("Notes").tag(Tab.notes)
                         Text("Transcript").tag(Tab.transcript)
@@ -160,6 +178,8 @@ struct ConversationDetail: View {
                             model.saveNotes(notes, for: info.id)
                         } addToCalendar: { item in
                             model.addToCalendar(item, in: info.id)
+                        } setDone: { index, done in
+                            model.setActionItem(index, done: done, in: info.id)
                         }
                         // A Conversation's draft stays with it when another one is selected.
                         .id(info.id)
