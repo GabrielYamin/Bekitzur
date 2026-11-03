@@ -22,7 +22,7 @@ struct MenuBarContent: View {
                     .font(.headline)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PanelRowStyle())
                 .help("Show the live Transcript")
                 if let app = model.endedCall {
                     Label("\(app) stopped using the microphone. Did the call end?", systemImage: "phone.down")
@@ -38,6 +38,7 @@ struct MenuBarContent: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.red)
                 .controlSize(.large)
+                .hoverLight()
             } else {
                 if let app = model.callToRecord {
                     Label("\(app) is using the microphone.", systemImage: "phone")
@@ -52,6 +53,7 @@ struct MenuBarContent: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(model.voiceSample != .idle && !model.voiceSample.isFinished)
+                .hoverLight()
             }
 
             if let processing = model.processing {
@@ -80,7 +82,7 @@ struct MenuBarContent: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PanelRowStyle())
                 }
             }
 
@@ -89,21 +91,24 @@ struct MenuBarContent: View {
                 model.showMainWindow()
                 Task { await model.chooseRecordingsToImport() }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PanelRowStyle())
             if model.canUpdate {
                 Button(model.updateStep ?? "Check for Updates…") { Task { await model.checkForUpdates(manually: true) } }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PanelRowStyle())
                     .disabled(model.updateStep != nil)
             }
             HStack {
                 Button("Open Bekitzur") { model.showMainWindow() }
+                    .hoverLight()
                 Button("Settings…") { model.showSettings() }
+                    .hoverLight()
                     .overlay(alignment: .topTrailing) {
                         if model.hasNewSettings { NewDot().offset(x: 3, y: -3) }
                     }
                     .help(model.hasNewSettings ? "Settings has something new" : "")
                 Spacer()
                 Button("Quit") { NSApp.terminate(nil) }
+                    .hoverLight()
             }
         }
         .padding(14)

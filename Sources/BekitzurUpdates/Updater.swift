@@ -96,9 +96,10 @@ public struct Updater: Sendable {
     }
 
     /// Downloads a release and unpacks it into a temporary folder; returns its Bekitzur.app once it's checked.
-    public func download(_ manifest: UpdateManifest) async throws -> URL {
+    /// - Parameter progress: How much of the zip has arrived, from 0 to 1, on the session's queue.
+    public func download(_ manifest: UpdateManifest, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> URL {
         guard manifest.isSigned(by: key) else { throw UpdateError.unsigned }
-        let (downloaded, response) = try await session.download(from: manifest.url)
+        let (downloaded, response) = try await session.download(from: manifest.url, delegate: DownloadProgress(report: progress))
         let folder = FileManager.default.temporaryDirectory.appending(path: "Bekitzur-update-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let zip = folder.appending(path: "Bekitzur.zip")
@@ -173,4 +174,18 @@ public struct Updater: Sendable {
     }
 
     static let leftoverPrefix = ".Bekitzur-replaced-"
+}
+
+/// Reports a download's progress as it arrives, from the task's own count of bytes.
+private final class DownloadProgress: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let report: @Sendable (Double) -> Void
+    private var observation: NSKeyValueObservation?
+
+    init(report: @escaping @Sendable (Double) -> Void) {
+        self.report = report
+    }
+
+    func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
+        observation = task.progress.observe(\.fractionCompleted) { [report] progress, _ in report(progress.fractionCompleted) }
+    }
 }

@@ -13,13 +13,13 @@ struct ModelsNote: View {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                         Text(failure).font(.callout).fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
-                        Button("Try Again") { model.downloadModels() }.controlSize(.small)
+                        Button("Try Again") { model.downloadModels() }.controlSize(.small).hoverLight()
                     }
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("\(download.step)…").font(.callout)
                         Spacer(minLength: 0)
-                        Button("Stop") { model.stopModelDownload() }.controlSize(.small)
+                        Button("Stop") { model.stopModelDownload() }.controlSize(.small).hoverLight()
                     }
                     ProgressView(value: Double(download.received), total: Double(max(download.total, 1)))
                     Text("\(download.received.formatted(.byteCount(style: .file))) of \(download.total.formatted(.byteCount(style: .file)))")
@@ -36,7 +36,7 @@ struct ModelsNote: View {
                 Image(systemName: "arrow.down.circle.fill").foregroundStyle(.blue)
                 Text(model.modelsMessage).font(.callout).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                Button("Download") { model.downloadModels() }.controlSize(.small)
+                Button("Download") { model.downloadModels() }.controlSize(.small).hoverLight()
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)

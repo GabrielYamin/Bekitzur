@@ -55,6 +55,7 @@ struct PermissionsNote: View {
                         Spacer(minLength: 0)
                         Button(missing.access == .notAsked ? "Allow…" : "Open Settings") { model.allow(missing) }
                             .controlSize(.small)
+                            .hoverLight()
                     }
                 }
             }
