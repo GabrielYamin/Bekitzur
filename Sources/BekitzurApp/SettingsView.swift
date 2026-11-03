@@ -70,6 +70,8 @@ private struct PeopleSection: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             TextField("Name", text: $newName)
+                                .labelsHidden()
+                                .multilineTextAlignment(.leading)
                                 .textFieldStyle(.roundedBorder)
                                 .focused($focused)
                                 .onAppear { focused = true }
