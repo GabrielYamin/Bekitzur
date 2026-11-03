@@ -31,6 +31,15 @@ public struct VoiceprintStore {
         try write(try load().filter { $0.name != name })
     }
 
+    /// Gives a Voiceprint another name. One already under the new name is the same person: their voices are averaged,
+    /// as another sample would be.
+    public func rename(_ name: String, to newName: String) throws {
+        let voiceprints = try load()
+        guard name != newName, let renamed = voiceprints.first(where: { $0.name == name }) else { return }
+        let embedding = voiceprints.first { $0.name == newName }.map { Speakers.average($0.embedding, renamed.embedding) } ?? renamed.embedding
+        try write(voiceprints.filter { $0.name != name && $0.name != newName } + [Voiceprint(name: newName, embedding: embedding)])
+    }
+
     private func write(_ voiceprints: [Voiceprint]) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(voiceprints).write(to: url, options: .atomic)

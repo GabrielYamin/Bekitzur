@@ -53,6 +53,67 @@ private struct VocabularySection: View {
     }
 }
 
+/// The people Bekitzur knows by voice, each to rename, which carries into every Conversation they're in, or forget.
+private struct PeopleSection: View {
+    let model: AppModel
+    @ViewState private var renaming: String?
+    @ViewState private var newName = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Section {
+            if model.people.isEmpty {
+                Text("No one yet. Name Speakers in a Conversation and they're added here.").foregroundStyle(.secondary)
+            }
+            ForEach(model.people, id: \.self) { person in
+                if renaming == person {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            TextField("Name", text: $newName)
+                                .textFieldStyle(.roundedBorder)
+                                .focused($focused)
+                                .onAppear { focused = true }
+                                .onSubmit(save)
+                                .onExitCommand { renaming = nil }
+                            Button("Cancel") { renaming = nil }
+                            Button("Rename", action: save)
+                                .buttonStyle(.borderedProminent)
+                                .disabled(trimmed.isEmpty || trimmed == person)
+                        }
+                        if trimmed != person, model.people.contains(trimmed) {
+                            Text("\(trimmed) is already in People: they become one person, with both voices.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    HStack {
+                        Text(person)
+                        Spacer()
+                        Button("Rename…") {
+                            newName = person
+                            renaming = person
+                        }
+                        Button("Forget", role: .destructive) { model.forget(person) }
+                    }
+                }
+            }
+        } header: {
+            Text("People")
+        } footer: {
+            Text("Renaming someone changes their name in every Conversation they're in, too.")
+        }
+    }
+
+    private var trimmed: String { newName.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func save() {
+        guard let person = renaming, !trimmed.isEmpty, trimmed != person else { return }
+        model.renamePerson(person, to: trimmed)
+        renaming = nil
+    }
+}
+
 struct SettingsView: View {
     @Bindable var model: AppModel
 
@@ -102,18 +163,7 @@ struct SettingsView: View {
                 voiceSample
             }
 
-            Section("People") {
-                if model.people.isEmpty {
-                    Text("No one yet. Name Speakers in a Conversation and they're added here.").foregroundStyle(.secondary)
-                }
-                ForEach(model.people, id: \.self) { person in
-                    HStack {
-                        Text(person)
-                        Spacer()
-                        Button("Forget", role: .destructive) { model.forget(person) }
-                    }
-                }
-            }
+            PeopleSection(model: model)
 
             VocabularySection(model: model)
 

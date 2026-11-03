@@ -82,6 +82,25 @@ public struct ProcessedConversation: Codable, Sendable, Equatable {
         self.notesEdited = notesEdited
     }
 
+    /// Shows a person under a new name everywhere in the Conversation, as `renamingSpeaker` does for each Speaker named
+    /// as them; a Speaker only suggested as them keeps the suggestion, under the new name.
+    public func renamingPerson(_ name: String, to newName: String) -> ProcessedConversation {
+        var result = self
+        for speaker in speakers {
+            switch speaker.naming {
+            case .named(let named, _) where named == name:
+                result = result.renamingSpeaker(speaker.label, to: newName)
+            case .suggested(let suggested, let similarity) where suggested == name:
+                if let i = result.speakers.firstIndex(where: { $0.label == speaker.label }) {
+                    result.speakers[i].naming = .suggested(newName, similarity: similarity)
+                }
+            default:
+                break
+            }
+        }
+        return result
+    }
+
     /// Shows a Speaker under a new name everywhere: Transcript, turns, Owners, and the Notes' text.
     public func renamingSpeaker(_ label: String, to name: String) -> ProcessedConversation {
         guard let index = speakers.firstIndex(where: { $0.label == label }) else { return self }

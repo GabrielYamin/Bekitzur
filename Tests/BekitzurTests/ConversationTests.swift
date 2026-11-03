@@ -53,6 +53,21 @@ struct ConversationTests {
         #expect(corrected.notes.summary.contains("Speaker 1 ships"))
     }
 
+    @Test func renamingAPersonReachesTheirSpeakersAndTheirSuggestions() {
+        let named = conversation().renamingSpeaker("Speaker 1", to: "Dana")
+
+        let renamed = named.renamingPerson("Dana", to: "Dana Levi")
+        let suggested = named.renamingPerson("Yossi", to: "Yosef")
+
+        #expect(renamed.speakers[0].naming == .named("Dana Levi", similarity: 1))
+        #expect(renamed.transcript.segments.map(\.speaker) == ["Dana Levi", "Speaker 10"])
+        #expect(renamed.notes.actionItems[0].owner == "Dana Levi")
+        #expect(renamed.notes.summary == "Dana Levi ships today; Speaker 10 reviews. Dana Levi's fix is ready.")
+        #expect(suggested.speakers[1].naming == .suggested("Yosef", similarity: 0.5))
+        #expect(suggested.transcript.segments.map(\.speaker) == ["Dana", "Speaker 10"])
+        #expect(named.renamingPerson("Omer", to: "Omri") == named)
+    }
+
     /// A two-person discussion: "זה על" opens the user's answer, and "גייטוויי" was transcribed for "gateway".
     @Test func marksMoveWordsToTheirSpeakerAndCorrectTheirText() {
         let words = [("על", 5.76), ("המק?", 5.99), ("זה", 6.24), ("על", 6.42)].map { TranscriptWord(start: $0.1, end: $0.1, text: $0.0) }

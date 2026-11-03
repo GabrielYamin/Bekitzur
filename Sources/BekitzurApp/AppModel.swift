@@ -1728,6 +1728,47 @@ final class AppModel {
         reloadPeople()
     }
 
+    /// Gives a person in People a new name: their Voiceprint, merged with someone already under it, and every finished
+    /// Conversation they're named or suggested in, with the user's own name when it's them.
+    func renamePerson(_ name: String, to newName: String) {
+        let newName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newName.isEmpty, newName != name else { return }
+        do {
+            try VoiceprintStore(url: BekitzurPaths.voiceprints).rename(name, to: newName)
+        } catch {
+            alert = "Couldn't rename \(name): \(error.localizedDescription)"
+            return
+        }
+        if userName == name { userName = newName }
+        filter.people = filter.people.reduce(into: []) { names, picked in
+            let renamed = picked == name ? newName : picked
+            if !names.contains(renamed) { names.append(renamed) }
+        }
+        reloadPeople()
+        let library = self.library, loaded = results
+        let ids = conversations.filter { $0.status == .unreviewed || $0.status == .reviewed }.map(\.id)
+        Task {
+            let changed = await Task.detached(priority: .userInitiated) {
+                var changed: [String: ProcessedConversation] = [:]
+                for id in ids {
+                    guard let result = loaded[id] ?? library.result(for: id) else { continue }
+                    let renamed = result.renamingPerson(name, to: newName)
+                    guard renamed != result, (try? library.save(renamed, for: id)) != nil else { continue }
+                    changed[id] = renamed
+                }
+                return changed
+            }.value
+            for (id, result) in changed where results[id] != nil { results[id] = result }
+            for id in ids where (flags[id] ?? library.flags(for: id)).words.contains(where: { $0.saidBy == name }) {
+                changeFlags(id) { flags in
+                    for i in flags.words.indices where flags.words[i].saidBy == name { flags.words[i].saidBy = newName }
+                }
+            }
+            indexConversations()
+            AppLog.write("Renamed a person in People, and in \(changed.count) Conversations")
+        }
+    }
+
     private func reloadPeople() {
         people = ((try? VoiceprintStore(url: BekitzurPaths.voiceprints).load()) ?? []).map(\.name).sorted()
     }
