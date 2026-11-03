@@ -54,7 +54,7 @@ public enum LiveChunks {
     }
 
     /// One segment per window, so whisper.cpp never opens a second window on what's left after the last segment; if
-    /// that window held a segment ending within 0.15 seconds of its start, word timing aborted the process. A piece
+    /// that window holds a segment ending within 0.15 seconds of its start, word timing aborts the process. A piece
     /// under a second gets silence after it, since word timing also needs more audio than its 7-step median filter.
     /// The segment is then split into sentences and moved to where the piece starts.
     ///
@@ -168,8 +168,7 @@ public enum LiveChunks {
 /// Tells Hebrew from English by the first speech, with whisper.cpp's language detection on regular Whisper: ivrit.ai's
 /// model answers Hebrew, all but certain, even for English.
 ///
-/// On the recordings whose language was known, 10 seconds of speech gave the right language with 85% or more, and 30
-/// seconds with 99% or more.
+/// 10 seconds of speech gives the right language a high probability, and 30 seconds a near-certain one.
 enum LanguageDetection {
     /// Speech heard before the first guess.
     static let firstGuess = 10.0

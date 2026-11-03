@@ -15,8 +15,8 @@ public struct CallWatch: Sendable {
 
     /// How long an app keeps the microphone before it counts as a call, since apps open it for a moment to check it.
     public static let startDelay: TimeInterval = 3
-    /// How long the microphone stays off before a call counts as over: Slack let go of it for 2 seconds as a huddle
-    /// started, and switching microphones does too.
+    /// How long the microphone stays off before a call counts as over: Slack lets go of it for a few seconds as a
+    /// huddle starts, and switching microphones does too.
     public static let endDelay: TimeInterval = 10
 
     /// The app of the call going on, from when it takes the microphone until it's been off for `endDelay`.

@@ -11,8 +11,8 @@ public enum SpeakerModels {
         _ = try await SpeechDetector()
     }
 
-    /// Deletes Sortformer's files once Nemotron 3 Diarization's, which replaced them, are downloaded: an install from
-    /// before uses Sortformer only until then.
+    /// Deletes Sortformer's files once Nemotron 3 Diarization's, which replace them, are downloaded: Sortformer is only
+    /// the fallback until then.
     /// - Returns: The bytes freed, or nil when there was nothing to delete.
     @discardableResult
     public static func removeReplaced() -> Int64? {
@@ -25,7 +25,7 @@ public enum SpeakerModels {
         return Int64(bytes)
     }
 
-    /// Whether Sortformer's files are still there, from an install before Nemotron 3 Diarization replaced it.
+    /// Whether Sortformer's files are on disk, to fall back on when Nemotron 3 Diarization can't load.
     static var hasSortformer: Bool {
         FileManager.default.fileExists(atPath: sortformerFolder.path)
     }

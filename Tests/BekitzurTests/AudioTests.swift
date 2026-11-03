@@ -165,7 +165,7 @@ struct AudioTests {
         #expect(heard.rate == Self.rate)
     }
 
-    /// The microphone, started after the system audio, used to begin its file at its own first sound and run ahead.
+    /// A microphone started after the system audio would run ahead if its file began at its own first sound.
     @Test func aTrackWhoseFirstSoundComesLateStartsWithSilenceFromTheRecordingsStart() throws {
         let url = temporaryURL("aac")
         defer { try? FileManager.default.removeItem(at: url) }

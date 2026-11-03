@@ -7,7 +7,7 @@ struct TranscriptLine: Identifiable {
     let speaker: String
     let start: Double
     let words: [NumberedWord]
-    /// The segments' text, shown as is when they have no word times (Transcripts made before those were kept).
+    /// The segments' text, shown as is when they have no word times.
     let text: String
 
     /// The Transcript's lines with the user's fixes applied: corrected words show what was said, a phrase corrected

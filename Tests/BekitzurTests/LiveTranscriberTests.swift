@@ -5,7 +5,7 @@ import Testing
 @testable import BekitzurPipeline
 
 struct LiveTranscriberTests {
-    /// The scripted read, kept out of git; tests that need it or the speech model run only where both are.
+    /// An evaluation Recording, kept out of git; tests that need it or the speech model run only where both are.
     static let scriptedRead = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../eval/recordings/meeting-1.m4a")
     static let canTranscribe = FileManager.default.fileExists(atPath: scriptedRead.path)
         && FileManager.default.fileExists(atPath: BekitzurPaths.speechModel(for: .hebrew).path)
@@ -45,8 +45,8 @@ struct LiveTranscriberTests {
         #expect((25 * 16_000...Int(25.6 * 16_000)).contains(cut))
     }
 
-    /// whisper.cpp's word timing aborted the app when a window held a segment ending within 0.15 seconds of its start,
-    /// as at the end of a short chunk; this fifth of a second of speech did it every time.
+    /// whisper.cpp's word timing aborts the app when a window holds a segment ending within 0.15 seconds of its start,
+    /// as at the end of a short chunk, like this fifth of a second of speech.
     @Test(.enabled(if: canTranscribe))
     func aFifthOfASecondOfSpeechIsTranscribedWithoutAborting() async throws {
         let clip = Array(try AudioLoader.loadMono16k(Self.scriptedRead)[480_000..<483_200])

@@ -13,7 +13,7 @@ public struct AudioInputDevice: Identifiable, Hashable, Sendable {
     }
 
     /// The microphones connected now, by name. Virtual devices and aggregates aren't microphones: Teams and Zoom each add
-    /// one to send a Mac's sound into a call, which recorded silence or the app's own sound, and Bekitzur's recording
+    /// one to send a Mac's sound into a call, which records silence or the app's own sound, and Bekitzur's recording
     /// device is one.
     public static func all() -> [AudioInputDevice] {
         deviceIDs()

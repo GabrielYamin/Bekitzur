@@ -2,8 +2,7 @@ import BekitzurCapture
 import SwiftUI
 
 /// The microphones to pick from, for a Picker on `AppModel.microphoneUID`: the Mac's default, each one connected, and the
-/// one chosen while it isn't connected. Recordings used whichever input macOS had as its default, so a headset or USB
-/// microphone meant changing it in System Settings.
+/// one chosen while it isn't connected.
 @MainActor @ViewBuilder
 func microphoneChoices(_ model: AppModel) -> some View {
     Text(model.defaultMicrophone.map { "Mac's default (\($0.name))" } ?? "Mac's default").tag(String?.none)

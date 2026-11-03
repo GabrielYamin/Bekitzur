@@ -2,8 +2,8 @@ import AVFoundation
 
 /// Where each block of a track goes in its file. The first comes after silence from the recording's start to when it
 /// was captured. After that, the device's count of its frames says where each block belongs, so audio lost on the way
-/// leaves silence in its place instead of moving the rest of the track earlier: blocks lost while the Mac was busy put
-/// the November 1 call's system audio 171 ms ahead of the microphone in five minutes, and its other side echoed.
+/// leaves silence in its place instead of moving the rest of the track earlier: blocks lost while the Mac is busy would
+/// put the tracks out of step, and the other side of a call would echo.
 struct TrackTimeline {
     let sampleRate: Double
     /// The host time the recording started, shared by its tracks.

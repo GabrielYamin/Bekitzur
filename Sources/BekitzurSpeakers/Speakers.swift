@@ -20,12 +20,11 @@ public struct Speaker: Sendable {
 
 public enum Speakers {
     /// Similarity at or above which a match is confident enough to name the Speaker without asking.
-    /// Initial values from the scripted read (matches scored 0.78 and 0.93, non-matches 0.07 to 0.12); tune with daily use.
+    /// In clear speech, the same person scores well above these and different people well below; tune with daily use.
     public static let confidentSimilarity: Float = 0.65
     public static let suggestSimilarity: Float = 0.45
     /// A confident match must also beat the Speaker's next-best Participant, and every other Speaker's similarity to
-    /// the same Participant, by this much. In a recording where far voices are faint, every voice can look alike
-    /// (a meeting recorded as a voice memo: all four voices scored 0.75 to 0.83 against the user's Voiceprint).
+    /// the same Participant, by this much. In a recording where far voices are faint, every voice can look alike.
     public static let confidentMargin: Float = 0.15
 
     /// Groups turns by voice, with each voice's duration-weighted average embedding.
@@ -74,8 +73,8 @@ public enum Speakers {
     /// keeps the Speaker of the words around it. Segments without word times go to whoever talks most during them.
     /// A stretch transcribed from one of a call's tracks goes to the voices heard in that track, and one from the
     /// microphone that goes to a voice also in the system audio is left out: the system audio's Transcript has that
-    /// person's words, and what the microphone made of them was what's left of their voice, sometimes misheard ("שתי
-    /// האוות" for "שתי הערות" on November 1), or speech recognition's "תודה רבה" over near silence.
+    /// person's words, and what the microphone makes of them is what's left of their voice, sometimes misheard, or
+    /// speech recognition's "תודה רבה" over near silence.
     public static func attribute(_ segments: [TranscriptSegment], turns allTurns: [SpeakerTurn], speakers: [Speaker]) -> [TranscriptSegment] {
         let names = Dictionary(uniqueKeysWithValues: speakers.map { ($0.voice, $0.displayName) })
         let byInput = Dictionary(grouping: allTurns.filter { $0.input != nil }, by: { $0.input! })
@@ -126,8 +125,7 @@ public enum Speakers {
         return overlap.max { $0.value < $1.value }?.key
     }
 
-    /// When a word is said. A word's last token can be timed seconds late (a 3-second "אינטגרציה" in the allocation
-    /// discussion), so no word counts as longer than 0.6 seconds.
+    /// When a word is said. A word's last token can be timed seconds late, so no word counts as longer than 0.6 seconds.
     private static func moment(of word: TranscriptWord) -> Double {
         (word.start + min(word.end, word.start + 0.6)) / 2
     }
@@ -153,8 +151,8 @@ public enum Speakers {
     }
 
     /// Shortest total speech for a voice to count as a person rather than a blip: 10 seconds, or 5% of all the speech
-    /// in a short Conversation, and at least 3 seconds. Sortformer gave a 16-minute team meeting a fourth voice of
-    /// 4 seconds, which was one of the other three.
+    /// in a short Conversation, and at least 3 seconds. Separators can split off a few seconds of one person as
+    /// another voice.
     public static func minimumVoiceSeconds(amid turns: [SpeakerTurn]) -> Double {
         max(3, min(10, 0.05 * turns.map(\.duration).reduce(0, +)))
     }
@@ -172,8 +170,7 @@ public enum Speakers {
     /// joins the voice it overlaps most.
     ///
     /// A timeline with fewer voices that count as people than `identities` heard two people as one, and then
-    /// `identities` are kept as they are: in a weekly team call, Sortformer gave one voice to two of the three people on
-    /// the other side, whom pyannote told apart, and matching voices one to one left one of them with a second of speech.
+    /// `identities` are kept as they are: matching voices one to one would leave one of the two with almost no speech.
     /// Two Speakers who are one person can be joined by giving them the same name, but two people in one Speaker can only
     /// be fixed word by word.
     public static func combine(timeline: [SpeakerTurn], identities: [SpeakerTurn], people: Int? = nil) -> [SpeakerTurn] {

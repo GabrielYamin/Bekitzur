@@ -33,8 +33,7 @@ struct TrackAlignmentTests {
         }
     }
 
-    /// The October 28 call: the microphone heard the call 60 ms before the system audio track had it. October 21's copy
-    /// was upside down.
+    /// The microphone hears the call 60 ms before the system audio track has it, and its copy can be upside down.
     @Test(arguments: [Float(0.12), -0.12])
     func aMicrophoneRunningAheadIsPlayedLaterByAsMuch(gain: Float) throws {
         var noise = Noise(seed: 1)
@@ -69,7 +68,7 @@ struct TrackAlignmentTests {
         return (0..<seconds * rate).map { i in (i / rate) % 4 == 3 ? 0 : noise.next() * 0.3 }
     }
 
-    /// November 1: each block lost from the system audio moved the rest of it further ahead of the microphone's copy.
+    /// Each block lost from the system audio moves the rest of it further ahead of the microphone's copy.
     @Test func systemAudioThatLostABlockPlaysLaterFromThere() throws {
         let call = talking(seconds: 90)
         // A block of 1,024 frames at 48 kHz went missing 41 seconds in; the speakers took 20 ms.

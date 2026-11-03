@@ -19,7 +19,7 @@ struct SpeakersTests {
         SpeakerTurn(voice: voice, start: start, end: end, embedding: embedding)
     }
 
-    /// The opening of a two-person call: pyannote folded the user's greeting into the other person's voice; Sortformer didn't.
+    /// The opening of a two-person call: pyannote folds the user's greeting into the other person's voice; the timeline doesn't.
     @Test func combiningKeepsTheTimelineAndTakesEachVoiceFromTheIdentities() {
         let identities = [
             turn("A", 4.4, 5.6, guest), turn("A", 6.8, 9.1, guest), turn("A", 13, 32, guest),
@@ -59,7 +59,7 @@ struct SpeakersTests {
         #expect(Speakers.speakers(from: turns).map(\.speechSeconds) == [24, 19])
     }
 
-    /// A 16-minute team meeting: Sortformer heard a fourth voice for 4 of about 900 seconds of speech, and it was one of the other three.
+    /// The timeline hears a fourth voice for 4 of about 900 seconds of speech, and it is one of the other three.
     @Test func aBriefVoiceOnlyTheTimelineHeardIsNoSpeakerInALongConversation() {
         let identities = [turn("Ron", 0, 300, user), turn("Tal", 300, 600, guest), turn("Maya", 600, 900, [0, 0, 1])]
         let timeline = [turn("S0", 0, 300), turn("S1", 300, 600), turn("S2", 600, 900), turn("S3", 950, 954)]
@@ -69,7 +69,7 @@ struct SpeakersTests {
         #expect(Set(combined.map(\.voice)) == ["Ron", "Tal", "Maya"])
     }
 
-    /// A weekly team call: on the other side, pyannote told three people apart, and Sortformer gave two of them one voice.
+    /// On the other side of a call, pyannote tells three people apart, and the timeline gives two of them one voice.
     @Test func whenTheTimelineHearsTwoPeopleAsOneTheIdentitiesAreKept() {
         let identities = [
             turn("S1", 0, 100, guest), turn("S2", 100, 200, user), turn("S3", 200, 300, [0, 0, 1]), turn("S4", 300, 302, [1, 1, 0]),
@@ -93,8 +93,8 @@ struct SpeakersTests {
         #expect(combined.map(\.embedding) == [guest, []])
     }
 
-    /// A meeting recorded as a voice memo: pyannote heard the user and one other voice, Sortformer heard Omer and two others, and
-    /// both separators name voices "S1", "S2", ….
+    /// A meeting recorded as a voice memo: pyannote hears the user and one other voice, the timeline hears the user
+    /// and two others, and both separators name voices "S1", "S2", ….
     @Test func voicesOnlyTheTimelineHeardStaySeparateEvenWhenLabelsClash() {
         let identities = [turn("S1", 0, 60, user), turn("S2", 60, 120, guest)]
         let timeline = [turn("S2", 0, 60), turn("S0", 60, 90), turn("S1", 90, 120)]
@@ -149,12 +149,12 @@ struct SpeakersTests {
 
         let result = Speakers.attribute([segment], turns: turns, speakers: Speakers.speakers(from: turns))
 
-        // "okay" is 0.5 s after Omer's turn, "so" 0.3 s before Sam's, and "then" is far from both.
+        // "okay" is 0.5 s after the first turn, "so" 0.3 s before the second, and "then" is far from both.
         #expect(result.map(\.text) == ["okay", "so then"])
         #expect(result.map(\.speaker) == ["Speaker 1", "Speaker 2"])
     }
 
-    /// The allocation discussion: "זה על המק" answers "זה על המק?", and Sortformer's turn for the question runs on
+    /// A quick reply: "זה על המק" answers "זה על המק?", and the timeline's turn for the question runs on
     /// into the answer.
     @Test func wordsWhereOneTurnRunsIntoTheNextGoToTheNewSpeaker() {
         let words = [("על", 5.76), ("המק?", 5.99), ("זה", 6.26), ("על", 6.42), ("המק,", 6.76)]

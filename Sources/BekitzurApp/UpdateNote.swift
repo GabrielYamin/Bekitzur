@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A newer version is out, with the button that installs it (after asking), and how far its download has come; nothing
-/// when there's none. With only a spinner, people clicked Install again, thinking nothing had happened.
+/// when there's none. With only a spinner, Install would seem to have done nothing.
 struct UpdateNote: View {
     let model: AppModel
 

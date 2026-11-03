@@ -2,7 +2,7 @@
 
 Bekitzur (Hebrew for "in short") is a Mac menu bar app that records Conversations, calls and in-person meetings alike, transcribes them in Hebrew or English, recognizes who spoke, and writes English Notes: a summary, Decisions, Action Items with Owners and due dates, and Open Questions, each pointing to the lines it came from. Everything runs on the Mac.
 
-This repository is the source. People download the app from [Bekitzur-releases](https://github.com/GabrielYamin/Bekitzur-releases), where the release workflow publishes it; that repository's README is [release/README.md](release/README.md).
+Bekitzur is open source, under the [MIT License](LICENSE). Its releases are on this repository's [Releases](https://github.com/GabrielYamin/Bekitzur/releases) page, and the app updates itself from there.
 
 ## What it does
 
@@ -34,9 +34,25 @@ Bekitzur is provided as is, without warranty of any kind, and its authors aren't
 - About 20 GB of free disk space for the models, which the download checks; a recording warns first with less than 2 GB free
 - To build: Xcode 26 or its Command Line Tools (Swift 6.2)
 
+## Install
+
+1. Download [Bekitzur.zip](https://github.com/GabrielYamin/Bekitzur/releases/latest/download/Bekitzur.zip) and open it, which unpacks a Bekitzur folder.
+2. Open Terminal and run:
+
+   ```bash
+   bash ~/Downloads/Bekitzur/install.sh
+   ```
+
+   It installs the app in the Applications folder of your home folder and opens it.
+3. Bekitzur lives in the menu bar. Choose **Download** in its window to get its speech, language, and speaker models (about 18 GB) from Hugging Face; if the download is interrupted, Download picks up where it left off. The first recording asks for the microphone and for system audio (the other side of calls).
+
+Bekitzur checks for new versions and asks before installing one; **Check for Updates…** in its menu checks right away. Updates keep your Conversations, names, and settings.
+
+To remove it, quit Bekitzur, then delete `~/Applications/Bekitzur.app` and `~/Library/Application Support/Bekitzur` (your Conversations and the models).
+
 ## Working on a new Mac
 
-1. Install the Command Line Tools: `xcode-select --install`.
+1. Install the Command Line Tools (`xcode-select --install`), and clone this repository.
 2. Build the app, install it in `~/Applications`, and open it: `scripts/build-app.sh`.
 3. Choose Download in its window to get the models, about 18 GB at pinned revisions with checksums; an interrupted download picks up where it left off. `bekitzur models --download` does the same from Terminal.
 4. Run the tests: `scripts/test.sh`. Tests that need the models or the scripted read (`eval/recordings/meeting-1.m4a`, which isn't in git) are skipped without them.
@@ -52,6 +68,8 @@ To bring your data along, copy `~/Library/Application Support/Bekitzur` (its Mod
 
 Builds are signed ad hoc as `app.bekitzur.mac`, which needs no developer certificate and keeps macOS permissions across updates. Build numbers are the build's time in UTC, and updates compare only those. Builds made here show version 9.9.9, from `App/Info.plist`, so they're never mistaken for a release; releases show their tag's version.
 
+Changes reach `main` through pull requests, which CI builds, tests, and packages on GitHub's macOS 26 runner before they can be merged. Releases are built, tested, and signed by the Release workflow on the same runner, which only the repository's owner can run. The app installs only releases signed with the key whose public half is `BekitzurUpdatePublicKey` in `App/Info.plist`.
+
 `scripts/make-icon.swift` draws the icon and the menu bar images into `App/Resources`, and `scripts/generate-built-in-vocabulary.py` turns `eval/vocabulary/built-in.txt` into the built-in list of English terms.
 
 ## The command-line tool
@@ -63,7 +81,7 @@ swift build -c release --product bekitzur
 .build/release/bekitzur transcribe --live --language auto recording.m4a
 ```
 
-Its commands are `process` (Transcript, Speakers, and Notes for one recording), `transcribe`, `language`, `speakers`, `enroll`, `align`, `notes`, `vocabulary`, `ask`, `models`, and two experiments, `audio-check` and `english-terms`. `bekitzur help <command>` explains each one.
+Its commands are `process` (Transcript, Speakers, and Notes for one recording), `transcribe`, `language`, `speech`, `speakers`, `enroll`, `align`, `notes`, `vocabulary`, `ask`, `models`, and two experiments, `audio-check` and `english-terms`. `bekitzur help <command>` explains each one.
 
 ## How the code is organized
 
@@ -86,23 +104,10 @@ Its commands are `process` (Transcript, Speakers, and Notes for one recording), 
 | `Tests` | Unit tests |
 | `scripts` | Building, packaging, installing, testing, the icon, and update signing |
 | `eval` | Scoring scripts for word error rate, Speakers, and the Vocabulary |
-| `spikes/llm-bakeoff` | The comparison that chose Gemma for the Notes |
-| `docs` | The plan and the architecture decisions |
-| `release` | The public README of Bekitzur-releases |
-
-## Releases
-
-1. Push the commits to `main`.
-2. Tag the release with its notes as the tag's message, written for the people who use the app, and push the tag:
-
-   ```bash
-   git tag -a v0.3.1 -m "What changed, for the people who use Bekitzur."
-   git push origin v0.3.1
-   ```
-
-3. The Release workflow ([.github/workflows/release.yml](.github/workflows/release.yml)) tests and packages the app on GitHub's macOS 26 runner, signs `update.json`, and publishes it with `Bekitzur.zip` as a release of Bekitzur-releases, along with `release/README.md` and `LICENSE`. Installed copies find it within six hours, or right away with Check for Updates….
-
-The app installs only releases signed with the key whose public half is `BekitzurUpdatePublicKey` in `App/Info.plist`.
+| `spikes` | Experiments: the comparison that chose Gemma for the Notes (`llm-bakeoff`), and questions to try Ask with (`ask-eval`) |
+| `docs` | The plan, the architecture decisions, and research on the models |
+| `release` | Release notes (`notes/<version>.md`), and the README of Bekitzur-releases, where versions up to 0.6.4 look for updates |
+| `.github/workflows` | CI, which builds, tests, and packages each pull request, and the Release workflow |
 
 ## Credits
 

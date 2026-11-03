@@ -16,9 +16,8 @@ public struct VocabularyStore: Sendable {
         self.url = url
     }
 
-    /// Drops spellings of fewer than two sounds: learned before that was refused, from a word that was only a prefix
-    /// (the "ב" of "ב-" in front of a project's name), they rewrote every prefix in front of an English word ("ב-GRPC"
-    /// became that project's name followed by "-GRPC").
+    /// Drops spellings of fewer than two sounds: one learned from a word that is only a prefix (the "ב" of "ב-" in
+    /// front of a name) would rewrite that prefix as the term in front of every English word.
     public func load() -> Vocabulary {
         var vocabulary = (try? JSONDecoder().decode(Vocabulary.self, from: Data(contentsOf: url))) ?? Vocabulary()
         vocabulary.spellings = vocabulary.spellings.filter { Self.isSpelling($0.key) }

@@ -6,15 +6,11 @@ import Foundation
 /// embeddings. So its timeline is used with pyannote's embeddings, which Voiceprints are made of, unless pyannote hears
 /// more voices than the timeline model can tell apart, or than it heard (``Speakers/combine(timeline:identities:people:)``).
 ///
-/// The timeline model is NVIDIA's Nemotron 3 Diarization, for up to eight voices. It took over from Sortformer, which
-/// tells apart four: on the other side of a weekly call it heard the three people pyannote did, where Sortformer gave two
-/// of them one voice; in an in-room conversation it heard the two pyannote did, where Sortformer split the user in two;
-/// and elsewhere the two gave the same Speakers.
+/// The timeline model is NVIDIA's Nemotron 3 Diarization, for up to eight voices. Sortformer, for up to four, is the
+/// fallback: it more often gives two people one voice, or one person two.
 ///
 /// When the user says how many people spoke and pyannote hears a different number, pyannote is held to that number
-/// and its own timeline is used: the timeline model can't be told how many voices to find. In a 32-minute meeting
-/// recorded as a voice memo, where two of the three people were far from the microphone, pyannote heard two voices and
-/// Sortformer four; held to three, pyannote told all three apart.
+/// and its own timeline is used: the timeline model can't be told how many voices to find.
 public enum SpeakerSeparation {
     /// The model that says who spoke when, which pyannote's voices are matched to.
     public enum Timeline: String, Sendable, CaseIterable {
@@ -22,8 +18,8 @@ public enum SpeakerSeparation {
         /// NVIDIA's Nemotron 3 Diarization, Sortformer's successor, for up to eight voices.
         case nemotron
 
-        /// The model, loaded. Nemotron's downloads the first time; an install from before, which has Sortformer's, uses
-        /// that until then, and deletes it once Nemotron's is in place.
+        /// The model, loaded. Nemotron's downloads the first time; if it can't load, Sortformer's is used where it's on
+        /// disk, and deleted once Nemotron's is in place.
         func load() async throws -> (maximumVoices: Int, separate: ([Float]) throws -> [SpeakerTurn]) {
             switch self {
             case .sortformer:
@@ -61,10 +57,9 @@ public enum SpeakerSeparation {
         return await fingerprinted(combined, in: samples, with: pyannote)
     }
 
-    /// Voices only the timeline model heard come without a fingerprint, so they can't be recognized next time: on
-    /// November 2, in 34 seconds of two people in a room, pyannote heard one voice where Nemotron heard both. Each gets one
-    /// from pyannote on that voice's own speech, the stretches where no other voice talks put together, so it's comparable
-    /// with the Voiceprints, which come from pyannote too.
+    /// Voices only the timeline model heard, as when pyannote hears two people as one, come without a fingerprint, so
+    /// they can't be recognized next time. Each gets one from pyannote on that voice's own speech, the stretches where no
+    /// other voice talks put together, so it's comparable with the Voiceprints, which come from pyannote too.
     static func fingerprinted(_ turns: [SpeakerTurn], in samples: [Float], with pyannote: SpeakerSeparator) async -> [SpeakerTurn] {
         var fingerprints: [String: [Float]] = [:]
         for voice in Set(turns.filter { $0.embedding.isEmpty }.map(\.voice)) {
@@ -91,8 +86,8 @@ public enum SpeakerSeparation {
 
     /// Who spoke when in a call recorded as two tracks. The system audio holds the other side, and the microphone the
     /// room, but on laptop speakers the microphone also hears the other side, as loud as the system audio. Separated
-    /// together, the sides mixed: in a 52-minute call a third of the speech went to a voice from the other side, and
-    /// silencing the microphone while the other side spoke didn't change that, but lost what the user said over them.
+    /// together, the two sides mix, and the other side's voices get the user's speech; silencing the microphone while
+    /// the other side speaks doesn't change that, and loses what the user says over them.
     /// So each input is separated on its own, the microphone with the other side taken out (`EchoCanceller`), and a voice
     /// heard in both is one person (`sides(user:other:)`).
     ///
@@ -102,7 +97,7 @@ public enum SpeakerSeparation {
     ///   - microphone: Lined up with `system`, and without the other side when they came through speakers.
     ///   - people: How many people spoke on both sides together, when the user said.
     ///   - silencingOtherSide: True for a microphone that still has the other side: it's silenced while they talk,
-    ///     except where the user talks over them (`TalkingOver`), as before, for comparing.
+    ///     except where the user talks over them (`TalkingOver`), for comparing.
     public static func turns(
         in mixed: [Float],
         microphone: [Float],
@@ -158,8 +153,8 @@ public enum SpeakerSeparation {
 
     /// Both sides' turns as one timeline. Each separator names its voices "S1", "S2", …, which aren't the same people,
     /// but a voice in the microphone whose fingerprint is a voice in the system audio is that person: someone in the
-    /// room who also joined the call, or what's left of the other side in the microphone. On four calls, voices left
-    /// from the other side matched theirs at 0.64 to 0.96, and the user matched no one on the other side above 0.36.
+    /// room who also joined the call, or what's left of the other side in the microphone. Voices left from the other
+    /// side match theirs well above `sameVoice`, and different people well below it.
     static func sides(user: [SpeakerTurn], other: [SpeakerTurn]) -> [SpeakerTurn] {
         let otherVoices = Dictionary(grouping: other, by: \.voice).mapValues(Speakers.weightedMean)
         let same = Dictionary(grouping: user, by: \.voice).compactMapValues { turns -> String? in

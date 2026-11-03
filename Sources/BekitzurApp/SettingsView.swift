@@ -12,8 +12,8 @@ private struct VocabularySection: View {
     var body: some View {
         Section {
             HStack {
-                // In a grouped Form the title is a label beside an empty field with no border, which read as text
-                // with an Add button that never turned on.
+                // In a grouped Form the title is a label beside an empty field with no border, which reads as text
+                // with an Add button that never turns on.
                 TextField("New term", text: $newTerm, prompt: Text("Add a term, like your product's name"))
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
@@ -119,6 +119,8 @@ private struct PeopleSection: View {
 struct SettingsView: View {
     @Bindable var model: AppModel
 
+    static let project = URL(string: "https://github.com/GabrielYamin/Bekitzur")!
+
     var body: some View {
         Form {
             Section("Recording") {
@@ -189,8 +191,14 @@ struct SettingsView: View {
                 Text("Recordings, Transcripts, Notes, and voices stay on this Mac.").font(.callout).foregroundStyle(.secondary)
             }
 
-            Section("Updates") {
+            Section("About and updates") {
                 LabeledContent("Version", value: model.versionDescription)
+                LabeledContent("Project") {
+                    Link("github.com/GabrielYamin/Bekitzur", destination: Self.project)
+                }
+                Text("Bekitzur is open source, under the MIT License. Its code, releases, and updates are on GitHub.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 if model.canUpdate {
                     HStack {
                         Button("Check for Updates…") { Task { await model.checkForUpdates(manually: true) } }

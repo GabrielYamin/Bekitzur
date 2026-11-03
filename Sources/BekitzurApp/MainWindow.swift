@@ -7,7 +7,7 @@ struct MainWindow: View {
 
     var body: some View {
         NavigationSplitView {
-            // Above the list rather than in its safe area, where rows scrolled under the boxes and showed through them.
+            // Above the list rather than in its safe area, where rows scroll under the boxes and show through them.
             VStack(spacing: 0) {
                 VStack(spacing: 6) {
                     RequirementsNote(model: model)
@@ -141,7 +141,7 @@ struct MainWindow: View {
     }
 }
 
-/// Recording and importing, each in a box of its own at the top of the list; as toolbar icons, people didn't find them.
+/// Recording and importing, each in a box of its own at the top of the list; as toolbar icons, they're easy to miss.
 private struct StartButtons: View {
     let model: AppModel
 
@@ -179,7 +179,7 @@ private struct StartButtons: View {
 }
 
 /// A neutral box with its icon in `tint`, or, `filled`, the whole box in it, for a recording going on: a red Record box
-/// looked like recording while nothing was.
+/// would look like recording while nothing is.
 private struct BoxButton<Subtitle: View>: View {
     let title: String
     let systemImage: String
@@ -239,7 +239,7 @@ struct ConversationRow: View {
                     .fontWeight(info.status == .unreviewed ? .semibold : .regular)
                     .lineLimit(2)
                 HStack(spacing: 4) {
-                    Text(info.startedAt, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute())
+                    Text(info.displayDate)
                     if info.status == .recording {
                         Text("·")
                         RecordingTimer(since: info.startedAt)
@@ -266,7 +266,7 @@ extension ConversationInfo {
 
 extension String {
     /// The direction of most of its words, by `TextDirection.of`; counting letters instead, a Hebrew sentence with a few
-    /// long English terms came out left to right.
+    /// long English terms would come out left to right.
     func direction(fallback: TextDirection) -> TextDirection {
         TextDirection.of(split(whereSeparator: \.isWhitespace), fallback: fallback)
     }

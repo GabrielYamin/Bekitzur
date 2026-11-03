@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>BekitzurUpdateFeed</key>
-	<string>https://github.com/GabrielYamin/Bekitzur-releases/releases/latest/download/update.json</string>
+	<string>https://github.com/GabrielYamin/Bekitzur/releases/latest/download/update.json</string>
 	<key>BekitzurUpdatePublicKey</key>
 	<string>PaZJpCM6cc7tu/mfUgTv4DG1AZft4ZHF5bTo0Kgsh/Q=</string>
 	<key>CFBundleDevelopmentRegion</key>

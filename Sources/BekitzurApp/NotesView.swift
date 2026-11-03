@@ -12,7 +12,7 @@ struct NotesView: View {
     /// Checks the Action Item at an index off, or back on.
     let setDone: (Int, Bool) -> Void
     /// The Notes being changed while `editing`. It's never nil: the editor's fields still read it once more as editing
-    /// ends, and an optional one set to nil on Save or Cancel crashed the app as SwiftUI unwrapped it.
+    /// ends, and an optional one set to nil on Save or Cancel would crash the app as SwiftUI unwraps it.
     @ViewState private var draft = NotesDraft(Notes())
     @ViewState private var editing = false
 

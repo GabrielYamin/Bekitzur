@@ -13,8 +13,8 @@ public actor SpeechDetector {
 
     /// Speech in 16 kHz mono samples, in seconds from their start, padded by `padding` on each side.
     ///
-    /// At these settings it kept every word of the scripted read and 99.9% of a 32-minute meeting's, faint voices included,
-    /// and in a quiet room it left out all but a few clicks and coughs of the room noise Whisper had written text over.
+    /// At these settings it keeps nearly every word, faint voices included, and leaves out all but a few clicks and
+    /// coughs of the room noise Whisper writes text over.
     /// - Parameter threshold: How sure the model must be that a moment is speech (0 to 1).
     public func speech(in samples: [Float], threshold: Float = 0.5, padding: Double = 0.3) async throws -> [ClosedRange<Double>] {
         let config = VadSegmentationConfig(minSpeechDuration: 0.25, minSilenceDuration: 0.5, maxSpeechDuration: 30, speechPadding: padding, negativeThreshold: max(0, threshold - 0.15))

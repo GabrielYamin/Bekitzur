@@ -41,8 +41,7 @@ struct TalkingOverTests {
         stretches.reduce(0) { $0 + $1.upperBound - $1.lowerBound }
     }
 
-    /// November 2: two short replies said over the other person went to that person, since the microphone was silenced
-    /// all the while they spoke.
+    /// Short replies said over the other person go to that person when the microphone stays silenced while they speak.
     @Test func theUserTalkingOverTheOtherSideIsFound() throws {
         let system = otherSide()
 

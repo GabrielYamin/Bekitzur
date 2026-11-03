@@ -25,9 +25,9 @@ public final class ConversationRecorder {
     public typealias TrackListener = @Sendable (Track, UnsafeBufferPointer<Float>, Double) -> Void
 
     /// Both tracks start at the same moment, each file with silence until its device's first sound, and each block goes
-    /// where its device's timestamps put it (`TrackTimeline`). Each file used to start at its own first sound, and the
-    /// microphone, started second, ran 9 to 212 ms ahead of the system audio, so the copy of a call that laptop speakers
-    /// put in the microphone played before the call itself: an echo.
+    /// where its device's timestamps put it (`TrackTimeline`). Files that each started at their own first sound would
+    /// be out of step by however long the second device took to start, so the copy of a call that laptop speakers put
+    /// in the microphone would play before the call itself: an echo.
     /// - Parameters:
     ///   - microphone: The UID of the microphone to record (`AudioInputDevice`); nil for the Mac's default.
     ///   - listener: Gets a mono copy of each track as it's written, on that track's writing thread.
