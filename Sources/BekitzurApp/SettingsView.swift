@@ -119,6 +119,8 @@ private struct PeopleSection: View {
 struct SettingsView: View {
     @Bindable var model: AppModel
 
+    static let project = URL(string: "https://github.com/GabrielYamin/Bekitzur")!
+
     var body: some View {
         Form {
             Section("Recording") {
@@ -189,8 +191,14 @@ struct SettingsView: View {
                 Text("Recordings, Transcripts, Notes, and voices stay on this Mac.").font(.callout).foregroundStyle(.secondary)
             }
 
-            Section("Updates") {
+            Section("About and updates") {
                 LabeledContent("Version", value: model.versionDescription)
+                LabeledContent("Project") {
+                    Link("github.com/GabrielYamin/Bekitzur", destination: Self.project)
+                }
+                Text("Bekitzur is open source, under the MIT License. Its code, releases, and updates are on GitHub.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 if model.canUpdate {
                     HStack {
                         Button("Check for Updates…") { Task { await model.checkForUpdates(manually: true) } }
