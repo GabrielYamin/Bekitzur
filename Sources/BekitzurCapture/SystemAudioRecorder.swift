@@ -43,6 +43,9 @@ public final class SystemAudioRecorder {
 
     public init() {}
 
+    /// The recording device's name: it has inputs, the tap's, but isn't a microphone to choose.
+    static let deviceName = "Bekitzur Recording"
+
     /// - Parameter origin: The host time the recording started; the file starts with silence up to the first sound.
     public func start(writingTo url: URL, origin: UInt64? = nil, listener: AudioListener? = nil) throws {
         let tap = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
@@ -63,7 +66,7 @@ public final class SystemAudioRecorder {
 
         let outputUID = try Self.defaultOutputDeviceUID()
         let aggregate: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "Bekitzur Recording",
+            kAudioAggregateDeviceNameKey: Self.deviceName,
             kAudioAggregateDeviceUIDKey: UUID().uuidString,
             kAudioAggregateDeviceMainSubDeviceKey: outputUID,
             kAudioAggregateDeviceIsPrivateKey: true,

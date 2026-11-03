@@ -28,15 +28,20 @@ public final class ConversationRecorder {
     /// where its device's timestamps put it (`TrackTimeline`). Each file used to start at its own first sound, and the
     /// microphone, started second, ran 9 to 212 ms ahead of the system audio, so the copy of a call that laptop speakers
     /// put in the microphone played before the call itself: an echo.
-    /// - Parameter listener: Gets a mono copy of each track as it's written, on that track's writing thread.
-    public func start(in directory: URL, listener: TrackListener? = nil) throws {
+    /// - Parameters:
+    ///   - microphone: The UID of the microphone to record (`AudioInputDevice`); nil for the Mac's default.
+    ///   - listener: Gets a mono copy of each track as it's written, on that track's writing thread.
+    public func start(in directory: URL, microphone device: String? = nil, listener: TrackListener? = nil) throws {
         let origin = mach_absolute_time()
         try systemAudio.start(
             writingTo: directory.appending(path: Track.systemAudio.recordingFile), origin: origin, listener: Self.listener(listener, for: .systemAudio)
         )
         do {
             try microphone.start(
-                writingTo: directory.appending(path: Track.microphone.recordingFile), origin: origin, listener: Self.listener(listener, for: .microphone)
+                writingTo: directory.appending(path: Track.microphone.recordingFile),
+                origin: origin,
+                listener: Self.listener(listener, for: .microphone),
+                device: device
             )
         } catch {
             systemAudio.stop()

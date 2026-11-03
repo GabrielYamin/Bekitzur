@@ -55,6 +55,21 @@ struct MenuBarContent: View {
                 .controlSize(.large)
                 .disabled(model.voiceSample != .idle && !model.voiceSample.isFinished)
                 .hoverLight()
+                if model.microphones.count > 1 {
+                    Menu {
+                        Picker("Microphone", selection: Binding(get: { model.microphoneUID }, set: { model.microphoneUID = $0 })) {
+                            microphoneChoices(model)
+                        }
+                        .pickerStyle(.inline)
+                    } label: {
+                        Label(model.recordingMicrophone?.name ?? "Microphone", systemImage: "mic")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .help("The microphone recordings use")
+                }
             }
 
             if let processing = model.processing {

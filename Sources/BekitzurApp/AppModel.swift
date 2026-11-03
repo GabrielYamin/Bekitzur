@@ -71,6 +71,24 @@ final class AppModel {
     @ObservationIgnored private var recordingCall: String?
     /// Settings has something the user hasn't seen: a dot on the Settings buttons until they open it.
     private(set) var hasNewSettings: Bool
+    /// The microphone to record, by UID (`AudioInputDevice`); nil for the Mac's default.
+    var microphoneUID = UserDefaults.standard.string(forKey: "microphone") {
+        didSet {
+            UserDefaults.standard.set(microphoneUID, forKey: "microphone")
+            if microphoneUID == nil {
+                microphoneName = nil
+            } else if let name = microphones.first(where: { $0.id == microphoneUID })?.name {
+                microphoneName = name
+            }
+            UserDefaults.standard.set(microphoneName, forKey: "microphoneName")
+        }
+    }
+    /// The chosen microphone's name, for when it isn't connected.
+    private(set) var microphoneName = UserDefaults.standard.string(forKey: "microphoneName")
+    /// The microphones connected now, and the Mac's default among them.
+    private(set) var microphones: [AudioInputDevice] = []
+    private(set) var defaultMicrophone: AudioInputDevice?
+    @ObservationIgnored private var microphonesWatch: AudioInputWatch?
     /// Whether this Mac has the memory to write Notes (`RequirementsNote`).
     let memory = MemoryRequirement.thisMac
     /// The user read that this Mac has less memory than Bekitzur is made for.
@@ -201,6 +219,28 @@ final class AppModel {
         Task { await checkForUpdatesRegularly() }
         watchCalls()
         indexConversations()
+        refreshMicrophones()
+        AppLog.write("Microphones: \(microphones.map(\.name).joined(separator: ", ")); the Mac's default is \(defaultMicrophone?.name ?? "none"); recording \(recordingMicrophone?.name ?? "none")")
+        microphonesWatch = AudioInputWatch { Task { @MainActor in AppModel.shared.refreshMicrophones() } }
+    }
+
+    func refreshMicrophones() {
+        microphones = AudioInputDevice.all()
+        defaultMicrophone = AudioInputDevice.systemDefault
+    }
+
+    /// The microphone a recording starts with: the chosen one when it's connected, otherwise the Mac's default.
+    var recordingMicrophone: AudioInputDevice? {
+        microphones.first { $0.id == microphoneUID } ?? defaultMicrophone
+    }
+
+    /// The chosen microphone's UID for a recording, nil for the default, with the reason logged when it isn't connected.
+    private func microphoneForRecording() -> String? {
+        let device = AudioInputDevice.connected(microphoneUID, among: microphones)
+        if device == nil, microphoneUID != nil {
+            AppLog.write("\(microphoneName ?? "The microphone chosen") isn't connected; recording \(defaultMicrophone?.name ?? "the Mac's default microphone")")
+        }
+        return device
     }
 
     /// Reads every Conversation's Notes and Transcript for the list's People menu and search, off the main thread; a
@@ -613,7 +653,8 @@ final class AppModel {
             }
             let recorder = ConversationRecorder()
             do {
-                try recorder.start(in: library.folder(for: info.id), listener: listener)
+                try recorder.start(in: library.folder(for: info.id), microphone: microphoneForRecording(), listener: listener)
+                AppLog.write("\(info.id): recording \(recordingMicrophone?.name ?? "the Mac's default microphone")")
             } catch {
                 live?.cancel()
                 try? library.delete(info.id)
@@ -1656,7 +1697,7 @@ final class AppModel {
         defer { try? FileManager.default.removeItem(at: url) }
         let microphone = MicrophoneRecorder()
         do {
-            try microphone.start(writingTo: url)
+            try microphone.start(writingTo: url, device: microphoneForRecording())
         } catch {
             voiceSample = .failed("Couldn't record: \(error)")
             return

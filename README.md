@@ -6,7 +6,7 @@ This repository is the source. People download the app from [Bekitzur-releases](
 
 ## What it does
 
-- Records the microphone and everything the Mac plays, so both sides of a call, as two tracks that keep time even when the Mac is busy, lined up after the call by the copy of it that laptop speakers put in the microphone.
+- Records the microphone you pick (or the Mac's default) and everything the Mac plays, so both sides of a call, as two tracks that keep time even when the Mac is busy, lined up after the call by the copy of it that laptop speakers put in the microphone.
 - Shows a live Transcript while recording, and tells Hebrew from English by the first speech.
 - Offers to record when Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, and to stop once the call is over; or, if you choose, records the call on its own and stops when it ends.
 - Transcribes Hebrew with ivrit.ai's Whisper fine-tune and English with Whisper large-v3-turbo, through whisper.cpp. A call's two sides are transcribed each on its own, the microphone without the speakers' copy of the call, so two people talking at once are both written down. English terms spoken in Hebrew come out in English letters (the Vocabulary), and corrections teach it new spellings.

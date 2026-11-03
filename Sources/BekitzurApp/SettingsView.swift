@@ -59,6 +59,17 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Recording") {
+                Picker(selection: $model.microphoneUID) {
+                    microphoneChoices(model)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Microphone")
+                        if model.newSettingsShown.contains(.microphone) { NewBadge() }
+                    }
+                }
+                Text("Bekitzur records the microphone picked here, or the Mac's default while it isn't connected. The other side of a call is everything the Mac plays, whatever it plays through.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 Toggle("Suggest recording calls", isOn: $model.suggestsCalls)
                 Text("When Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, Bekitzur offers to record, and once it stops, to stop recording. A call can't be seen while it rings, so the offer comes when you answer or join.")
                     .font(.callout)

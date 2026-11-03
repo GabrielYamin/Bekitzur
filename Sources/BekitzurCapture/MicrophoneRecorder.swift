@@ -1,12 +1,14 @@
 import AVFoundation
 import CoreAudio
 
-/// Records the default input device to a mono file.
+/// Records a microphone, the one chosen or the Mac's default, to a mono file.
 public final class MicrophoneRecorder: @unchecked Sendable {
     private let engine = AVAudioEngine()
     private var writer: AudioFileWriter?
     private var configurationChanges: NSObjectProtocol?
     private let restarts = DispatchQueue(label: "bekitzur.microphone-restarts")
+    /// The chosen microphone's UID; nil for the Mac's default, which the engine follows by itself.
+    private var device: String?
 
     public init() {}
 
@@ -24,8 +26,12 @@ public final class MicrophoneRecorder: @unchecked Sendable {
         }
     }
 
-    /// - Parameter origin: The host time the recording started; the file starts with silence up to the first sound.
-    public func start(writingTo url: URL, origin: UInt64? = nil, listener: AudioListener? = nil) throws {
+    /// - Parameters:
+    ///   - origin: The host time the recording started; the file starts with silence up to the first sound.
+    ///   - device: The UID of the microphone to record (`AudioInputDevice`); nil for the Mac's default.
+    public func start(writingTo url: URL, origin: UInt64? = nil, listener: AudioListener? = nil, device: String? = nil) throws {
+        self.device = device
+        useDevice()
         let format = engine.inputNode.outputFormat(forBus: 0)
         guard format.channelCount > 0, let mono = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 1) else {
             throw CaptureError(step: "find a microphone", status: kAudioHardwareBadDeviceError)
@@ -61,9 +67,17 @@ public final class MicrophoneRecorder: @unchecked Sendable {
         }
     }
 
+    /// Points the engine's input at the chosen microphone, or at the default one once it's disconnected.
+    private func useDevice() {
+        guard let device, let unit = engine.inputNode.audioUnit else { return }
+        guard var id = AudioInputDevice.objectID(forUID: device) ?? AudioInputDevice.defaultObjectID() else { return }
+        AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &id, UInt32(MemoryLayout<AudioObjectID>.size))
+    }
+
     private func restart() {
         guard let writer else { return }
         engine.inputNode.removeTap(onBus: 0)
+        useDevice()
         writer.restarted()
         tap(into: writer)
         try? engine.start()
