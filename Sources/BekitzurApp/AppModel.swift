@@ -49,6 +49,16 @@ final class AppModel {
             watchCalls()
         }
     }
+    /// Recording starts when a call does, and stops once it's over, instead of being offered.
+    var recordsCallsAutomatically: Bool {
+        didSet {
+            UserDefaults.standard.set(recordsCallsAutomatically, forKey: "recordCallsAutomatically")
+            watchCalls()
+        }
+    }
+    /// The app of the call that started the recording, which stops it once the call is over; nil for a recording the
+    /// user started, which a call ending only offers to stop.
+    @ObservationIgnored private var recordingCall: String?
     @ObservationIgnored private var callWatch = CallWatch()
     @ObservationIgnored private var microphoneUsers: MicrophoneUsers?
     @ObservationIgnored private var callCheck: Task<Void, Never>?
@@ -138,6 +148,7 @@ final class AppModel {
         lastLanguage = UserDefaults.standard.string(forKey: "language").flatMap(ConversationLanguage.init(rawValue:)) ?? .hebrew
         userName = UserDefaults.standard.string(forKey: "userName") ?? NSFullUserName()
         suggestsCalls = UserDefaults.standard.object(forKey: "suggestCalls") as? Bool ?? true
+        recordsCallsAutomatically = UserDefaults.standard.bool(forKey: "recordCallsAutomatically")
         vocabulary = VocabularyStore(url: BekitzurPaths.vocabulary).load()
         try? FileManager.default.createDirectory(at: BekitzurPaths.conversations, withIntermediateDirectories: true)
         conversations = library.all()
@@ -557,6 +568,7 @@ final class AppModel {
         self.recorder = nil
         recordingID = nil
         recordingStartedAt = nil
+        recordingCall = nil
         checkCall()
         let live = liveTranscriber
         liveTranscriber = nil
@@ -632,9 +644,10 @@ final class AppModel {
 
     static let callNotification = "call"
     static let callEndedNotification = "call ended"
+    static let recordingCallNotification = "recording call"
 
     private func watchCalls() {
-        if suggestsCalls {
+        if suggestsCalls || recordsCallsAutomatically {
             if microphoneUsers == nil {
                 microphoneUsers = MicrophoneUsers { [weak self] users in self?.microphoneUsersChanged(users) }
             }
@@ -656,10 +669,12 @@ final class AppModel {
     /// Offers to record a call, or to stop after one, when the apps using the microphone change, when recording starts or
     /// stops, and when an offer falls due.
     private func checkCall() {
-        guard suggestsCalls, let microphoneUsers else { return }
+        guard suggestsCalls || recordsCallsAutomatically, let microphoneUsers else { return }
         switch callWatch.update(using: microphoneUsers.bundleIDs, recording: isRecording, now: Date()) {
-        case .record(let app): offerRecording(app)
-        case .stop(let app): offerStopping(app)
+        case .record(let app):
+            if recordsCallsAutomatically { recordCall(in: app) } else { offerRecording(app) }
+        case .stop(let app):
+            if recordingCall != nil { stopRecordingCall(in: app) } else if suggestsCalls { offerStopping(app) }
         case nil: break
         }
         if callToRecord != nil, isRecording || callWatch.call == nil { offerRecording(nil) }
@@ -671,6 +686,26 @@ final class AppModel {
             guard !Task.isCancelled else { return }
             checkCall()
         }
+    }
+
+    /// Records a call that started, as the user chose in Settings; it stops once the call is over.
+    private func recordCall(in app: String) {
+        guard !isRecording, voiceSample.isFinished else { return }
+        Task {
+            await startRecording()
+            guard isRecording else { return }
+            recordingCall = app
+            AppLog.write("Started recording the call in \(app) on its own")
+            notify(Self.recordingCallNotification, title: "Recording your call", body: "\(app) started using the microphone. Bekitzur stops recording when the call ends.")
+        }
+    }
+
+    private func stopRecordingCall(in app: String) {
+        guard let id = recordingID else { return }
+        AppLog.write("Stopped recording on its own, since the call in \(app) ended")
+        withdrawNotification(Self.recordingCallNotification)
+        stopRecording()
+        notify(id, title: "The call ended", body: "Bekitzur stopped recording the call in \(app) and is writing the Notes.")
     }
 
     private func offerRecording(_ app: String?) {

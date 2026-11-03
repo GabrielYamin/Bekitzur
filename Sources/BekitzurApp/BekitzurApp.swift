@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().setNotificationCategories([
             UNNotificationCategory(identifier: AppModel.callNotification, actions: [UNNotificationAction(identifier: Self.record, title: "Record")], intentIdentifiers: []),
             UNNotificationCategory(identifier: AppModel.callEndedNotification, actions: [UNNotificationAction(identifier: Self.stop, title: "Stop and write Notes")], intentIdentifiers: []),
+            UNNotificationCategory(identifier: AppModel.recordingCallNotification, actions: [UNNotificationAction(identifier: Self.stop, title: "Stop and write Notes")], intentIdentifiers: []),
         ])
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
         AppLog.write("Launched build \(version); microphone permission: \(MicrophoneRecorder.permission); system audio permission: \(SystemAudioRecorder.access.rawValue)")
@@ -117,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 model.showMainWindow()
             case AppModel.callNotification:
                 Task { await model.startRecording() }
-            case AppModel.callEndedNotification:
+            case AppModel.callEndedNotification, AppModel.recordingCallNotification:
                 if action == Self.stop { model.stopRecording() } else { model.showMainWindow(selecting: model.recordingID) }
             default:
                 model.showMainWindow(selecting: id)
