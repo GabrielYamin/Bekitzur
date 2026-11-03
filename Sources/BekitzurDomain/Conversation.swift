@@ -18,6 +18,8 @@ public struct ConversationInfo: Codable, Identifiable, Sendable, Hashable {
     /// What processing is doing right now, while status is processing.
     public var step: String?
     public var title: String?
+    /// The user gave it its title, which writing the Notes again keeps.
+    public var renamed: Bool?
     public var error: String?
     /// Something the user should check, like a track that recorded only silence.
     public var warning: String?
@@ -66,13 +68,16 @@ public struct ProcessedConversation: Codable, Sendable, Equatable {
     public var notes: Notes
     /// The user's fixes to the Transcript when the Notes were written; the Notes are behind when these differ.
     public var notesFixes: Set<TranscriptFlags.Word>?
+    /// The user changed the Notes, which writing them again replaces.
+    public var notesEdited: Bool?
 
-    public init(transcript: Transcript, speakers: [ConversationSpeaker], turns: [Turn], notes: Notes, notesFixes: Set<TranscriptFlags.Word>? = nil) {
+    public init(transcript: Transcript, speakers: [ConversationSpeaker], turns: [Turn], notes: Notes, notesFixes: Set<TranscriptFlags.Word>? = nil, notesEdited: Bool? = nil) {
         self.transcript = transcript
         self.speakers = speakers
         self.turns = turns
         self.notes = notes
         self.notesFixes = notesFixes
+        self.notesEdited = notesEdited
     }
 
     /// Shows a Speaker under a new name everywhere: Transcript, turns, Owners, and the Notes' text.

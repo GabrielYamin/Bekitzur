@@ -98,6 +98,15 @@ final class AppModel {
     @ObservationIgnored private var notifiedUpdate: String?
     var selection: String?
     var alert: String?
+    /// The Conversation being renamed, while the Rename dialog shows.
+    var renaming: String?
+    /// Something that writes Notes the user changed again, waiting for them to agree.
+    var replacingNotes: NotesReplacement?
+
+    struct NotesReplacement {
+        let id: String
+        let write: @MainActor () -> Void
+    }
 
     /// The language last detected, assumed for a Recording without speech to detect it from.
     @ObservationIgnored private var lastLanguage: ConversationLanguage {
@@ -829,7 +838,7 @@ final class AppModel {
         AppLog.write("\(id): processing (\(info.language?.name ?? "language to detect")\(info.people.map { ", \($0) people" } ?? ""), \(how), \(flags.fixes.count) fixes)")
         Task {
             do {
-                let result: ProcessedConversation
+                var result: ProcessedConversation
                 let warning: String?
                 let measuredDelay: Double?
                 let measuredDelays: [TrackDelay]?
@@ -862,6 +871,8 @@ final class AppModel {
                         }
                     }
                 }
+                let current = conversations.first { $0.id == id }
+                if current?.renamed == true, let title = current?.title { result.notes.title = title }
                 try library.save(result, for: id)
                 library.deleteLiveTranscript(for: id)
                 liveTranscripts[id] = nil
@@ -871,7 +882,7 @@ final class AppModel {
                 update(id) {
                     $0.status = .unreviewed
                     $0.step = nil
-                    $0.title = result.notes.title
+                    if $0.renamed != true { $0.title = result.notes.title }
                     $0.warning = warning
                     $0.language = language
                     if let measuredDelay { $0.microphoneDelay = measuredDelay }
@@ -1184,6 +1195,55 @@ final class AppModel {
         result.speakers[index].naming = .unknown
         try? library.save(result, for: id)
         results[id] = result
+    }
+
+    /// Saves the user's changes to a Conversation's Notes; a new title renames the Conversation too.
+    func saveNotes(_ notes: Notes, for id: String) {
+        guard var result = results[id] ?? library.result(for: id) else { return }
+        let renamed = notes.title != result.notes.title
+        result.notes = notes
+        result.notesEdited = true
+        do {
+            try library.save(result, for: id)
+            results[id] = result
+        } catch {
+            alert = "Couldn't save the Notes: \(error.localizedDescription)"
+            return
+        }
+        if renamed {
+            update(id) {
+                $0.title = notes.title
+                $0.renamed = true
+            }
+        }
+    }
+
+    /// Runs `write`, which writes a Conversation's Notes again, at once, or once the user agrees when it would replace
+    /// their changes to the Notes.
+    func replaceNotes(of id: String, _ write: @escaping @MainActor () -> Void) {
+        if (results[id] ?? library.result(for: id))?.notesEdited == true {
+            replacingNotes = NotesReplacement(id: id, write: write)
+        } else {
+            write()
+        }
+    }
+
+    /// Gives a Conversation a title of the user's, in the list and in its Notes.
+    func rename(_ id: String, to title: String) {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        update(id) {
+            $0.title = title
+            $0.renamed = true
+        }
+        guard var result = results[id] ?? library.result(for: id) else { return }
+        result.notes.title = title
+        do {
+            try library.save(result, for: id)
+            results[id] = result
+        } catch {
+            alert = "Couldn't save the title: \(error.localizedDescription)"
+        }
     }
 
     func copyNotes(_ id: String) {

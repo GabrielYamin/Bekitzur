@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MainWindow: View {
     @Bindable var model: AppModel
+    @ViewState private var newTitle = ""
 
     var body: some View {
         NavigationSplitView {
@@ -11,6 +12,7 @@ struct MainWindow: View {
                     ConversationRow(info: info)
                         .tag(info.id)
                         .contextMenu {
+                            Button("Rename…") { model.renaming = info.id }
                             Button("Show in Finder") { model.showInFinder(info.id) }
                             Divider()
                             Button("Delete", role: .destructive) { model.delete(info.id) }
@@ -31,6 +33,17 @@ struct MainWindow: View {
                 Task { await model.importRecordings(urls) }
                 return !urls.isEmpty
             }
+            .alert("Rename Conversation", isPresented: Binding(get: { model.renaming != nil }, set: { if !$0 { model.renaming = nil } })) {
+                TextField("Title", text: $newTitle)
+                Button("Rename") {
+                    if let id = model.renaming { model.rename(id, to: newTitle) }
+                }
+                .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Cancel", role: .cancel) {}
+            }
+            .onChange(of: model.renaming) { _, id in
+                newTitle = id.flatMap { id in model.conversations.first { $0.id == id }?.displayTitle } ?? ""
+            }
             .safeAreaInset(edge: .top) {
                 VStack(spacing: 6) {
                     PermissionsNote(model: model)
@@ -44,10 +57,22 @@ struct MainWindow: View {
             }
             .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
         } detail: {
-            if let id = model.selection, let info = model.conversations.first(where: { $0.id == id }) {
-                ConversationDetail(model: model, info: info)
-            } else {
-                ContentUnavailableView("Select a Conversation", systemImage: "text.bubble")
+            Group {
+                if let id = model.selection, let info = model.conversations.first(where: { $0.id == id }) {
+                    ConversationDetail(model: model, info: info)
+                } else {
+                    ContentUnavailableView("Select a Conversation", systemImage: "text.bubble")
+                }
+            }
+            .alert("Replace your changes to the Notes?", isPresented: Binding(get: { model.replacingNotes != nil }, set: { if !$0 { model.replacingNotes = nil } })) {
+                Button("Write Notes Again", role: .destructive) {
+                    let replacement = model.replacingNotes
+                    model.replacingNotes = nil
+                    replacement?.write()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You've edited this Conversation's Notes. Writing them again replaces your changes.")
             }
         }
         .toolbar {

@@ -70,12 +70,13 @@ struct ConversationDetail: View {
                     Button("Mark as not reviewed") { model.markUnreviewed(info.id) }
                 }
                 if info.status == .unreviewed || info.status == .reviewed || info.status == .failed {
-                    Button("Write Notes again") { model.writeNotesAgain(info.id) }
-                    Button("Transcribe again") { model.transcribeAgain(info.id, language: info.language) }
+                    Button("Write Notes again") { model.replaceNotes(of: info.id) { model.writeNotesAgain(info.id) } }
+                    Button("Transcribe again") { model.replaceNotes(of: info.id) { model.transcribeAgain(info.id, language: info.language) } }
                     ForEach(ConversationLanguage.allCases.filter { $0 != info.language }, id: \.self) { language in
-                        Button("Transcribe again as \(language.name)") { model.transcribeAgain(info.id, language: language) }
+                        Button("Transcribe again as \(language.name)") { model.replaceNotes(of: info.id) { model.transcribeAgain(info.id, language: language) } }
                     }
                 }
+                Button("Rename…") { model.renaming = info.id }
                 Button("Show in Finder") { model.showInFinder(info.id) }
                 Divider()
                 Button("Delete", role: .destructive) { model.delete(info.id) }
@@ -131,7 +132,7 @@ struct ConversationDetail: View {
                         HStack {
                             Label("You've fixed the Transcript since the Notes were written.", systemImage: "pencil.circle")
                             Spacer()
-                            Button("Update Notes") { model.updateNotes(info.id) }
+                            Button("Update Notes") { model.replaceNotes(of: info.id) { model.updateNotes(info.id) } }
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 8)
@@ -153,7 +154,11 @@ struct ConversationDetail: View {
                             tab = .transcript
                             playback.seek(to: time)
                             playback.play()
+                        } save: { notes in
+                            model.saveNotes(notes, for: info.id)
                         }
+                        // A Conversation's draft stays with it when another one is selected.
+                        .id(info.id)
                     case .transcript:
                         TranscriptView(model: model, info: info, result: result, playback: playback)
                     case .speakers:

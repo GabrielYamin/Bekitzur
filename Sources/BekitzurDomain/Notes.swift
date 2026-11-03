@@ -23,6 +23,13 @@ public struct Decision: Codable, Sendable, Equatable {
     /// The Source: turn IDs where the Decision was reached.
     public var sourceTurns: [String]
     public var quote: String
+
+    /// Without a Source, for one the user adds.
+    public init(text: String, sourceTurns: [String] = [], quote: String = "") {
+        self.text = text
+        self.sourceTurns = sourceTurns
+        self.quote = quote
+    }
 }
 
 public struct ActionItem: Codable, Sendable, Equatable {
@@ -34,11 +41,25 @@ public struct ActionItem: Codable, Sendable, Equatable {
     public var dueDate: String?
     public var sourceTurns: [String]
     public var quote: String
+
+    public init(text: String, owner: String? = nil, duePhrase: String? = nil, dueDate: String? = nil, sourceTurns: [String] = [], quote: String = "") {
+        self.text = text
+        self.owner = owner
+        self.duePhrase = duePhrase
+        self.dueDate = dueDate
+        self.sourceTurns = sourceTurns
+        self.quote = quote
+    }
 }
 
 public struct OpenQuestion: Codable, Sendable, Equatable {
     public var text: String
     public var sourceTurns: [String]
+
+    public init(text: String, sourceTurns: [String] = []) {
+        self.text = text
+        self.sourceTurns = sourceTurns
+    }
 }
 
 public struct Notes: Codable, Sendable, Equatable {
