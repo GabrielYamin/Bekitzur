@@ -29,7 +29,17 @@ final class AppModel {
 
     let library = ConversationLibrary(root: BekitzurPaths.conversations)
     private(set) var conversations: [ConversationInfo] = []
-    private(set) var results: [String: ProcessedConversation] = [:]
+    private(set) var results: [String: ProcessedConversation] = [:] {
+        didSet {
+            for (id, result) in results where oldValue[id] != result { searchEntries[id] = SearchEntry(result, user: userName) }
+        }
+    }
+    /// What each Conversation can be found by in the list's People menu and search, by ID: read from every Conversation
+    /// at launch, then kept up to date as Notes are written and Speakers named.
+    private(set) var searchEntries: [String: SearchEntry] = [:]
+    /// The list's People menu and search.
+    var filter = ConversationFilter()
+    @ObservationIgnored private var indexing: Task<Void, Never>?
     /// What the user marked in each Transcript while listening back.
     private(set) var flags: [String: TranscriptFlags] = [:]
     /// The user's own English terms and the spellings their corrections taught.
@@ -130,7 +140,11 @@ final class AppModel {
     }
 
     var userName: String {
-        didSet { UserDefaults.standard.set(userName, forKey: "userName") }
+        didSet {
+            UserDefaults.standard.set(userName, forKey: "userName")
+            // The People menu leaves the user out, by this name; typed a letter at a time, so after a pause.
+            indexConversations(after: .seconds(1))
+        }
     }
 
     @ObservationIgnored private var recorder: ConversationRecorder?
@@ -180,6 +194,24 @@ final class AppModel {
         }
         Task { await checkForUpdatesRegularly() }
         watchCalls()
+        indexConversations()
+    }
+
+    /// Reads every Conversation's Notes and Transcript for the list's People menu and search, off the main thread; a
+    /// result already in memory is newer than its file while it's being saved, so it wins.
+    func indexConversations(after delay: Duration = .zero) {
+        indexing?.cancel()
+        indexing = Task {
+            if delay > .zero { try? await Task.sleep(for: delay) }
+            guard !Task.isCancelled else { return }
+            let library = self.library, user = userName
+            let ids = conversations.filter { $0.status == .unreviewed || $0.status == .reviewed }.map(\.id)
+            let read = await Task.detached(priority: .utility) {
+                Dictionary(uniqueKeysWithValues: ids.compactMap { id in library.result(for: id).map { (id, SearchEntry($0, user: user)) } })
+            }.value
+            guard !Task.isCancelled else { return }
+            searchEntries = read.merging(results.mapValues { SearchEntry($0, user: user) }) { _, loaded in loaded }
+        }
     }
 
     // MARK: Updates
@@ -1228,6 +1260,7 @@ final class AppModel {
                 }
             }
             if let last = imported.last { selection = last.id }
+            indexConversations()
         } catch {
             AppLog.write("Import of \(url.lastPathComponent) failed: \(error)")
             alert = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
@@ -1401,6 +1434,7 @@ final class AppModel {
             alert = "Couldn't delete the Conversation: \(error)"
         }
         results[id] = nil
+        searchEntries[id] = nil
         flags[id] = nil
         liveTranscripts[id] = nil
         liveStopped.remove(id)
@@ -1419,6 +1453,7 @@ final class AppModel {
         for info in conversations.reversed() where (info.status == .recording || info.status == .processing) && info.id != recordingID && info.id != processingID {
             enqueue(info.id)
         }
+        indexConversations()
         AppLog.write("Read the Conversations folder again: \(conversations.count) Conversations")
     }
 

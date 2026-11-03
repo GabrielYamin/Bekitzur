@@ -18,6 +18,11 @@ struct MainWindow: View {
                 .padding(.horizontal, 10)
                 .padding(.top, 6)
                 .padding(.bottom, 8)
+                if !model.conversations.isEmpty {
+                    ConversationListHeader(model: model)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 2)
+                }
                 conversationList
             }
             .dropDestination(for: URL.self) { urls, _ in
@@ -79,20 +84,31 @@ struct MainWindow: View {
         .task { await model.refreshPermissions() }
     }
 
+    /// The Conversations the People menu and search leave.
+    private var shownConversations: [ConversationInfo] {
+        guard model.filter.isActive else { return model.conversations }
+        return model.conversations.filter { model.filter.matches(title: $0.displayTitle, entry: model.searchEntries[$0.id]) }
+    }
+
     private var conversationList: some View {
         List(selection: $model.selection) {
-            ForEach(model.conversations) { info in
-                ConversationRow(info: info)
-                    .tag(info.id)
-                    .contextMenu {
-                        Button("Rename…") { model.renaming = info.id }
-                        Button("Export…") { Task { await model.export(info.id) } }
-                            .disabled(info.status == .recording || info.status == .processing)
-                        Button("Show in Finder") { model.showInFinder(info.id) }
-                        Divider()
-                        Button("Delete", role: .destructive) { model.delete(info.id) }
-                            .disabled(info.status == .recording || info.status == .processing)
+            ForEach(shownConversations) { info in
+                VStack(alignment: .leading, spacing: 2) {
+                    ConversationRow(info: info)
+                    if let excerpt = model.filter.excerpt(title: info.displayTitle, entry: model.searchEntries[info.id]) {
+                        SearchExcerpt(excerpt: excerpt).padding(.leading, 16)
                     }
+                }
+                .tag(info.id)
+                .contextMenu {
+                    Button("Rename…") { model.renaming = info.id }
+                    Button("Export…") { Task { await model.export(info.id) } }
+                        .disabled(info.status == .recording || info.status == .processing)
+                    Button("Show in Finder") { model.showInFinder(info.id) }
+                    Divider()
+                    Button("Delete", role: .destructive) { model.delete(info.id) }
+                        .disabled(info.status == .recording || info.status == .processing)
+                }
             }
         }
         .overlay {
@@ -101,6 +117,12 @@ struct MainWindow: View {
                     "No Conversations yet",
                     systemImage: "waveform",
                     description: Text("Record or import one above, or drop a recording or an exported Conversation here.")
+                )
+            } else if shownConversations.isEmpty {
+                ContentUnavailableView(
+                    "No matching Conversations",
+                    systemImage: "magnifyingglass",
+                    description: Text("A Conversation shows when everyone picked in People is in it and the search is in its title, Notes, or Transcript.")
                 )
             }
         }

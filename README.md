@@ -13,6 +13,7 @@ This repository is the source. People download the app from [Bekitzur-releases](
 - Separates Speakers with FluidAudio (pyannote community-1 and NVIDIA's Nemotron 3 Diarization), and names people it has heard before from their Voiceprints.
 - Writes the Notes with Gemma 4 26B-A4B through llama.cpp. Quotes are checked against the Transcript, and due dates are worked out in code.
 - For review: listen back along the Transcript, fix words and Speakers, update or edit the Notes, rename Conversations, add Action Items with a due day to your calendar, and ask questions that are answered only from the Transcript.
+- Finds Conversations by the people in them and by what was said in them, in their titles, Notes, and Transcripts.
 - Downloads its own models with their progress, imports recordings made elsewhere, exports a Conversation as one file that someone else with Bekitzur opens to add it, and updates itself from signed releases after asking.
 
 [docs/plan.md](docs/plan.md) has the design and a log of what was built and how it measured. [CONTEXT.md](CONTEXT.md) defines the terms, like Conversation, Speaker, and Voiceprint.
