@@ -1,29 +1,60 @@
-# Builds a release when a version tag like v0.2.0 is pushed, and publishes it to the public releases repository,
-# together with release/README.md as that repository's README.
+# Builds a release and publishes it in this repository, where the app checks for updates. It runs only from the Actions
+# tab (Release → Run workflow, on main, with the version), and only for the repository's owner.
+#
+# The release notes are release/notes/<version>.md, committed before running it, so only what's written there is public.
 #
 # Needs, in this repository's Settings → Secrets and variables → Actions:
-#   - variable RELEASES_REPO: the public repository, like account/Bekitzur-releases
-#   - secret RELEASES_TOKEN: a fine-grained token that can write contents of that repository and nothing else
 #   - secret UPDATE_SIGNING_KEY: the private key from scripts/make-update-key.swift, whose public half is in App/Info.plist
 #
-# The release notes are the tag's message (git tag -a v0.2.0 -m "…"), so only what you write there is public.
+# Copies of Bekitzur up to 0.6.4 check for updates in GabrielYamin/Bekitzur-releases. While the variable RELEASES_REPO
+# (GabrielYamin/Bekitzur-releases) and the secret RELEASES_TOKEN (a fine-grained token that can write contents of that
+# repository and nothing else) are set, each release is published there too, pointing to the download here.
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version, like 0.7.0
+        required: true
+        type: string
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: release
 
 jobs:
   release:
+    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Check the version and its notes
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Releases are built from main, not $GITHUB_REF_NAME."
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The version should look like 0.7.0, not $VERSION."
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null; then
+            echo "::error::v$VERSION is already released."
+            exit 1
+          fi
+          if [ ! -s "release/notes/$VERSION.md" ]; then
+            echo "::error::release/notes/$VERSION.md, with the notes for the people who use Bekitzur, isn't on main."
+            exit 1
+          fi
 
       - name: Reuse downloaded packages and frameworks
         uses: actions/cache@v4
@@ -36,31 +67,23 @@ jobs:
         run: swift test
 
       - name: Package
-        env:
-          TAG: ${{ github.ref_name }}
-        run: BEKITZUR_VERSION="${TAG#v}" scripts/package.sh
+        run: BEKITZUR_VERSION="$VERSION" scripts/package.sh
 
       - name: Describe and sign the release
         env:
-          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
-          TAG: ${{ github.ref_name }}
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
-          version="${TAG#v}"
           build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" build/Bekitzur.app/Contents/Info.plist)
           sha=$(shasum -a 256 build/Bekitzur.zip | cut -d' ' -f1)
-          signature=$(swift scripts/sign-update.swift "$version" "$build" "$sha")
-          # Checkout leaves the tag without its message, which would turn the notes into the commit's message.
-          git fetch --quiet --force origin "refs/tags/$TAG:refs/tags/$TAG"
-          git tag -l --format='%(contents)' "$TAG" > build/notes.md
-          python3 - "$version" "$build" "$sha" "$signature" "$RELEASES_REPO" "$TAG" <<'EOF'
+          signature=$(swift scripts/sign-update.swift "$VERSION" "$build" "$sha")
+          python3 - "$VERSION" "$build" "$sha" "$signature" "$GITHUB_REPOSITORY" <<'EOF'
           import json, sys
-          version, build, sha, signature, repo, tag = sys.argv[1:]
-          notes = open("build/notes.md", encoding="utf-8").read().strip()
+          version, build, sha, signature, repo = sys.argv[1:]
+          notes = open(f"release/notes/{version}.md", encoding="utf-8").read().strip()
           json.dump({
               "version": version,
               "build": build,
-              "url": f"https://github.com/{repo}/releases/download/{tag}/Bekitzur.zip",
+              "url": f"https://github.com/{repo}/releases/download/v{version}/Bekitzur.zip",
               "sha256": sha,
               "notes": notes,
               "signature": signature,
@@ -68,21 +91,23 @@ jobs:
           EOF
           cat build/update.json
 
-      - name: Publish to the releases repository
+      - name: Publish
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
-          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" build/Bekitzur.zip build/update.json \
-            --repo "$RELEASES_REPO" --title "Bekitzur ${TAG#v}" --notes-file build/notes.md
+          gh release create "v$VERSION" build/Bekitzur.zip build/update.json --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "Bekitzur $VERSION" --notes-file "release/notes/$VERSION.md"
 
-      - name: Publish the README and license
+      - name: Publish in Bekitzur-releases, for copies that still check there
+        if: vars.RELEASES_REPO != ''
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           RELEASES_REPO: ${{ vars.RELEASES_REPO }}
         run: |
-          # publish <path in the releases repository> <file here>
+          gh release create "v$VERSION" build/Bekitzur.zip build/update.json \
+            --repo "$RELEASES_REPO" --title "Bekitzur $VERSION" --notes-file "release/notes/$VERSION.md"
+
+          # publish <path in Bekitzur-releases> <file here>
           publish() {
             local sha published=""
             # For a file that isn't there yet, gh api prints the error instead of applying --jq, so only its exit
