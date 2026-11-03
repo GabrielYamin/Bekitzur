@@ -26,6 +26,12 @@ struct MainWindow: View {
                         .padding(.horizontal, 10)
                         .padding(.bottom, 6)
                 }
+                if PeopleFilterVariant.isOn, variant == .header {
+                    PeopleHeaderFilter(filter: $people)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 2)
+                        .padding(.bottom, 2)
+                }
                 conversationList
             }
             .modifier(PeopleSearchIfShown(shown: PeopleFilterVariant.isOn && variant == .search, filter: $people))

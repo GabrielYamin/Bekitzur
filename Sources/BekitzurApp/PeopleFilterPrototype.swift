@@ -8,13 +8,14 @@ import BekitzurLibrary
 import SwiftUI
 
 enum PeopleFilterVariant: String, CaseIterable {
-    case menu = "A", search = "B", section = "C"
+    case menu = "A", search = "B", section = "C", header = "D"
 
     var name: String {
         switch self {
-        case .menu: "People button and chips"
+        case .menu: "Filter field, people as chips in it"
         case .search: "People as search tokens"
         case .section: "People section in the sidebar"
+        case .header: "People menu in the list's header"
         }
     }
 
@@ -70,29 +71,21 @@ struct PersonToken: Identifiable, Hashable {
     var id: String { name }
 }
 
-// MARK: Variant A: a People button with a checklist, and the people picked as removable chips
+// MARK: Variant A: a full-width filter field in the boxes' style, with the people picked as chips inside it
 
 struct PeopleMenuFilter: View {
     @Binding var filter: PeopleFilter
     @ViewState private var picking = false
+    @ViewState private var hovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Button {
-                    picking.toggle()
-                } label: {
-                    Label(filter.selected.isEmpty ? "People" : "People (\(filter.selected.count))", systemImage: "person.2")
-                }
-                .popover(isPresented: $picking, arrowEdge: .bottom) {
-                    PeopleChecklist(filter: $filter).frame(width: 240).padding(10)
-                }
-                Spacer()
-                if !filter.selected.isEmpty {
-                    Button("Clear") { filter.selected = [] }.buttonStyle(.borderless).font(.caption)
-                }
-            }
-            if !filter.selected.isEmpty {
+        HStack(spacing: 6) {
+            Image(systemName: "person.2").foregroundStyle(.secondary)
+            if filter.selected.isEmpty {
+                Text("Filter by people").foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down").font(.caption.bold()).foregroundStyle(.secondary)
+            } else {
                 FlowLayout(spacing: 4) {
                     ForEach(filter.selected, id: \.self) { name in
                         Button {
@@ -108,9 +101,75 @@ struct PeopleMenuFilter: View {
                             .background(.tint.opacity(0.18), in: Capsule())
                         }
                         .buttonStyle(.plain)
+                        .help("Take \(name) out of the filter")
                     }
                 }
+                Spacer(minLength: 0)
+                Button {
+                    filter.selected = []
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Show everyone's Conversations")
             }
+        }
+        .font(.callout)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+        .background(Color.primary.opacity(hovering ? 0.08 : 0.05), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.12)))
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .onTapGesture { picking.toggle() }
+        .onHover { hovering = $0 }
+        .popover(isPresented: $picking, arrowEdge: .bottom) {
+            PeopleChecklist(filter: $filter).frame(width: 240).padding(10)
+        }
+    }
+}
+
+// MARK: Variant D: a light People menu on the right of a "Conversations" header above the list
+
+struct PeopleHeaderFilter: View {
+    @Binding var filter: PeopleFilter
+    @ViewState private var picking = false
+
+    var body: some View {
+        HStack {
+            Text("Conversations").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Spacer()
+            Button {
+                picking.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: filter.selected.isEmpty ? "person.2" : "person.2.fill")
+                    Text(label)
+                    Image(systemName: "chevron.down").font(.caption2.bold())
+                }
+                .font(.subheadline)
+                .foregroundStyle(filter.selected.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $picking, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 8) {
+                    PeopleChecklist(filter: $filter)
+                    if !filter.selected.isEmpty {
+                        Button("Show everyone's Conversations") { filter.selected = [] }.buttonStyle(.link)
+                    }
+                }
+                .frame(width: 240)
+                .padding(10)
+            }
+        }
+    }
+
+    private var label: String {
+        switch filter.selected.count {
+        case 0: "People"
+        case 1: "With \(filter.selected[0])"
+        default: "With \(filter.selected[0]) + \(filter.selected.count - 1)"
         }
     }
 }
