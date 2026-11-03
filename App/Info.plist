@@ -24,6 +24,18 @@
 				<string>public.audio</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Bekitzur Conversation</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>app.bekitzur.conversation</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>Bekitzur</string>
@@ -51,5 +63,25 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Bekitzur records your microphone during the Conversations you choose to record. The audio stays on this Mac.</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>app.bekitzur.conversation</string>
+			<key>UTTypeDescription</key>
+			<string>Bekitzur Conversation</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.zip-archive</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>bekitzur</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

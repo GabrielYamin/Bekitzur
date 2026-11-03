@@ -13,6 +13,8 @@ struct MainWindow: View {
                         .tag(info.id)
                         .contextMenu {
                             Button("Rename…") { model.renaming = info.id }
+                            Button("Export…") { Task { await model.export(info.id) } }
+                                .disabled(info.status == .recording || info.status == .processing)
                             Button("Show in Finder") { model.showInFinder(info.id) }
                             Divider()
                             Button("Delete", role: .destructive) { model.delete(info.id) }
@@ -25,7 +27,7 @@ struct MainWindow: View {
                     ContentUnavailableView(
                         "No Conversations yet",
                         systemImage: "waveform",
-                        description: Text("Record or import one above, or drop a recording here.")
+                        description: Text("Record or import one above, or drop a recording or an exported Conversation here.")
                     )
                 }
             }
@@ -132,9 +134,9 @@ private struct StartButtons: View {
             BoxButton(title: "Import", systemImage: "square.and.arrow.down", tint: .accentColor) {
                 Task { await model.chooseRecordingsToImport() }
             } subtitle: {
-                Text("A recording from elsewhere")
+                Text("A recording or a Conversation")
             }
-            .help("Import a recording made elsewhere, like a voice memo")
+            .help("Import a recording made elsewhere, like a voice memo, or a Conversation exported from Bekitzur")
         }
     }
 }

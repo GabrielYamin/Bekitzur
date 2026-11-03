@@ -21,16 +21,7 @@ public struct ConversationLibrary: Sendable {
     }
 
     public func create(language: ConversationLanguage? = nil, startedAt: Date = Date()) throws -> ConversationInfo {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
-        let base = formatter.string(from: startedAt)
-        var id = base
-        var copy = 1
-        while FileManager.default.fileExists(atPath: folder(for: id).path) {
-            copy += 1
-            id = "\(base)-\(copy)"
-        }
-        let info = ConversationInfo(id: id, startedAt: startedAt, language: language, status: .recording)
+        let info = ConversationInfo(id: freeID(from: Self.id(for: startedAt)), startedAt: startedAt, language: language, status: .recording)
         try FileManager.default.createDirectory(at: folder(for: info.id), withIntermediateDirectories: true)
         try save(info)
         return info
@@ -38,6 +29,24 @@ public struct ConversationLibrary: Sendable {
 
     public func save(_ info: ConversationInfo) throws {
         try write(info, to: folder(for: info.id).appending(path: "info.json"))
+    }
+
+    /// A folder name from when a Conversation started: "2026-10-19-143012".
+    static func id(for startedAt: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+        return formatter.string(from: startedAt)
+    }
+
+    /// `base`, or with "-2", "-3", … when a Conversation already has it.
+    func freeID(from base: String) -> String {
+        var id = base
+        var copy = 1
+        while FileManager.default.fileExists(atPath: folder(for: id).path) {
+            copy += 1
+            id = "\(base)-\(copy)"
+        }
+        return id
     }
 
     public func result(for id: String) -> ProcessedConversation? {
@@ -93,7 +102,7 @@ public struct ConversationLibrary: Sendable {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
-    private static let decoder: JSONDecoder = {
+    static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder

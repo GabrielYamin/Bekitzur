@@ -1117,12 +1117,17 @@ final class AppModel {
 
     // MARK: Importing
 
-    /// Asks for recordings to import, with how many people spoke in them.
+    /// A Conversation exported from Bekitzur (`ConversationLibrary.export`).
+    static let conversationType = UTType(filenameExtension: ConversationLibrary.fileExtension, conformingTo: .zip) ?? .zip
+
+    /// Asks for recordings to import, with how many people spoke in them, or Conversations exported from Bekitzur.
     func chooseRecordingsToImport() async {
         let panel = NSOpenPanel()
-        panel.title = "Import recordings"
+        panel.title = "Import"
+        panel.message = "Choose recordings, or Conversations exported from Bekitzur."
         panel.prompt = "Import"
-        panel.allowedContentTypes = [.audio]
+        panel.allowedContentTypes = [.audio, Self.conversationType, .zip, .folder]
+        panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
         let people = NSPopUpButton()
         people.addItems(withTitles: Self.peopleChoices.map(Self.peopleTitle))
@@ -1142,10 +1147,13 @@ final class AppModel {
         people.map { "\($0) people" } ?? "Let Bekitzur decide"
     }
 
-    /// Copies recordings into new Conversations and processes them. A Conversation is dated from the recording's
-    /// metadata when it has a date, since due dates like "tomorrow" are counted from it, and from the file otherwise.
+    /// Copies recordings into new Conversations and processes them, and adds Conversations exported from Bekitzur as
+    /// they are. A Conversation is dated from the recording's metadata when it has a date, since due dates like
+    /// "tomorrow" are counted from it, and from the file otherwise.
     func importRecordings(_ urls: [URL], people: Int? = nil) async {
-        for url in urls {
+        let exported = urls.filter(Self.isExportedConversation)
+        for url in exported { await importConversations(from: url) }
+        for url in urls where !exported.contains(url) {
             do {
                 let asset = AVURLAsset(url: url)
                 let duration = try await asset.load(.duration).seconds
@@ -1175,6 +1183,63 @@ final class AppModel {
                 alert = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
             }
         }
+    }
+
+    /// A Conversation's file, a zip, as Conversations were sent before there was one, or a folder.
+    private static func isExportedConversation(_ url: URL) -> Bool {
+        ["bekitzur", "zip"].contains(url.pathExtension.lowercased()) || (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    }
+
+    /// Adds the Conversations in an exported file or folder as they are, and processes one that was recording or
+    /// processing when it was exported.
+    private func importConversations(from url: URL) async {
+        let library = self.library
+        do {
+            let imported = try await Task.detached { try library.importConversations(from: url) }.value
+            conversations = library.all()
+            for info in imported {
+                AppLog.write("\(info.id): imported from \(url.lastPathComponent)")
+                if info.status == .recording || info.status == .processing {
+                    update(info.id) {
+                        $0.status = .processing
+                        $0.step = "Waiting"
+                    }
+                    enqueue(info.id)
+                }
+            }
+            if let last = imported.last { selection = last.id }
+        } catch {
+            AppLog.write("Import of \(url.lastPathComponent) failed: \(error)")
+            alert = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
+        }
+    }
+
+    /// Asks where to save a Conversation as one file, to give to someone with Bekitzur, who opens it to import it.
+    func export(_ id: String) async {
+        guard let info = conversations.first(where: { $0.id == id }), info.status != .recording, info.status != .processing else { return }
+        let panel = NSSavePanel()
+        panel.title = "Export Conversation"
+        panel.message = "Someone with Bekitzur can open this file to add the Conversation, with its recording, Transcript, Speakers, and Notes."
+        panel.prompt = "Export"
+        let day = DateFormatter()
+        day.dateFormat = "yyyy-MM-dd"
+        panel.nameFieldStringValue = "\(Self.fileName(info.displayTitle)) \(day.string(from: info.startedAt)).\(ConversationLibrary.fileExtension)"
+        panel.allowedContentTypes = [Self.conversationType]
+        NSApp.activate()
+        guard await panel.begin() == .OK, let url = panel.url else { return }
+        let library = self.library
+        do {
+            try await Task.detached { try library.export(id, to: url) }.value
+            AppLog.write("\(id): exported")
+        } catch {
+            AppLog.write("\(id): export failed: \(error)")
+            alert = "Couldn't export the Conversation: \(error.localizedDescription)"
+        }
+    }
+
+    /// A title as a file name: without the slashes and colons Finder can't show, and not too long.
+    private static func fileName(_ title: String) -> String {
+        String(title.map { "/:".contains($0) ? "-" : $0 }.prefix(80)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func notifyNotesReady(id: String, title: String) {

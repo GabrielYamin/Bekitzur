@@ -77,6 +77,8 @@ struct ConversationDetail: View {
                     }
                 }
                 Button("Rename…") { model.renaming = info.id }
+                Button("Export…") { Task { await model.export(info.id) } }
+                    .disabled(info.status == .recording || info.status == .processing)
                 Button("Show in Finder") { model.showInFinder(info.id) }
                 Divider()
                 Button("Delete", role: .destructive) { model.delete(info.id) }

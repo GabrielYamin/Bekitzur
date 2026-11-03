@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return false
     }
 
-    /// Audio files opened with Bekitzur in Finder, or dropped on its Dock icon, are imported.
+    /// Audio files and exported Conversations opened with Bekitzur in Finder, or dropped on its Dock icon, are imported.
     func application(_ application: NSApplication, open urls: [URL]) {
         AppModel.shared.showMainWindow()
         Task { await AppModel.shared.importRecordings(urls) }
