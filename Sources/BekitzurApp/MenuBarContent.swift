@@ -94,7 +94,7 @@ struct MenuBarContent: View {
                             StatusDot(status: info.status)
                             Text(info.displayTitle).lineLimit(1)
                             Spacer()
-                            Text(info.startedAt, format: .dateTime.hour().minute()).foregroundStyle(.secondary)
+                            Text(info.displayDate).foregroundStyle(.secondary).fixedSize()
                         }
                         .contentShape(Rectangle())
                     }
@@ -151,6 +151,10 @@ extension ConversationInfo {
         case .failed: "Couldn't write Notes"
         default: "Conversation"
         }
+    }
+
+    var displayDate: String {
+        startedAt.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute())
     }
 }
 

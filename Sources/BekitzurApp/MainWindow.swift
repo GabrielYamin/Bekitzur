@@ -239,7 +239,7 @@ struct ConversationRow: View {
                     .fontWeight(info.status == .unreviewed ? .semibold : .regular)
                     .lineLimit(2)
                 HStack(spacing: 4) {
-                    Text(info.startedAt, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute())
+                    Text(info.displayDate)
                     if info.status == .recording {
                         Text("·")
                         RecordingTimer(since: info.startedAt)
