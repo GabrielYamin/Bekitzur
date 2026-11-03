@@ -67,7 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             UNNotificationCategory(identifier: AppModel.recordingCallNotification, actions: [UNNotificationAction(identifier: Self.stop, title: "Stop and write Notes")], intentIdentifiers: []),
         ])
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
-        AppLog.write("Launched build \(version); microphone permission: \(MicrophoneRecorder.permission); system audio permission: \(SystemAudioRecorder.access.rawValue)")
+        let memory = Int((Double(ProcessInfo.processInfo.physicalMemory) / Double(1 << 30)).rounded())
+        AppLog.write("Launched build \(version); \(memory) GB of memory; microphone permission: \(MicrophoneRecorder.permission); system audio permission: \(SystemAudioRecorder.access.rawValue)")
         Task { AppLog.write("At launch, \(await AppModel.notificationSettings())") }
 
         // SIGTERM (pkill, the build script) would otherwise end the process before a recording's files are finished.

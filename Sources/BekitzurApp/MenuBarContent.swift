@@ -6,6 +6,7 @@ struct MenuBarContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            RequirementsNote(model: model)
             PermissionsNote(model: model)
             ModelsNote(model: model)
             UpdateNote(model: model)

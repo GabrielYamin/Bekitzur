@@ -10,6 +10,7 @@ struct MainWindow: View {
             // Above the list rather than in its safe area, where rows scrolled under the boxes and showed through them.
             VStack(spacing: 0) {
                 VStack(spacing: 6) {
+                    RequirementsNote(model: model)
                     PermissionsNote(model: model)
                     ModelsNote(model: model)
                     UpdateNote(model: model)

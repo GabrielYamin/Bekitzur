@@ -6,7 +6,10 @@ struct ModelsNote: View {
     let model: AppModel
 
     var body: some View {
-        if let download = model.modelDownload {
+        if case .tooLow = model.memory {
+            // RequirementsNote says why there's nothing to download.
+            EmptyView()
+        } else if let download = model.modelDownload {
             VStack(alignment: .leading, spacing: 6) {
                 if let failure = download.failure {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {

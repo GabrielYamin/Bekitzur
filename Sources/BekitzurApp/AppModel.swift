@@ -71,6 +71,12 @@ final class AppModel {
     @ObservationIgnored private var recordingCall: String?
     /// Settings has something the user hasn't seen: a dot on the Settings buttons until they open it.
     private(set) var hasNewSettings: Bool
+    /// Whether this Mac has the memory to write Notes (`RequirementsNote`).
+    let memory = MemoryRequirement.thisMac
+    /// The user read that this Mac has less memory than Bekitzur is made for.
+    var memoryNoteSeen = UserDefaults.standard.bool(forKey: "memoryNoteSeen") {
+        didSet { UserDefaults.standard.set(memoryNoteSeen, forKey: "memoryNoteSeen") }
+    }
     /// The settings marked New while Settings is open: the ones that were new when it opened.
     private(set) var newSettingsShown: Set<NewSetting> = []
     @ObservationIgnored private var callWatch = CallWatch()
@@ -463,6 +469,10 @@ final class AppModel {
     /// Downloads the missing models, then the speaker models, and processes the Conversations that waited for them.
     func downloadModels() {
         guard modelTask == nil else { return }
+        if case .tooLow(let gigabytes) = memory {
+            AppLog.write("Models not downloaded: this Mac has \(gigabytes) GB of memory")
+            return
+        }
         let store = BekitzurPaths.modelStore
         let files = store.missing()
         let total = store.remainingBytes(files)
@@ -555,13 +565,30 @@ final class AppModel {
     /// in whisper.cpp ends only live transcription; one took the whole app down mid-recording.
     static let transcribesLive = true
 
-    func startRecording() async {
+    /// Free space under which a recording starts only after a warning: a call takes under 100 MB an hour (77 to 78 MB
+    /// for two calls, 31 for a room), so this is room for twenty hours.
+    static let lowDiskSpace: Int64 = 2_000_000_000
+
+    /// - Parameter automatically: For a call that started, where nobody's there to answer a question, so low disk space
+    ///   is only told in a notification.
+    func startRecording(automatically: Bool = false) async {
         guard recordingID == nil else { return }
         guard await MicrophoneRecorder.requestAccess() else {
             AppLog.write("Recording not started: microphone permission \(MicrophoneRecorder.permission)")
             alert = "Bekitzur needs the microphone. Allow it in System Settings → Privacy & Security → Microphone, then try again."
             await refreshPermissions()
             return
+        }
+        if let free = (try? BekitzurPaths.conversations.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage,
+           free < Self.lowDiskSpace {
+            let space = free.formatted(.byteCount(style: .file))
+            let why = "A recording takes under 100 MB an hour, but if the disk fills up, the rest of it is lost."
+            AppLog.write("Starting a recording with \(space) free")
+            if automatically {
+                notify("low disk space", title: "Only \(space) free on this Mac", body: why)
+            } else if !ask("Only \(space) free on this Mac", why, confirm: "Record Anyway", cancel: "Cancel") {
+                return
+            }
         }
         do {
             var info = try library.create()
@@ -744,7 +771,7 @@ final class AppModel {
     private func recordCall(in app: String) {
         guard !isRecording, voiceSample.isFinished else { return }
         Task {
-            await startRecording()
+            await startRecording(automatically: true)
             guard isRecording else { return }
             recordingCall = app
             AppLog.write("Started recording the call in \(app) on its own")

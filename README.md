@@ -30,8 +30,8 @@ Bekitzur is provided as is, without warranty of any kind, and its authors aren't
 
 ## Requirements
 
-- A Mac with Apple silicon and at least 32 GB of memory, running macOS 26 or later
-- About 20 GB of free disk space for the models
+- A Mac with Apple silicon and at least 32 GB of memory, running macOS 26 or later. With 24 GB the app says writing Notes may be slow or fail; with less, it doesn't download its models.
+- About 20 GB of free disk space for the models, which the download checks; a recording warns first with less than 2 GB free
 - To build: Xcode 26 or its Command Line Tools (Swift 6.2)
 
 ## Working on a new Mac
