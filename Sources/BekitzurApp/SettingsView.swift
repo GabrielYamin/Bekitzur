@@ -12,7 +12,11 @@ private struct VocabularySection: View {
     var body: some View {
         Section {
             HStack {
-                TextField("Add a term, like your product's name", text: $newTerm)
+                // In a grouped Form the title is a label beside an empty field with no border, which read as text
+                // with an Add button that never turned on.
+                TextField("New term", text: $newTerm, prompt: Text("Add a term, like your product's name"))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
                     .onSubmit(add)
                 Button("Add", action: add).disabled(newTerm.trimmingCharacters(in: .whitespaces).isEmpty)
             }
