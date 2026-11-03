@@ -8,12 +8,12 @@ This repository is the source. People download the app from [Bekitzur-releases](
 
 - Records the microphone and everything the Mac plays, so both sides of a call, as two tracks that keep time even when the Mac is busy, lined up after the call by the copy of it that laptop speakers put in the microphone.
 - Shows a live Transcript while recording, and tells Hebrew from English by the first speech.
-- Offers to record when Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, and to stop once the call is over.
-- Transcribes Hebrew with ivrit.ai's Whisper fine-tune and English with Whisper large-v3-turbo, through whisper.cpp. English terms spoken in Hebrew come out in English letters (the Vocabulary), and corrections teach it new spellings.
+- Offers to record when Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, and to stop once the call is over; or, if you choose, records the call on its own and stops when it ends.
+- Transcribes Hebrew with ivrit.ai's Whisper fine-tune and English with Whisper large-v3-turbo, through whisper.cpp. A call's two sides are transcribed each on its own, the microphone without the speakers' copy of the call, so two people talking at once are both written down. English terms spoken in Hebrew come out in English letters (the Vocabulary), and corrections teach it new spellings.
 - Separates Speakers with FluidAudio (pyannote community-1 and NVIDIA's Nemotron 3 Diarization), and names people it has heard before from their Voiceprints.
 - Writes the Notes with Gemma 4 26B-A4B through llama.cpp. Quotes are checked against the Transcript, and due dates are worked out in code.
-- For review: listen back along the Transcript, fix words and Speakers, update the Notes, and ask questions that are answered only from the Transcript.
-- Downloads its own models with their progress, imports recordings made elsewhere, and updates itself from signed releases after asking.
+- For review: listen back along the Transcript, fix words and Speakers, update or edit the Notes, rename Conversations, and ask questions that are answered only from the Transcript.
+- Downloads its own models with their progress, imports recordings made elsewhere, exports a Conversation as one file that someone else with Bekitzur opens to add it, and updates itself from signed releases after asking.
 
 [docs/plan.md](docs/plan.md) has the design and a log of what was built and how it measured. [CONTEXT.md](CONTEXT.md) defines the terms, like Conversation, Speaker, and Voiceprint.
 
