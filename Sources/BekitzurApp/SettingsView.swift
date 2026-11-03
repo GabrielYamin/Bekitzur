@@ -137,6 +137,12 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            Section("Disclaimer") {
+                Text("Bekitzur is provided as is, without warranty of any kind, and its authors aren't liable for anything that comes of using it, like a recording that's lost or incomplete, a mistake in a Transcript, Speakers, or Notes, or a decision made from them. Everything runs on your Mac: recordings, Transcripts, Notes, and voices stay on it, and Bekitzur goes online only to download its models and updates. You're responsible for telling the people you record, and for following the law and your organization's rules on recording.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }

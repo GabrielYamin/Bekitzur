@@ -23,6 +23,10 @@ Recording, transcription, speaker recognition, and Notes all run on the Mac. Con
 
 Recordings and personal data stay out of git: `eval/recordings/` and `eval/private/` (the scripted read and the team's own terms) are ignored, and test data uses invented names.
 
+## Disclaimer
+
+Bekitzur is provided as is, without warranty of any kind, and its authors aren't liable for anything that comes of using it, like a recording that's lost or incomplete, a mistake in a Transcript, Speakers, or Notes, or a decision made from them. Everything runs on your Mac: recordings, Transcripts, Notes, and voices stay on it, and Bekitzur goes online only to download its models and updates. You're responsible for telling the people you record, and for following the law and your organization's rules on recording. The [MIT License](LICENSE) has the full terms.
+
 ## Requirements
 
 - A Mac with Apple silicon and at least 32 GB of memory, running macOS 26 or later
