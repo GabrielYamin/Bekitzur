@@ -50,6 +50,23 @@ public struct ActionItem: Codable, Sendable, Equatable {
         self.sourceTurns = sourceTurns
         self.quote = quote
     }
+
+    /// An Owner or due phrase of "null", or blank, is none, from the model and from saved Notes alike: a build from before
+    /// October 28 wrote null as text for each of a meeting's Action Items, which showed as a due date of "null".
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        text = try container.decode(String.self, forKey: .text)
+        owner = Self.given(try container.decodeIfPresent(String.self, forKey: .owner))
+        duePhrase = Self.given(try container.decodeIfPresent(String.self, forKey: .duePhrase))
+        dueDate = try container.decodeIfPresent(String.self, forKey: .dueDate)
+        sourceTurns = try container.decode([String].self, forKey: .sourceTurns)
+        quote = try container.decode(String.self, forKey: .quote)
+    }
+
+    private static func given(_ text: String?) -> String? {
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty || trimmed.lowercased() == "null" ? nil : text
+    }
 }
 
 public struct OpenQuestion: Codable, Sendable, Equatable {

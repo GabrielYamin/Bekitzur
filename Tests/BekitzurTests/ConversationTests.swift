@@ -97,4 +97,23 @@ struct ConversationTests {
         #expect(markdown.contains("- [ ] **Speaker 10**: Review what Speaker 1 shipped\n"))
         #expect(markdown.contains("## Open Questions\n- Will Speaker 1 need help?"))
     }
+
+    /// A build from before October 28 wrote null as text for each of a meeting's five Action Items, which showed as a due
+    /// date of "null", in the Notes and in a Conversation imported from it.
+    @Test func nullWrittenAsTextIsNoOwnerOrDueDate() throws {
+        let fromTheModel = #"{"text": "Send the report", "owner": "null", "due_phrase": " NULL ", "source_turns": ["T001"], "quote": "אשלח"}"#
+        let saved = #"{"text": "Fix the build", "owner": "Speaker 1", "duePhrase": "null", "sourceTurns": [], "quote": ""}"#
+        let said = #"{"text": "Ship it", "owner": "", "duePhrase": "by Friday", "sourceTurns": [], "quote": ""}"#
+        let model = JSONDecoder()
+        model.keyDecodingStrategy = .convertFromSnakeCase
+
+        let first = try model.decode(ActionItem.self, from: Data(fromTheModel.utf8))
+        let second = try JSONDecoder().decode(ActionItem.self, from: Data(saved.utf8))
+        let third = try JSONDecoder().decode(ActionItem.self, from: Data(said.utf8))
+
+        #expect(first.owner == nil && first.duePhrase == nil && first.sourceTurns == ["T001"])
+        #expect(second.owner == "Speaker 1" && second.duePhrase == nil)
+        #expect(third.owner == nil && third.duePhrase == "by Friday")
+        #expect(try JSONDecoder().decode(ActionItem.self, from: JSONEncoder().encode(second)) == second)
+    }
 }
