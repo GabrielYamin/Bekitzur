@@ -80,21 +80,14 @@ struct NotesView: View {
                                 HStack(spacing: 6) {
                                     Chip(item.owner ?? "No Owner", systemImage: "person", prominent: item.owner != nil)
                                     if let due = NotesMarkdown.dueText(item) {
-                                        Chip(due, systemImage: "calendar", prominent: true)
-                                            .help(item.duePhrase.map { "Said: \"\($0)\"" } ?? "")
+                                        let said = item.duePhrase.map { "Said: \"\($0)\"" }
                                         if item.dueDate != nil {
-                                            Button {
+                                            DueChip(text: due, help: ["Add to Calendar", said].compactMap(\.self).joined(separator: ". ")) {
                                                 addToCalendar(item)
-                                            } label: {
-                                                Image(systemName: "plus")
-                                                    .font(.caption.bold())
-                                                    .foregroundStyle(.secondary)
-                                                    .frame(width: 22, height: 22)
-                                                    .background(.quaternary.opacity(0.6), in: Circle())
-                                                    .contentShape(Circle())
                                             }
-                                            .buttonStyle(.plain)
-                                            .help("Add to Calendar")
+                                        } else {
+                                            Chip(due, systemImage: "calendar", prominent: true)
+                                                .help(said ?? "")
                                         }
                                     }
                                 }
@@ -410,5 +403,35 @@ private struct Chip: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(prominent ? AnyShapeStyle(.tint.opacity(0.15)) : AnyShapeStyle(.quaternary.opacity(0.5)), in: Capsule())
+    }
+}
+
+/// A due day that adds its Action Item to the calendar: the due Chip with a + after the day, lit under the pointer.
+private struct DueChip: View {
+    let text: String
+    let help: String
+    let action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Label {
+                HStack(spacing: 5) {
+                    Text(text)
+                    Image(systemName: "plus").font(.caption.bold())
+                }
+            } icon: {
+                Image(systemName: "calendar")
+            }
+            .font(.callout)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.tint.opacity(hovering ? 0.28 : 0.15), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
     }
 }
