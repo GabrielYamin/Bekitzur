@@ -63,7 +63,12 @@ struct SettingsView: View {
                 Text("When Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, Bekitzur offers to record, and once it stops, to stop recording. A call can't be seen while it rings, so the offer comes when you answer or join.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                Toggle("Record calls automatically", isOn: $model.recordsCallsAutomatically)
+                Toggle(isOn: $model.recordsCallsAutomatically) {
+                    HStack(spacing: 6) {
+                        Text("Record calls automatically")
+                        if model.newSettingsShown.contains(.recordCallsAutomatically) { NewBadge() }
+                    }
+                }
                 Text("Recording starts on its own when a call does, and stops once the call is over, with a notification each time. A recording you start yourself never stops on its own. Let the people on the call know they're recorded.")
                     .font(.callout)
                     .foregroundStyle(.secondary)

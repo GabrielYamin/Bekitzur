@@ -59,6 +59,10 @@ final class AppModel {
     /// The app of the call that started the recording, which stops it once the call is over; nil for a recording the
     /// user started, which a call ending only offers to stop.
     @ObservationIgnored private var recordingCall: String?
+    /// Settings has something the user hasn't seen: a dot on the Settings buttons until they open it.
+    private(set) var hasNewSettings: Bool
+    /// The settings marked New while Settings is open: the ones that were new when it opened.
+    private(set) var newSettingsShown: Set<NewSetting> = []
     @ObservationIgnored private var callWatch = CallWatch()
     @ObservationIgnored private var microphoneUsers: MicrophoneUsers?
     @ObservationIgnored private var callCheck: Task<Void, Never>?
@@ -149,6 +153,7 @@ final class AppModel {
         userName = UserDefaults.standard.string(forKey: "userName") ?? NSFullUserName()
         suggestsCalls = UserDefaults.standard.object(forKey: "suggestCalls") as? Bool ?? true
         recordsCallsAutomatically = UserDefaults.standard.bool(forKey: "recordCallsAutomatically")
+        hasNewSettings = UserDefaults.standard.integer(forKey: "seenSettingsRevision") < NewSetting.revision
         vocabulary = VocabularyStore(url: BekitzurPaths.vocabulary).load()
         try? FileManager.default.createDirectory(at: BekitzurPaths.conversations, withIntermediateDirectories: true)
         conversations = library.all()
@@ -1571,6 +1576,11 @@ final class AppModel {
     }
 
     func showSettings() {
+        if hasNewSettings {
+            newSettingsShown = NewSetting.added
+            hasNewSettings = false
+            UserDefaults.standard.set(NewSetting.revision, forKey: "seenSettingsRevision")
+        }
         settingsWindow.show()
     }
 

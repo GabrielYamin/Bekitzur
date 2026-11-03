@@ -98,6 +98,10 @@ struct MenuBarContent: View {
             HStack {
                 Button("Open Bekitzur") { model.showMainWindow() }
                 Button("Settings…") { model.showSettings() }
+                    .overlay(alignment: .topTrailing) {
+                        if model.hasNewSettings { NewDot().offset(x: 3, y: -3) }
+                    }
+                    .help(model.hasNewSettings ? "Settings has something new" : "")
                 Spacer()
                 Button("Quit") { NSApp.terminate(nil) }
             }

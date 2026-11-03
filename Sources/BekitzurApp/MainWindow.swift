@@ -58,10 +58,17 @@ struct MainWindow: View {
                 Button {
                     model.showSettings()
                 } label: {
-                    Label("Settings", systemImage: "gearshape")
+                    Label {
+                        Text("Settings")
+                    } icon: {
+                        Image(systemName: "gearshape")
+                            .overlay(alignment: .topTrailing) {
+                                if model.hasNewSettings { NewDot().offset(x: 2, y: -2) }
+                            }
+                    }
                 }
                 .keyboardShortcut(",", modifiers: .command)
-                .help("Settings (⌘,)")
+                .help(model.hasNewSettings ? "Settings has something new (⌘,)" : "Settings (⌘,)")
             }
         }
         .alert("Bekitzur", isPresented: Binding(get: { model.alert != nil }, set: { if !$0 { model.alert = nil } })) {
