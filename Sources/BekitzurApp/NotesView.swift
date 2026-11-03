@@ -7,6 +7,8 @@ struct NotesView: View {
     let play: (Double) -> Void
     /// Saves the user's changes to the Notes.
     let save: (Notes) -> Void
+    /// Opens an Action Item with a due day in the calendar app.
+    let addToCalendar: (ActionItem) -> Void
     /// The Notes being changed while `editing`. It's never nil: the editor's fields still read it once more as editing
     /// ends, and an optional one set to nil on Save or Cancel crashed the app as SwiftUI unwrapped it.
     @ViewState private var draft = NotesDraft(Notes())
@@ -80,6 +82,20 @@ struct NotesView: View {
                                     if let due = NotesMarkdown.dueText(item) {
                                         Chip(due, systemImage: "calendar", prominent: true)
                                             .help(item.duePhrase.map { "Said: \"\($0)\"" } ?? "")
+                                        if item.dueDate != nil {
+                                            Button {
+                                                addToCalendar(item)
+                                            } label: {
+                                                Image(systemName: "plus")
+                                                    .font(.caption.bold())
+                                                    .foregroundStyle(.secondary)
+                                                    .frame(width: 22, height: 22)
+                                                    .background(.quaternary.opacity(0.6), in: Circle())
+                                                    .contentShape(Circle())
+                                            }
+                                            .buttonStyle(.plain)
+                                            .help("Add to Calendar")
+                                        }
                                     }
                                 }
                             }

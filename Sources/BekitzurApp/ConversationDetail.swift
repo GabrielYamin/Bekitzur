@@ -158,6 +158,8 @@ struct ConversationDetail: View {
                             playback.play()
                         } save: { notes in
                             model.saveNotes(notes, for: info.id)
+                        } addToCalendar: { item in
+                            model.addToCalendar(item, in: info.id)
                         }
                         // A Conversation's draft stays with it when another one is selected.
                         .id(info.id)

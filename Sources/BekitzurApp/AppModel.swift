@@ -1242,6 +1242,26 @@ final class AppModel {
         }
     }
 
+    /// Opens an Action Item with a due day as an event in whichever app opens calendar files, where the user adds it.
+    func addToCalendar(_ item: ActionItem, in id: String) {
+        guard let info = conversations.first(where: { $0.id == id }),
+              let event = CalendarEvent(item, conversationID: id, conversationTitle: info.displayTitle, conversationDate: info.startedAt) else { return }
+        let folder = FileManager.default.temporaryDirectory.appending(path: "Bekitzur calendar events", directoryHint: .isDirectory)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            let file = folder.appending(path: "\(Self.fileName(item.text)).ics")
+            try Data(event.ics().utf8).write(to: file, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+            guard NSWorkspace.shared.open(file) else {
+                alert = "No app on this Mac opens calendar files."
+                return
+            }
+            AppLog.write("\(id): an Action Item went to the calendar app")
+        } catch {
+            alert = "Couldn't make the calendar event: \(error.localizedDescription)"
+        }
+    }
+
     /// A title as a file name: without the slashes and colons Finder can't show, and not too long.
     private static func fileName(_ title: String) -> String {
         String(title.map { "/:".contains($0) ? "-" : $0 }.prefix(80)).trimmingCharacters(in: .whitespacesAndNewlines)
