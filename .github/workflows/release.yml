@@ -5,10 +5,6 @@
 #
 # Needs, in this repository's Settings → Secrets and variables → Actions:
 #   - secret UPDATE_SIGNING_KEY: the private key from scripts/make-update-key.swift, whose public half is in App/Info.plist
-#
-# Copies of Bekitzur up to 0.6.4 check for updates in GabrielYamin/Bekitzur-releases. While the variable RELEASES_REPO
-# (GabrielYamin/Bekitzur-releases) and the secret RELEASES_TOKEN (a fine-grained token that can write contents of that
-# repository and nothing else) are set, each release is published there too, pointing to the download here.
 name: Release
 
 on:
@@ -97,33 +93,3 @@ jobs:
         run: |
           gh release create "v$VERSION" build/Bekitzur.zip build/update.json --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --title "Bekitzur $VERSION" --notes-file "release/notes/$VERSION.md"
-
-      - name: Publish in Bekitzur-releases, for copies that still check there
-        if: vars.RELEASES_REPO != ''
-        env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
-        run: |
-          gh release create "v$VERSION" build/Bekitzur.zip build/update.json \
-            --repo "$RELEASES_REPO" --title "Bekitzur $VERSION" --notes-file "release/notes/$VERSION.md"
-
-          # publish <path in Bekitzur-releases> <file here>
-          publish() {
-            local sha published=""
-            # For a file that isn't there yet, gh api prints the error instead of applying --jq, so only its exit
-            # status says whether there's a sha.
-            if sha=$(gh api "repos/$RELEASES_REPO/contents/$1" --jq '.sha' 2>/dev/null); then
-              published=$(gh api "repos/$RELEASES_REPO/contents/$1" --jq '.content' | base64 --decode)
-            else
-              sha=""
-            fi
-            if [ "$published" = "$(cat "$2")" ]; then
-              echo "$1 already current"
-              return
-            fi
-            gh api --method PUT "repos/$RELEASES_REPO/contents/$1" -f message="Update $1" \
-              -f content="$(base64 < "$2" | tr -d '\n')" ${sha:+-f sha="$sha"} > /dev/null
-            echo "$1 updated"
-          }
-          publish README.md release/README.md
-          publish LICENSE LICENSE
