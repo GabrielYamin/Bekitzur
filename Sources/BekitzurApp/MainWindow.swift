@@ -4,6 +4,9 @@ import SwiftUI
 struct MainWindow: View {
     @Bindable var model: AppModel
     @ViewState private var newTitle = ""
+    // PROTOTYPE (people filter): the filter the variants share, and the variant shown.
+    @ViewState private var people = PeopleFilter()
+    @AppStorage("peopleFilterVariant") private var variant = PeopleFilterVariant.menu
 
     var body: some View {
         NavigationSplitView {
@@ -18,7 +21,20 @@ struct MainWindow: View {
                 .padding(.horizontal, 10)
                 .padding(.top, 6)
                 .padding(.bottom, 8)
+                if PeopleFilterVariant.isOn, variant == .menu {
+                    PeopleMenuFilter(filter: $people)
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                }
                 conversationList
+            }
+            .modifier(PeopleSearchIfShown(shown: PeopleFilterVariant.isOn && variant == .search, filter: $people))
+            .task(id: model.conversations.map(\.id).joined() + model.userName) {
+                guard PeopleFilterVariant.isOn else { return }
+                people.index = await PeopleIndex.build(model.conversations, library: model.library, me: model.userName)
+            }
+            .onChange(of: variant) { _, shown in
+                if shown != .search { people.query = "" }
             }
             .dropDestination(for: URL.self) { urls, _ in
                 Task { await model.importRecordings(urls) }
@@ -76,23 +92,49 @@ struct MainWindow: View {
         } message: {
             Text(model.alert ?? "")
         }
+        .overlay(alignment: .bottom) {
+            if PeopleFilterVariant.isOn {
+                PrototypeSwitcher(variant: $variant, state: prototypeState).padding(.bottom, 14)
+            }
+        }
         .task { await model.refreshPermissions() }
+    }
+
+    // PROTOTYPE (people filter)
+    private var visibleConversations: [ConversationInfo] {
+        PeopleFilterVariant.isOn ? model.conversations.filter(people.matches) : model.conversations
+    }
+
+    // PROTOTYPE (people filter): what's picked and what it leaves, shown in the switcher.
+    private var prototypeState: String {
+        let picked = people.selected.isEmpty ? "No one picked" : "Picked: \(people.selected.joined(separator: " + "))"
+        let typed = people.query.isEmpty ? "" : ", \"\(people.query)\""
+        return "\(picked)\(typed) · \(visibleConversations.count) of \(model.conversations.count) Conversations · \(people.index.people.count) people named"
+    }
+
+    @ViewBuilder private var rows: some View {
+        ForEach(visibleConversations) { info in
+            ConversationRow(info: info)
+                .tag(info.id)
+                .contextMenu {
+                    Button("Rename…") { model.renaming = info.id }
+                    Button("Export…") { Task { await model.export(info.id) } }
+                        .disabled(info.status == .recording || info.status == .processing)
+                    Button("Show in Finder") { model.showInFinder(info.id) }
+                    Divider()
+                    Button("Delete", role: .destructive) { model.delete(info.id) }
+                        .disabled(info.status == .recording || info.status == .processing)
+                }
+        }
     }
 
     private var conversationList: some View {
         List(selection: $model.selection) {
-            ForEach(model.conversations) { info in
-                ConversationRow(info: info)
-                    .tag(info.id)
-                    .contextMenu {
-                        Button("Rename…") { model.renaming = info.id }
-                        Button("Export…") { Task { await model.export(info.id) } }
-                            .disabled(info.status == .recording || info.status == .processing)
-                        Button("Show in Finder") { model.showInFinder(info.id) }
-                        Divider()
-                        Button("Delete", role: .destructive) { model.delete(info.id) }
-                            .disabled(info.status == .recording || info.status == .processing)
-                    }
+            if PeopleFilterVariant.isOn, variant == .section {
+                PeopleSection(filter: $people)
+                Section("Conversations") { rows }
+            } else {
+                rows
             }
         }
         .overlay {
@@ -102,6 +144,8 @@ struct MainWindow: View {
                     systemImage: "waveform",
                     description: Text("Record or import one above, or drop a recording or an exported Conversation here.")
                 )
+            } else if visibleConversations.isEmpty, variant != .section {
+                ContentUnavailableView("No Conversations with them", systemImage: "person.2.slash", description: Text("Each Conversation shown has everyone picked in it."))
             }
         }
         .alert("Rename Conversation", isPresented: Binding(get: { model.renaming != nil }, set: { if !$0 { model.renaming = nil } })) {
