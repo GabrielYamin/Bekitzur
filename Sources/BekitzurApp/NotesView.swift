@@ -7,8 +7,10 @@ struct NotesView: View {
     let play: (Double) -> Void
     /// Saves the user's changes to the Notes.
     let save: (Notes) -> Void
-    /// The Notes being changed, while they're edited.
-    @ViewState private var draft: NotesDraft?
+    /// The Notes being changed while `editing`. It's never nil: the editor's fields still read it once more as editing
+    /// ends, and an optional one set to nil on Save or Cancel crashed the app as SwiftUI unwrapped it.
+    @ViewState private var draft = NotesDraft(Notes())
+    @ViewState private var editing = false
 
     private var notes: Notes { result.notes }
     private var turns: [String: Turn] { Dictionary(result.turns.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }) }
@@ -16,23 +18,24 @@ struct NotesView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                if result.notesEdited == true, draft == nil {
+                if result.notesEdited == true, !editing {
                     Label("You've edited these Notes", systemImage: "pencil").font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
-                if draft == nil {
+                if !editing {
                     Button {
                         draft = NotesDraft(notes)
+                        editing = true
                     } label: {
                         Label("Edit", systemImage: "pencil")
                     }
                     .help("Change the Notes: the title, summary, and each item")
                 } else {
-                    Button("Cancel") { draft = nil }
+                    Button("Cancel") { editing = false }
                         .keyboardShortcut(.cancelAction)
                     Button("Save") {
-                        if let draft { save(draft.applied(to: notes)) }
-                        draft = nil
+                        save(draft.applied(to: notes))
+                        editing = false
                     }
                     .keyboardShortcut("s", modifiers: .command)
                     .buttonStyle(.borderedProminent)
@@ -42,9 +45,9 @@ struct NotesView: View {
             .padding(.horizontal, 24)
             .frame(maxWidth: 780)
             .frame(maxWidth: .infinity)
-            if let binding = Binding($draft) {
+            if editing {
                 ScrollView {
-                    NotesEditor(draft: binding)
+                    NotesEditor(draft: $draft)
                         .padding(24)
                         .frame(maxWidth: 780, alignment: .leading)
                         .frame(maxWidth: .infinity)
