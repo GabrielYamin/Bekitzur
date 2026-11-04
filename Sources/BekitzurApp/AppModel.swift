@@ -489,7 +489,7 @@ final class AppModel {
         let store = BekitzurPaths.modelStore
         let missing = store.missing()
         if missing != missingModels {
-            AppLog.write(missing.isEmpty ? "Every model downloaded" : "Models to download: " + missing.map(\.name).joined(separator: ", "))
+            AppLog.write(missing.isEmpty ? "Every model downloaded" : "Models to download: " + ModelFile.groups(of: missing).map(\.name).joined(separator: ", "))
         }
         missingModels = missing
         modelBytesLeft = store.remainingBytes(missing)
@@ -498,9 +498,10 @@ final class AppModel {
     /// What the models note says before a download starts.
     var modelsMessage: String {
         let size = modelBytesLeft.formatted(.byteCount(style: .file))
-        if missingModels.allSatisfy({ BekitzurPaths.modelStore.installed($0) != nil }) {
-            return missingModels.count == 1
-                ? "A new \(missingModels[0].name.lowercased()) is ready to download (\(size))."
+        if missingModels.allSatisfy({ !$0.required || BekitzurPaths.modelStore.installed($0) != nil }) {
+            let models = ModelFile.groups(of: missingModels)
+            return models.count == 1
+                ? "A new \(models[0].name.lowercased()) is ready to download (\(size))."
                 : "New models are ready to download (\(size))."
         }
         return "Bekitzur needs its speech and language models to transcribe and write Notes: \(size) to download."
@@ -524,7 +525,7 @@ final class AppModel {
             AppLog.write("Models not downloaded: \(failure)")
             return
         }
-        AppLog.write("Downloading the models: \(files.map(\.name).joined(separator: ", ")), \(total.formatted(.byteCount(style: .file))) to go")
+        AppLog.write("Downloading the models: \(ModelFile.groups(of: files).map(\.name).joined(separator: ", ")), \(total.formatted(.byteCount(style: .file))) to go")
         modelDownload = ModelDownload(step: "Starting the download", total: total)
         modelTask = Task { await runModelDownload(files, into: store) }
     }
@@ -964,7 +965,7 @@ final class AppModel {
 
     private func processNext() {
         guard processingID == nil, !waiting.isEmpty else { return }
-        guard BekitzurPaths.modelStore.usable() else {
+        guard BekitzurPaths.modelStore.usable(ModelFile.required) else {
             for id in waiting { update(id) { $0.step = "Waiting for the models" } }
             return
         }

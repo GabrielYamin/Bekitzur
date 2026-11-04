@@ -172,10 +172,11 @@ struct SettingsView: View {
             VocabularySection(model: model)
 
             Section("Models") {
-                ForEach(ModelFile.all) { file in
-                    LabeledContent(file.name) {
-                        let size = file.bytes.formatted(.byteCount(style: .file))
-                        Text(model.missingModels.contains(file) ? "Not downloaded, \(size)" : "Downloaded, \(size)").foregroundStyle(.secondary)
+                ForEach(ModelFile.groups) { group in
+                    LabeledContent(group.name) {
+                        let size = group.bytes.formatted(.byteCount(style: .file))
+                        let missing = group.files.contains(where: model.missingModels.contains)
+                        Text(missing ? "Not downloaded, \(size)" : "Downloaded, \(size)").foregroundStyle(.secondary)
                     }
                 }
                 ModelsNote(model: model)

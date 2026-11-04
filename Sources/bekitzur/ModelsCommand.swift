@@ -18,9 +18,10 @@ struct ModelsCommand: AsyncParsableCommand {
 
     func run() async throws {
         let store = ModelStore(folder: URL(filePath: folder))
-        for file in ModelFile.all {
-            let state = store.has(file) ? "downloaded" : store.installed(file) != nil ? "not downloaded; reading the file it replaces" : "not downloaded"
-            print("\(file.name), \(file.bytes.formatted(.byteCount(style: .file))): \(state)")
+        for group in ModelFile.groups {
+            let state = group.files.allSatisfy(store.has) ? "downloaded"
+                : group.files.allSatisfy({ store.installed($0) != nil }) ? "not downloaded; reading the file it replaces" : "not downloaded"
+            print("\(group.name), \(group.bytes.formatted(.byteCount(style: .file))): \(state)\(group.files.allSatisfy(\.required) ? "" : " (optional)")")
         }
         guard download else { return }
         let downloader = ModelDownloader(log: { log($0) })

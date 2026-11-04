@@ -81,7 +81,7 @@ swift build -c release --product bekitzur
 .build/release/bekitzur transcribe --live --language auto recording.m4a
 ```
 
-Its commands are `process` (Transcript, Speakers, and Notes for one recording), `transcribe`, `language`, `speech`, `speakers`, `enroll`, `align`, `notes`, `vocabulary`, `ask`, `models`, and two experiments, `audio-check` and `english-terms`. `bekitzur help <command>` explains each one.
+Its commands are `process` (Transcript, Speakers, and Notes for one recording), `transcribe`, `language`, `speech`, `speakers`, `enroll`, `align`, `separate`, `notes`, `vocabulary`, `ask`, `models`, and two experiments, `audio-check` and `english-terms`. `bekitzur help <command>` explains each one.
 
 ## How the code is organized
 
@@ -131,8 +131,9 @@ And these models, which the app downloads and which aren't part of it:
 | [pyannote speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) with WeSpeaker and BUT Speech@FIT, [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/speaker-diarization-coreml) | Speaker embeddings and separation | CC BY 4.0 |
 | [NVIDIA Nemotron 3 Diarization](https://huggingface.co/nvidia/Nemotron-3-Diarization), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/nemotron-3-diarization-coreml) | Speaker separation | OpenMDW 1.1 |
 | [NVIDIA Streaming Sortformer](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/diar-streaming-sortformer-coreml) | Speaker separation in installs from before Nemotron, until its model is downloaded | NVIDIA Open Model License |
+| [MossFormer2_SS_16K](https://huggingface.co/alibabasglab/MossFormer2_SS_16K) from Alibaba's [ClearerVoice-Studio](https://github.com/modelscope/ClearerVoice-Studio), [converted to Core ML](https://huggingface.co/Moipee/MossFormer2-SS-16K-CoreML) | Separating two people who talk at once | Apache 2.0 |
 
-Thanks to ivrit.ai for open Hebrew speech models, to the ggml authors for whisper.cpp and llama.cpp, to Fluid Inference for FluidAudio and its Core ML conversions, and to OpenAI, Google, pyannote, WeSpeaker, BUT Speech@FIT, Silero, and NVIDIA for releasing their models.
+Thanks to ivrit.ai for open Hebrew speech models, to the ggml authors for whisper.cpp and llama.cpp, to Fluid Inference for FluidAudio and its Core ML conversions, and to OpenAI, Google, Alibaba, pyannote, WeSpeaker, BUT Speech@FIT, Silero, and NVIDIA for releasing their models.
 
 The full license texts of the software in the app are in [App/Resources/Acknowledgements.txt](App/Resources/Acknowledgements.txt), which ships inside the app.
 
