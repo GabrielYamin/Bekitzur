@@ -32,6 +32,8 @@ public struct ConversationInfo: Codable, Identifiable, Sendable, Hashable {
     /// microphone heard: measured after recording, on the microphone as `microphoneDelay` places it. Empty when the
     /// microphone didn't hear the call, as with headphones; nil until measured.
     public var systemAudioDelays: [TrackDelay]?
+    /// People who talked at once are still to be separated, which happens after the Notes are written.
+    public var separating: Bool?
 
     public init(id: String, startedAt: Date, language: ConversationLanguage? = nil, status: ConversationStatus) {
         self.id = id
@@ -72,6 +74,8 @@ public struct ProcessedConversation: Codable, Sendable, Equatable {
     public var notesFixes: Set<TranscriptFlags.Word>?
     /// The user changed the Notes, which writing them again replaces.
     public var notesEdited: Bool?
+    /// Separating people who talked at once, after the Notes were written, changed lines they cite.
+    public var separationChangedNotes: Bool?
 
     public init(transcript: Transcript, speakers: [ConversationSpeaker], turns: [Turn], notes: Notes, notesFixes: Set<TranscriptFlags.Word>? = nil, notesEdited: Bool? = nil) {
         self.transcript = transcript

@@ -20,7 +20,7 @@ struct OverlapSeparationTests {
     private func found(_ start: Double, _ text: String, voice: String, probability: Float = 0.9, confidence: Float = 0.9) -> OverlapSeparation.Found {
         OverlapSeparation.Found(
             word: TranscriptWord(start: start, end: start + 0.3, text: text, probability: probability),
-            speaker: voice == "S1" ? "Speaker 1" : "Speaker 2",
+            label: voice == "S1" ? "Speaker 1" : "Speaker 2",
             voice: voice,
             input: nil,
             confidence: confidence
@@ -212,6 +212,88 @@ struct OverlapSeparationTests {
         )
 
         #expect(merged == segments)
+    }
+
+    @Test func aWordTheUserMarkedStaysWithItsSpeaker() {
+        let segments = [segment([(2.0, "אני"), (5.5, "ושנבין")], speaker: "Speaker 1")]
+        var flags = TranscriptFlags()
+        flags.toggle(segments[0].words![1])
+
+        let merged = OverlapSeparation.merge(segments, found: [found(5.52, "שנבין", voice: "S2")], activity: activity, flags: flags)
+
+        #expect(merged.segments == segments && merged.added == 0)
+    }
+
+    @Test func aLineMarkedAsSomeoneElsesIsLeftAlone() {
+        let segments = [segment([(2.0, "אני"), (2.5, "חושב"), (5.5, "ושנבין")], speaker: "Speaker 1")]
+        var flags = TranscriptFlags()
+        flags.toggleSpeaker(lineStartingAt: 2.0, speaker: "Speaker 1")
+
+        let merged = OverlapSeparation.merge(segments, found: [found(5.52, "שנבין", voice: "S2")], activity: activity, flags: flags)
+
+        #expect(merged.segments == segments)
+    }
+
+    @Test func nothingIsAddedWhereTheUserCorrectedAWord() {
+        let segments = [segment([(5.0, "אז"), (5.4, "בוא")], speaker: "Speaker 1")]
+        var flags = TranscriptFlags()
+        flags.correct(segments[0].words![1], as: "בואו")
+
+        let merged = OverlapSeparation.merge(segments, found: [found(5.7, "נכון", voice: "S2"), found(6.6, "בטח", voice: "S2")], activity: activity, flags: flags)
+
+        #expect(merged.segments.filter { $0.separated == true }.map(\.text) == ["בטח"])
+    }
+
+    /// The user named Speaker 2 while their words were being separated.
+    @Test func wordsComeInUnderTheNameTheSpeakerHasNow() {
+        let segments = [segment([(5.0, "אז"), (5.5, "שנבין")], speaker: "Speaker 1")]
+
+        let merged = OverlapSeparation.merge(segments, found: [found(5.52, "שנבין", voice: "S2"), found(6.2, "בנוסף", voice: "S2")], activity: activity, names: ["Speaker 2": "Dana"])
+
+        #expect(merged.segments.map(\.speaker) == ["Speaker 1", "Dana", "Dana"])
+    }
+
+    @Test func mergingAgainReplacesWhatWasMerged() {
+        let separated = OverlapSeparation.Separated(found: [found(6.2, "בנוסף", voice: "S2")], activity: activity)
+        let transcript = Transcript(language: .hebrew, segments: [segment([(5.0, "אז")], speaker: "Speaker 1")])
+
+        let once = OverlapSeparation.merge(separated, into: transcript, flags: TranscriptFlags(), names: [:])
+        let twice = OverlapSeparation.merge(separated, into: once.transcript, flags: TranscriptFlags(), names: [:])
+
+        #expect(twice.transcript == once.transcript && twice.added == 1)
+    }
+
+    @Test func theNotesAreBehindOnlyWhenALineTheyCiteChanged() {
+        let segments = [segment([(1.0, "בוא"), (2.0, "נתחיל")], speaker: "Speaker 1"), segment([(5.0, "אני"), (6.0, "אקח")], speaker: "Speaker 2")]
+        var notes = Notes()
+        notes.actionItems = [ActionItem(text: "Take it", owner: "Speaker 2", sourceTurns: ["T002"])]
+        let result = ProcessedConversation(
+            transcript: Transcript(language: .hebrew, segments: segments),
+            speakers: [],
+            turns: [Turn(id: "T001", speaker: "Speaker 1", text: "בוא נתחיל", start: 1.0, end: 2.3), Turn(id: "T002", speaker: "Speaker 2", text: "אני אקח", start: 5.0, end: 6.3)],
+            notes: notes
+        )
+        func merged(changing time: Double) -> OverlapSeparation.Merged {
+            OverlapSeparation.Merged(transcript: result.transcript, moved: 1, added: 0, changed: [time])
+        }
+
+        #expect(OverlapSeparation.changesSources(merged(changing: 5.6), of: result))
+        #expect(!OverlapSeparation.changesSources(merged(changing: 1.6), of: result))
+    }
+
+    /// The Speakers found again can come out under other labels; their voices still say who they are.
+    @Test func eachVoiceFoundAgainIsTheSpeakerWithThatVoice() {
+        let found = [
+            Speaker(label: "Speaker 1", voice: "a", speechSeconds: 60, centroid: [0, 1, 0]),
+            Speaker(label: "Speaker 2", voice: "b", speechSeconds: 40, centroid: [1, 0, 0]),
+            Speaker(label: "Speaker 3", voice: "c", speechSeconds: 5, centroid: [0, 0, 1]),
+        ]
+        let speakers = [
+            ConversationSpeaker(label: "Speaker 1", speechSeconds: 40, embedding: [0.9, 0.1, 0], naming: .unknown),
+            ConversationSpeaker(label: "Speaker 2", speechSeconds: 60, embedding: [0.1, 0.9, 0], naming: .unknown),
+        ]
+
+        #expect(OverlapSeparation.labels(for: found, in: speakers) == ["a": "Speaker 2", "b": "Speaker 1"])
     }
 
     @Test func transcriptionsOfOneWordMatch() {

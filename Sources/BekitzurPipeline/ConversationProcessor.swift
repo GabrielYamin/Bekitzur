@@ -251,6 +251,7 @@ public enum ConversationProcessor {
         result.notes = try NotesWriter(model: model).write(turns: turns, date: date, language: language).notes
         result.turns = turns
         result.notesFixes = flags.fixes
+        result.separationChangedNotes = nil
         return result
     }
 

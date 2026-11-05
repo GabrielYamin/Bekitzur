@@ -318,6 +318,21 @@ struct TranscriptView: View {
                 findBar(matches: matches.count)
                 Divider()
             }
+            // Nothing in the Transcript moves while it's read: what separating found waits to be shown.
+            if let found = model.separationsFound[info.id] {
+                HStack {
+                    Label("Separated \(found.places) \(found.places == 1 ? "place" : "places") where people talked at once.", systemImage: "person.2.wave.2")
+                    Spacer()
+                    Button("Show") {
+                        selection.range = nil
+                        model.mergeSeparation(info.id)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.accentColor.opacity(0.08))
+                Divider()
+            }
             TranscriptLines(
                 rows: rows,
                 rowOfWord: rowOfWord,
@@ -334,6 +349,12 @@ struct TranscriptView: View {
             PlayerBar(playback: playback, spaceBar: !typingQuery)
         }
         .task(id: info.id) { model.loadFlags(info.id) }
+        .onAppear { model.transcriptAppeared(info.id) }
+        .onDisappear { model.transcriptDisappeared(info.id) }
+        .onChange(of: info.id) { old, new in
+            model.transcriptDisappeared(old)
+            model.transcriptAppeared(new)
+        }
         .onChange(of: query) { match = 0 }
         .sheet(item: $correcting) { item in
             CorrectionSheet(words: item.words, said: Self.correction(of: item.words, in: flags)) { said in

@@ -9,6 +9,9 @@ import Foundation
 ///
 /// Separation decides only the moments the timeline hears two voices of an input at once: one after the other, two
 /// people can come out in the same separated voice, and who's talking is already known there.
+///
+/// The app finds the words after writing the Notes (`find`), which takes minutes, and merges them into the Transcript as
+/// it is by then (`merge`), which takes no time and leaves what the user fixed meanwhile as they left it.
 public enum OverlapSeparation {
     /// What separating needs from the app: the model, and transcription as the app runs it.
     public struct Resources: Sendable {
@@ -30,19 +33,53 @@ public enum OverlapSeparation {
         }
     }
 
+    /// What separating found, before it's merged into a Transcript: the separated voices' words, each with the Speaker
+    /// whose voice it is, and where each voice was heard.
+    public struct Separated: Sendable {
+        let found: [Found]
+        let activity: Activity
+    }
+
+    /// A Transcript with what separating found merged in.
+    public struct Merged: Sendable {
+        public let transcript: Transcript
+        public let moved: Int
+        public let added: Int
+        /// When each word given to another Speaker or added is said.
+        public let changed: [Double]
+
+        /// The places it changed something, changes less than 3 seconds apart being one.
+        public var places: Int {
+            var places = 0
+            var last = -Double.infinity
+            for time in changed.sorted() {
+                if time - last > 3 { places += 1 }
+                last = time
+            }
+            return places
+        }
+    }
+
     struct Stretch: Equatable {
         var start: Double
         var end: Double
         let input: RecordingInput?
     }
 
-    /// A word speech recognition wrote in one separated voice, and how sure it was of the phrase it's in.
-    struct Found {
+    /// A word speech recognition wrote in one separated voice, the label of the Speaker whose voice it is, which a name
+    /// given later doesn't change, and how sure speech recognition was of the phrase it's in.
+    struct Found: Sendable {
         let word: TranscriptWord
-        let speaker: String
+        let label: String
         let voice: String
         let input: RecordingInput?
         let confidence: Float
+    }
+
+    /// A word of a Transcript: its segment, and where it is among the segment's words.
+    struct Position: Hashable {
+        let segment: Int
+        let word: Int
     }
 
     static let frame = 0.01
@@ -59,7 +96,7 @@ public enum OverlapSeparation {
     static let gap = 1.5
 
     /// The Transcript's segments with the words of people who talked at once each given to its own voice, and the words
-    /// only separation heard added, marked `separated`.
+    /// only separation heard added, marked `separated`: found and merged at once, before the Notes.
     /// - Parameter audio: The 16 kHz mono audio of an input, or of the whole Recording for nil.
     public static func apply(
         to segments: [TranscriptSegment],
@@ -70,18 +107,71 @@ public enum OverlapSeparation {
         audio: (RecordingInput?) -> [Float],
         resources: Resources
     ) async throws -> [TranscriptSegment] {
+        let labels = Dictionary(speakers.map { ($0.voice, $0.label) }, uniquingKeysWith: { first, _ in first })
+        guard let separated = try await find(turns: turns, labels: labels, language: language, length: length, audio: audio, resources: resources) else { return segments }
+        let names = Dictionary(speakers.map { ($0.label, $0.displayName) }, uniquingKeysWith: { first, _ in first })
+        let merged = merge(segments, found: separated.found, activity: separated.activity, names: names)
+        resources.log("\(merged.moved) words given to another Speaker, \(merged.added) added")
+        return merged.segments
+    }
+
+    /// What separating the people who talked at once in a processed Conversation finds: its Speakers found again in the
+    /// same audio, each tied to the Conversation's Speaker with that voice, so names given since still apply. Nil when
+    /// no one talked at once.
+    /// - Parameters:
+    ///   - samples: The Recording's audio as processing had it, 16 kHz mono.
+    ///   - call: The tracks of a call, lined up and without the speakers' copy of the call in the microphone.
+    public static func find(
+        in samples: [Float],
+        call: CallTracks?,
+        people: Int?,
+        speakers: [ConversationSpeaker],
+        language: ConversationLanguage,
+        resources: Resources
+    ) async throws -> Separated? {
+        let turns = if let call {
+            try await SpeakerSeparation.turns(in: samples, microphone: call.microphone, system: call.system, people: people)
+        } else {
+            try await SpeakerSeparation.turns(in: samples, people: people)
+        }
+        return try await find(
+            turns: turns,
+            labels: labels(for: Speakers.speakers(from: turns), in: speakers),
+            language: language,
+            length: Double(samples.count) / 16_000,
+            audio: { input in
+                switch input {
+                case .microphone: call?.microphone ?? samples
+                case .systemAudio: call?.system ?? samples
+                case nil: samples
+                }
+            },
+            resources: resources
+        )
+    }
+
+    /// The separated voices' words where two voices of an input are heard at once.
+    /// - Parameter labels: Each voice's Speaker label; the words of a voice without one are left out.
+    static func find(
+        turns: [SpeakerTurn],
+        labels: [String: String],
+        language: ConversationLanguage,
+        length: Double,
+        audio: (RecordingInput?) -> [Float],
+        resources: Resources
+    ) async throws -> Separated? {
         let activity = Activity(turns, length: length)
         let moments = activity.moments()
         let windows = windows(around: moments)
-        guard !windows.isEmpty else { return segments }
+        guard !windows.isEmpty else { return nil }
         let started = Date()
         let separator = try await VoiceSeparator(package: resources.package, compiled: resources.compiled)
-        let names = Dictionary(speakers.map { ($0.voice, $0.displayName) }, uniquingKeysWith: { first, _ in first })
         // A separated voice can go from one person to another within a window, as one stops and another starts, so
         // it's named moment by moment.
         var pieces: [[(window: Stretch, samples: [Float])]] = [[], []]
         var namings: [[(moment: Stretch, voices: [String])]] = []
         for window in windows {
+            try Task.checkCancellation()
             let track = audio(window.input)
             let from = min(track.count, Int(window.start * 16_000)), to = min(track.count, Int(window.end * 16_000))
             guard to - from > 1_600 else { continue }
@@ -94,18 +184,60 @@ public enum OverlapSeparation {
         let separating = Date().timeIntervalSince(started)
         var found: [Found] = []
         for k in 0..<2 {
+            try Task.checkCancellation()
             for item in try await transcribed(pieces[k], language: language, transcribe: resources.transcribe) {
                 let time = moment(of: item.word)
                 func distance(_ moment: Stretch) -> Double { max(0, moment.start - time, time - moment.end) }
                 guard let nearest = namings[item.piece].min(by: { distance($0.moment) < distance($1.moment) }), nearest.voices.count == 2,
-                      let speaker = names[nearest.voices[k]] else { continue }
-                found.append(Found(word: item.word, speaker: speaker, voice: nearest.voices[k], input: nearest.moment.input, confidence: item.confidence))
+                      let label = labels[nearest.voices[k]] else { continue }
+                found.append(Found(word: item.word, label: label, voice: nearest.voices[k], input: nearest.moment.input, confidence: item.confidence))
             }
         }
-        let merged = merge(segments, found: found, activity: activity)
-        resources.log(String(format: "Separated %d stretches where people talked at once (%.0f s) in %.1f s and transcribed them in %.1f s: %d words given to another Speaker, %d added",
-                             windows.count, windows.reduce(0) { $0 + $1.end - $1.start }, separating, Date().timeIntervalSince(started) - separating, merged.moved, merged.added))
-        return merged.segments
+        resources.log(String(format: "Separated %d stretches where people talked at once (%.0f s) in %.1f s and transcribed them in %.1f s",
+                             windows.count, windows.reduce(0) { $0 + $1.end - $1.start }, separating, Date().timeIntervalSince(started) - separating))
+        return Separated(found: found, activity: activity)
+    }
+
+    /// The Transcript with what separating found merged in, words it merged before replaced, and what the user fixed
+    /// left as it is (`merge(_:found:activity:flags:names:)`).
+    /// - Parameter names: The name each Speaker label shows as now.
+    public static func merge(_ separated: Separated, into transcript: Transcript, flags: TranscriptFlags, names: [String: String]) -> Merged {
+        var transcript = transcript
+        let merged = merge(transcript.segments.filter { $0.separated != true }, found: separated.found, activity: separated.activity, flags: flags, names: names)
+        transcript.segments = merged.segments
+        return Merged(transcript: transcript, moved: merged.moved, added: merged.added, changed: merged.changed)
+    }
+
+    /// Whether the changes are in a turn a Decision, Action Item, or Open Question cites, so the Notes may be behind.
+    public static func changesSources(_ merged: Merged, of result: ProcessedConversation) -> Bool {
+        let notes = result.notes
+        let cited = Set(notes.decisions.flatMap(\.sourceTurns) + notes.actionItems.flatMap(\.sourceTurns) + notes.openQuestions.flatMap(\.sourceTurns))
+        let spans = result.turns.filter { cited.contains($0.id) }.compactMap { turn in turn.start.flatMap { start in turn.end.map { start...$0 } } }
+        return merged.changed.contains { time in spans.contains { $0.lowerBound - 0.3 <= time && time <= $0.upperBound + 0.3 } }
+    }
+
+    /// Each voice found again, tied to the Conversation's Speaker whose voice is most like it: the same audio gives the
+    /// same Speakers, but nothing promises them the same labels.
+    static func labels(for found: [Speaker], in speakers: [ConversationSpeaker]) -> [String: String] {
+        func cosine(_ a: [Float], _ b: [Float]) -> Float {
+            guard a.count == b.count, !a.isEmpty else { return 0 }
+            var dot: Float = 0, normA: Float = 0, normB: Float = 0
+            for i in a.indices {
+                dot += a[i] * b[i]
+                normA += a[i] * a[i]
+                normB += b[i] * b[i]
+            }
+            return normA > 0 && normB > 0 ? dot / (normA * normB).squareRoot() : 0
+        }
+        var labels: [String: String] = [:]
+        var taken = Set<String>()
+        for speaker in found.sorted(by: { $0.speechSeconds > $1.speechSeconds }) {
+            let best = speakers.filter { !taken.contains($0.label) }.max { cosine(speaker.centroid, $0.embedding) < cosine(speaker.centroid, $1.embedding) }
+            guard let best, cosine(speaker.centroid, best.embedding) >= 0.7 else { continue }
+            labels[speaker.voice] = best.label
+            taken.insert(best.label)
+        }
+        return labels
     }
 
     /// The moments widened by `context` on each side, joined where they meet, input by input.
@@ -163,17 +295,29 @@ public enum OverlapSeparation {
 
     /// Today's words where people talk at once given to the voice separation found them in, and words only separation
     /// found there added, unless speech recognition was unsure of that voice's words, the person already has a word
-    /// there, or it's a sound speech recognition writes over noise.
-    static func merge(_ segments: [TranscriptSegment], found: [Found], activity: Activity) -> (segments: [TranscriptSegment], moved: Int, added: Int) {
+    /// there, or it's a sound speech recognition writes over noise. What the user fixed stays as it is
+    /// (`untouched(_:flags:)`), and nothing is added where they corrected a word or said who said it.
+    /// - Parameter names: The name each Speaker label shows as; a label without one shows as itself.
+    static func merge(
+        _ segments: [TranscriptSegment],
+        found: [Found],
+        activity: Activity,
+        flags: TranscriptFlags = TranscriptFlags(),
+        names: [String: String] = [:]
+    ) -> (segments: [TranscriptSegment], moved: Int, added: Int, changed: [Double]) {
+        func speaker(_ item: Found) -> String { names[item.label] ?? item.label }
         // A word one voice has leaked into the other comes out in both, less sure in the voice it leaked into.
         let found = found.sorted { ($0.word.probability ?? 1, -$0.word.start, $0.voice) > ($1.word.probability ?? 1, -$1.word.start, $1.voice) }
         var speakers = segments.map { segment in (segment.words ?? []).map { _ in segment.speaker } }
+        let untouched = untouched(segments, flags: flags)
+        let fixed = segments.flatMap { segment in (segment.words ?? []).filter { flags.flag(for: $0)?.isFix == true }.map { moment(of: $0) } }
         let alone = segments.flatMap { segment in
             (segment.words ?? []).filter { !activity.together(segment.input, around: moment(of: $0), within: margin) }
                 .map { (word: $0, speaker: segment.speaker, input: segment.input) }
         }
         var used = Set<Int>()
         var moved = 0
+        var changed: [Double] = []
         for (s, segment) in segments.enumerated() {
             for (w, word) in (segment.words ?? []).enumerated() {
                 let time = moment(of: word)
@@ -182,6 +326,7 @@ public enum OverlapSeparation {
                     && abs(moment(of: found[$0].word) - time) <= 0.6 && sameWord(found[$0].word.text, word.text) }) else { continue }
                 used.insert(match)
                 let to = found[match]
+                guard !untouched.contains(Position(segment: s, word: w)) else { continue }
                 // Where one person stops and another starts, both can come out in the same separated voice.
                 let carriesSpeaker = found.contains { other in
                     other.voice == to.voice && other.input == to.input && (other.word.probability ?? 1) >= 0.5
@@ -189,9 +334,10 @@ public enum OverlapSeparation {
                         && alone.contains { $0.speaker == segment.speaker && $0.input == segment.input
                             && abs(moment(of: $0.word) - moment(of: other.word)) <= 0.6 && sameWord($0.word.text, other.word.text) }
                 }
-                if to.speaker != segment.speaker, !carriesSpeaker, activity.heard(to.voice, segment.input, around: time, within: 0.3) {
-                    speakers[s][w] = to.speaker
+                if speaker(to) != segment.speaker, !carriesSpeaker, activity.heard(to.voice, segment.input, around: time, within: 0.3) {
+                    speakers[s][w] = speaker(to)
                     moved += 1
+                    changed.append(time)
                 }
             }
         }
@@ -206,11 +352,13 @@ public enum OverlapSeparation {
                   activity.together(item.input, around: time, within: margin),
                   activity.heard(item.voice, item.input, around: time, within: 0.3),
                   !isNoise(item.word.text),
-                  !kept.contains(where: { $0.speaker == item.speaker && abs(moment(of: $0.word) - time) <= 0.4 }),
-                  !kept.contains(where: { abs(moment(of: $0.word) - time) <= ($0.speaker == item.speaker ? 1.2 : 0.6) && sameWord($0.word.text, item.word.text) }),
-                  !added.contains(where: { $0.speaker != item.speaker && abs(moment(of: $0.word) - time) <= 0.6 && sameWord($0.word.text, item.word.text) })
+                  !fixed.contains(where: { abs($0 - time) <= 0.6 }),
+                  !kept.contains(where: { $0.speaker == speaker(item) && abs(moment(of: $0.word) - time) <= 0.4 }),
+                  !kept.contains(where: { abs(moment(of: $0.word) - time) <= ($0.speaker == speaker(item) ? 1.2 : 0.6) && sameWord($0.word.text, item.word.text) }),
+                  !added.contains(where: { $0.label != item.label && abs(moment(of: $0.word) - time) <= 0.6 && sameWord($0.word.text, item.word.text) })
             else { continue }
             added.append(item)
+            changed.append(time)
         }
 
         var result: [TranscriptSegment] = []
@@ -229,16 +377,40 @@ public enum OverlapSeparation {
         }
         for group in groups(added.sorted { $0.word.start < $1.word.start }) {
             result.append(TranscriptSegment(start: group[0].word.start, end: group[group.count - 1].word.end, text: group.map(\.word.text).joined(separator: " "),
-                                            speaker: group[0].speaker, words: group.map(\.word), input: group[0].input, separated: true))
+                                            speaker: speaker(group[0]), words: group.map(\.word), input: group[0].input, separated: true))
         }
-        return (result.sorted { $0.start < $1.start }, moved, added.count)
+        return (result.sorted { $0.start < $1.start }, moved, added.count, changed)
+    }
+
+    /// The words separating leaves where they are: the ones the user marked, corrected, or said someone else said, and
+    /// every word of a line they marked as someone else's, in the lines the Transcript shows (`TranscriptRows`).
+    static func untouched(_ segments: [TranscriptSegment], flags: TranscriptFlags) -> Set<Position> {
+        var untouched = Set<Position>()
+        let speakers = Array(Set(segments.compactMap(\.speaker))).sorted()
+        // A word corrected with the one before it isn't shown on its own, so it starts no line.
+        var shown: [(position: Position, word: TranscriptWord, speaker: String)] = []
+        for (s, segment) in segments.enumerated() {
+            for (w, word) in (segment.words ?? []).enumerated() {
+                let flag = flags.flag(for: word)
+                if flag != nil { untouched.insert(Position(segment: s, word: w)) }
+                guard flag?.phrase == nil else { continue }
+                shown.append((Position(segment: s, word: w), word, flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers) ?? "Speaker"))
+            }
+        }
+        guard !flags.speakers.isEmpty else { return untouched }
+        for row in TranscriptRows.layout(shown.map { ($0.word.start, $0.word.end, $0.speaker) }) {
+            for line in row where flags.isSpeakerFlagged(lineStartingAt: shown[line[0]].word.start) {
+                untouched.formUnion(line.map { shown[$0].position })
+            }
+        }
+        return untouched
     }
 
     /// Added words of one person in a row, a segment each.
     private static func groups(_ words: [Found]) -> [[Found]] {
         var groups: [[Found]] = []
         for word in words {
-            if let last = groups.last?.last, last.speaker == word.speaker, last.input == word.input, word.word.start - last.word.end < 1 {
+            if let last = groups.last?.last, last.label == word.label, last.input == word.input, word.word.start - last.word.end < 1 {
                 groups[groups.count - 1].append(word)
             } else {
                 groups.append([word])
@@ -296,8 +468,8 @@ public enum OverlapSeparation {
 }
 
 /// Where each voice the timeline found is heard, in frames of 10 ms, input by input.
-struct Activity {
-    private struct Key: Hashable {
+struct Activity: Sendable {
+    private struct Key: Hashable, Sendable {
         let input: RecordingInput?
         let voice: String
     }
