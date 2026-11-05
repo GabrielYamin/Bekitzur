@@ -116,11 +116,13 @@ public final class Transcriber {
         var words: [TranscriptWord] = []
         var bytes: [UInt8] = []
         var start = 0.0, end = 0.0
+        var probability: Float = 1
 
         func finishWord() {
             let text = Self.clean(String(decoding: bytes, as: UTF8.self))
-            if !text.isEmpty { words.append(TranscriptWord(start: start, end: end, text: text)) }
+            if !text.isEmpty { words.append(TranscriptWord(start: start, end: end, text: text, probability: probability)) }
             bytes = []
+            probability = 1
         }
 
         for token in 0..<whisper_full_n_tokens(context, segment) {
@@ -132,6 +134,7 @@ public final class Transcriber {
             if bytes.isEmpty { start = time }
             end = time
             bytes += pieceBytes
+            probability = min(probability, data.p)
         }
         if !bytes.isEmpty { finishWord() }
         return words

@@ -1201,6 +1201,14 @@ final class AppModel {
             transcript: transcript,
             flags: flags,
             vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load(),
+            separation: BekitzurPaths.voiceSeparation.map { model in
+                OverlapSeparation.Resources(
+                    package: model.package,
+                    compiled: model.compiled,
+                    transcribe: { samples, language in try await transcribeInHelper(samples, language: language, assumed: language) },
+                    log: { AppLog.write("\(folder.lastPathComponent): \($0)") }
+                )
+            },
             progress: progress
         )
         let silent = Set(audio.silentTracks.map { $0.deletingPathExtension().lastPathComponent })

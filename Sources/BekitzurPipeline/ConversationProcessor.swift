@@ -9,6 +9,7 @@ import Foundation
 public enum ProcessingStep: String, Sendable {
     case transcribing = "Transcribing"
     case recognizingSpeakers = "Recognizing speakers"
+    case separatingVoices = "Separating people who talk at once"
     case checkingTerms = "Checking English terms"
     case writingNotes = "Writing Notes"
 }
@@ -165,6 +166,7 @@ public enum ConversationProcessor {
     ///   - transcript: A Transcript already made in this language, to separate Speakers again without transcribing.
     ///   - flags: The user's marks on that Transcript; their fixes go into the Notes.
     ///   - vocabulary: The user's own terms and taught spellings, on top of the built-in terms.
+    ///   - separation: What separating people who talk at once needs, when its model is downloaded.
     public static func process(
         _ samples: [Float],
         date: Date,
@@ -175,11 +177,13 @@ public enum ConversationProcessor {
         transcript existing: Transcript? = nil,
         flags: TranscriptFlags = TranscriptFlags(),
         vocabulary: Vocabulary = Vocabulary(),
+        separation: OverlapSeparation.Resources? = nil,
         progress: @Sendable (ProcessingStep) -> Void = { _ in }
     ) async throws -> ProcessedConversation {
         var transcript: Transcript
         if let existing, existing.language == language {
             transcript = existing
+            transcript.segments.removeAll { $0.separated == true }
         } else {
             progress(.transcribing)
             transcript = try Transcript(
@@ -196,6 +200,24 @@ public enum ConversationProcessor {
         }
         let speakers = Speakers.name(Speakers.speakers(from: turns), with: voiceprints)
         transcript.segments = Speakers.attribute(transcript.segments, turns: turns, speakers: speakers)
+        if let separation {
+            progress(.separatingVoices)
+            transcript.segments = try await OverlapSeparation.apply(
+                to: transcript.segments,
+                turns: turns,
+                speakers: speakers,
+                language: language,
+                length: Double(samples.count) / 16_000,
+                audio: { input in
+                    switch input {
+                    case .microphone: call?.microphone ?? samples
+                    case .systemAudio: call?.system ?? samples
+                    case nil: samples
+                    }
+                },
+                resources: separation
+            )
+        }
 
         let separated = ProcessedConversation(
             transcript: transcript,
