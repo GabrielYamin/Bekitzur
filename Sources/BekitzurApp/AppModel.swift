@@ -956,20 +956,15 @@ final class AppModel {
         finishRemoving(choice)
     }
 
+    /// The app is being moved to the Trash, which quitting needn't watch for.
+    var isRemoving: Bool { removing }
+
     private func finishRemoving(_ choice: AppRemoval.Choice) {
         guard choice != .appOnly else { return NSApp.terminate(nil) }
         modelTask?.cancel()
         separation?.cancel()
-        AppLog.write(choice == .everything ? "Moving everything to the Trash" : "Moving the models to the Trash")
+        AppRemoval.moveToTrashSayingWhatFailed(choice)
         // Quitting writes to the log and the settings, which would come back after going to the Trash.
-        if choice == .everything { AppLog.stop() }
-        let failed = AppRemoval.moveToTrash(choice)
-        if !failed.isEmpty {
-            let alert = NSAlert()
-            alert.messageText = "Some of Bekitzur's data couldn't be moved to the Trash"
-            alert.informativeText = "Move these to the Trash in Finder: " + failed.map { $0.path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }.joined(separator: ", ")
-            alert.runModal()
-        }
         if choice == .everything { exit(0) }
         NSApp.terminate(nil)
     }

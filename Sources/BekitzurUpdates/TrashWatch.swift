@@ -1,7 +1,8 @@
 import Foundation
 
-/// Tells when the app is moved to the Trash, which macOS doesn't: it watches the app's folder, which Finder renames into
-/// the Trash, while the app runs on from there. An update moves it aside next to itself instead (`Updater.replace`).
+/// Tells when the app is moved to the Trash, which macOS doesn't: it watches the app's folder, which is renamed into the
+/// Trash. An update moves it aside next to itself instead (`Updater.replace`). Finder quits a running app before it
+/// moves it, so then it's a helper that watches, after the app quits (`waitForTrash`).
 public final class TrashWatch {
     private let source: DispatchSourceFileSystemObject
 
@@ -21,6 +22,18 @@ public final class TrashWatch {
 
     deinit {
         source.cancel()
+    }
+
+    /// Once the process `pid` has quit, whether the folder open as `descriptor` goes to the Trash within `seconds`.
+    public static func waitForTrash(descriptor: Int32, after pid: pid_t, seconds: Double) -> Bool {
+        let quitBy = Date().addingTimeInterval(60)
+        while kill(pid, 0) == 0, Date() < quitBy { usleep(100_000) }
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
+            if let path = path(of: descriptor), isInTrash(path) { return true }
+            usleep(200_000)
+        }
+        return false
     }
 
     /// Whether the item is in a Trash: the user's, or another volume's.

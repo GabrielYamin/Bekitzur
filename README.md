@@ -50,9 +50,9 @@ Bekitzur checks for new versions and asks before installing one; **Check for Upd
 
 ## Uninstall
 
-Drag Bekitzur to the Trash while it's running, or choose **Delete Bekitzur…** in its Settings. It quits, and offers to move its data to the Trash too: only the speech models (about 18 GB), or everything, your Conversations included. You can put back what's in the Trash until you empty it.
+Drag Bekitzur to the Trash, or choose **Delete Bekitzur…** in its Settings. It quits, and offers to move its data to the Trash too: only the speech models (about 18 GB), or everything, your Conversations included. You can put back what's in the Trash until you empty it.
 
-If Bekitzur wasn't running when you deleted it, its data stays. To remove it yourself, quit Bekitzur and move these to the Trash (in Finder, **Go → Go to Folder…** opens them):
+If Bekitzur wasn't running when you deleted it, nothing asks, and its data stays. To remove it yourself, quit Bekitzur and move these to the Trash (in Finder, **Go → Go to Folder…** opens them):
 
 - `~/Applications/Bekitzur.app`
 - `~/Library/Application Support/Bekitzur`: your Conversations, voiceprints, and vocabulary, and the speech models
