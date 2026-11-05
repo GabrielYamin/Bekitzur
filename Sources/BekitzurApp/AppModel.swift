@@ -171,6 +171,9 @@ final class AppModel {
         }
     }
 
+    @ObservationIgnored private var trashWatch: TrashWatch?
+    /// The app is being moved to the Trash, with as much of its data as the user chose.
+    @ObservationIgnored private var removing = false
     @ObservationIgnored private var recorder: ConversationRecorder?
     /// Keeps macOS from slowing Bekitzur down in the background, or sleeping, while it records.
     @ObservationIgnored private var recordingActivity: NSObjectProtocol?
@@ -237,6 +240,7 @@ final class AppModel {
         refreshMicrophones()
         AppLog.write("Microphones: \(microphones.map(\.name).joined(separator: ", ")); the Mac's default is \(defaultMicrophone?.name ?? "none"); recording \(recordingMicrophone?.name ?? "none")")
         microphonesWatch = AudioInputWatch { Task { @MainActor in AppModel.shared.refreshMicrophones() } }
+        trashWatch = TrashWatch(app: Bundle.main.bundleURL) { [weak self] in self?.movedToTrash() }
     }
 
     func refreshMicrophones() {
@@ -919,6 +923,55 @@ final class AppModel {
             $0.endedAt = Date()
             $0.status = .processing
         }
+        recorder = nil
+        recordingID = nil
+    }
+
+    // MARK: Removing Bekitzur
+
+    /// The app was moved to the Trash, which leaves it running, and its data on this Mac: it stops, offers to move its
+    /// data to the Trash too, and quits.
+    func movedToTrash() {
+        guard !removing else { return }
+        removing = true
+        AppLog.write("Moved to the Trash")
+        let recording = recordingID != nil
+        stopRecordingForQuit()
+        finishRemoving(AppRemoval.ask(appInTrash: true, recording: recording) ?? .appOnly)
+    }
+
+    /// Delete Bekitzur… in Settings: moves the app to the Trash with as much of its data as the user chooses, and quits.
+    func deleteApp() {
+        guard !removing, let choice = AppRemoval.ask(appInTrash: false, recording: recordingID != nil) else { return }
+        removing = true
+        do {
+            try FileManager.default.trashItem(at: Bundle.main.bundleURL, resultingItemURL: nil)
+        } catch {
+            removing = false
+            alert = "Couldn't move Bekitzur to the Trash: \(error.localizedDescription)"
+            return
+        }
+        AppLog.write("Moved to the Trash from Settings")
+        stopRecordingForQuit()
+        finishRemoving(choice)
+    }
+
+    private func finishRemoving(_ choice: AppRemoval.Choice) {
+        guard choice != .appOnly else { return NSApp.terminate(nil) }
+        modelTask?.cancel()
+        separation?.cancel()
+        AppLog.write(choice == .everything ? "Moving everything to the Trash" : "Moving the models to the Trash")
+        // Quitting writes to the log and the settings, which would come back after going to the Trash.
+        if choice == .everything { AppLog.stop() }
+        let failed = AppRemoval.moveToTrash(choice)
+        if !failed.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "Some of Bekitzur's data couldn't be moved to the Trash"
+            alert.informativeText = "Move these to the Trash in Finder: " + failed.map { $0.path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }.joined(separator: ", ")
+            alert.runModal()
+        }
+        if choice == .everything { exit(0) }
+        NSApp.terminate(nil)
     }
 
     // MARK: Processing

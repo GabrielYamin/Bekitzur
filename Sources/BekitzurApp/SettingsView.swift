@@ -190,6 +190,12 @@ struct SettingsView: View {
                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([BekitzurPaths.conversations]) }
                 }
                 Text("Recordings, Transcripts, Notes, and voices stay on this Mac.").font(.callout).foregroundStyle(.secondary)
+                LabeledContent("Bekitzur") {
+                    Button("Delete Bekitzur…", role: .destructive) { model.deleteApp() }
+                }
+                Text("Moves the app to the Trash, with its speech models or all its data if you choose, and quits. Dragging the app to the Trash does the same.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             Section("About and updates") {

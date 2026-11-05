@@ -48,7 +48,19 @@ Bekitzur is provided as is, without warranty of any kind, and its authors aren't
 
 Bekitzur checks for new versions and asks before installing one; **Check for Updates…** in its menu checks right away. Updates keep your Conversations, names, and settings.
 
-To remove it, quit Bekitzur, then delete `~/Applications/Bekitzur.app` and `~/Library/Application Support/Bekitzur` (your Conversations and the models).
+## Uninstall
+
+Drag Bekitzur to the Trash while it's running, or choose **Delete Bekitzur…** in its Settings. It quits, and offers to move its data to the Trash too: only the speech models (about 18 GB), or everything, your Conversations included. You can put back what's in the Trash until you empty it.
+
+If Bekitzur wasn't running when you deleted it, its data stays. To remove it yourself, quit Bekitzur and move these to the Trash (in Finder, **Go → Go to Folder…** opens them):
+
+- `~/Applications/Bekitzur.app`
+- `~/Library/Application Support/Bekitzur`: your Conversations, voiceprints, and vocabulary, and the speech models
+- `speaker-diarization`, `nemotron-3-diarization`, `silero-vad`, and `sortformer` in `~/Library/Application Support/FluidAudio/Models`: the speaker models, or the whole FluidAudio folder if no other app uses it
+- `~/Library/Caches/app.bekitzur.mac`, `~/Library/HTTPStorages/app.bekitzur.mac`, and `~/Library/Logs/Bekitzur`
+- `~/Library/Preferences/app.bekitzur.mac.plist`: your settings
+
+System Settings keeps listing Bekitzur under the microphone, screen and system audio recording, and notifications until you remove it there.
 
 ## Working on a new Mac
 
