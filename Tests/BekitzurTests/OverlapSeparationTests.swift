@@ -56,7 +56,7 @@ struct OverlapSeparationTests {
         ])
     }
 
-    /// Liron said "שנבין" over Gabriel, and it was written as Gabriel's.
+    /// "שנבין", said over someone, was written as theirs.
     @Test func aWordSaidOverSomeoneGoesToWhoeverSeparationHearsSayIt() {
         let segments = [segment([(2.0, "אני"), (2.5, "חושב"), (5.5, "ושנבין"), (8.0, "את"), (8.3, "זה")], speaker: "Speaker 1")]
 
@@ -75,7 +75,7 @@ struct OverlapSeparationTests {
         #expect(merged.segments == segments)
     }
 
-    /// Eli said "בנוסף כן" over Gabriel, and speech recognition left it out.
+    /// "בנוסף כן", said over someone, was left out by speech recognition.
     @Test func wordsOnlyTheSeparatedVoiceHasAreAdded() {
         let segments = [segment([(5.0, "אז"), (5.4, "בוא"), (5.8, "נתחיל")], speaker: "Speaker 1")]
 
@@ -113,7 +113,7 @@ struct OverlapSeparationTests {
         #expect(merged.added == 0)
     }
 
-    /// Gabriel stops and David answers "כן, בואו נתחיל ככה": separation keeps both in Gabriel's voice.
+    /// One person stops and the next answers "כן, בואו נתחיל ככה": separation keeps both in the first one's voice.
     @Test func aWordStaysWithItsSpeakerWhenTheVoiceItsFoundInCarriesThemToo() {
         let activity = Activity([
             SpeakerTurn(voice: "S1", start: 0, end: 6, embedding: [1, 0]),
@@ -153,7 +153,7 @@ struct OverlapSeparationTests {
         #expect(merged.added == 0)
     }
 
-    /// Shai said "כן", and it leaked into the other separated voice too.
+    /// A "כן" leaked into the other separated voice too.
     @Test func aWordInBothVoicesGoesToTheOneSurerOfIt() {
         let segments = [segment([(5.0, "אז"), (5.5, "כן")], speaker: "Speaker 1")]
 
@@ -178,12 +178,12 @@ struct OverlapSeparationTests {
         #expect(names == ["B", "A"])
     }
 
-    /// Shai stops and Niv starts in the same separated voice, while Liron talks in the other.
+    /// One person stops and another starts in the same separated voice, while a third talks in the other.
     @Test func aSeparatedVoiceIsNamedMomentByMoment() {
         let activity = Activity([
-            SpeakerTurn(voice: "Shai", start: 0, end: 2, embedding: [1, 0, 0]),
-            SpeakerTurn(voice: "Liron", start: 1.5, end: 6, embedding: [0, 1, 0]),
-            SpeakerTurn(voice: "Niv", start: 4, end: 6, embedding: [0, 0, 1]),
+            SpeakerTurn(voice: "S1", start: 0, end: 2, embedding: [1, 0, 0]),
+            SpeakerTurn(voice: "S2", start: 1.5, end: 6, embedding: [0, 1, 0]),
+            SpeakerTurn(voice: "S3", start: 4, end: 6, embedding: [0, 0, 1]),
         ], length: 6)
         let window = OverlapSeparation.Stretch(start: 0, end: 6, input: nil)
         func voice(loud: [Range<Int>]) -> [Float] {
@@ -194,8 +194,8 @@ struct OverlapSeparationTests {
         let first = activity.voices(of: separated, at: .init(start: 1.5, end: 2, input: nil), in: window)
         let second = activity.voices(of: separated, at: .init(start: 4, end: 6, input: nil), in: window)
 
-        #expect(first == ["Shai", "Liron"])
-        #expect(second == ["Niv", "Liron"])
+        #expect(first == ["S1", "S2"])
+        #expect(second == ["S3", "S2"])
     }
 
     @Test func withoutTwoPeopleAtOnceNothingIsSeparatedOrTranscribed() async throws {
