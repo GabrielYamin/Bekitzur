@@ -1297,7 +1297,8 @@ final class AppModel {
             progress(.transcribing)
             let system = try await transcribeInHelper(tracks.system, language: language ?? given?.language, assumed: assumed)
             let microphone = try await transcribeInHelper(tracks.microphone, language: system.language, assumed: assumed)
-            transcript = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: prepared.microphoneSpeech)
+            let speech = await ConversationProcessor.microphoneSpeech(prepared.microphoneSpeech, in: tracks.microphone)
+            transcript = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: speech)
         } else {
             progress(.transcribing)
             transcript = try await transcribeInHelper(samples, language: language, assumed: assumed)

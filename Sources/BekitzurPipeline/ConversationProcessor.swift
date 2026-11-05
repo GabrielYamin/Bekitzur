@@ -139,6 +139,27 @@ public enum ConversationProcessor {
         return Transcript(language: system.language, segments: (microphoneSegments + systemSegments).sorted { $0.start < $1.start })
     }
 
+    /// Where a call's microphone has speech of its own: above what's left of the other side and the room's noise
+    /// (`CallTracks.removingEcho`), and speech to the speech detector too, since keystrokes are loud enough for the first
+    /// and speech recognition writes words over them ("Hvað er það?"). Without the detector, the first alone.
+    /// - Parameter microphone: The microphone without the other side (`CallTracks.removingEcho`).
+    public static func microphoneSpeech(_ ownSpeech: [ClosedRange<Double>], in microphone: [Float]) async -> [ClosedRange<Double>] {
+        // Surer than live transcription asks for (0.5), at which a burst of keystrokes passes as speech.
+        guard let detected = try? await SpeechDetector().speech(in: microphone, threshold: 0.7) else { return ownSpeech }
+        return overlaps(ownSpeech, detected)
+    }
+
+    /// Where stretches of the one and of the other overlap.
+    static func overlaps(_ a: [ClosedRange<Double>], _ b: [ClosedRange<Double>]) -> [ClosedRange<Double>] {
+        a.flatMap { x in
+            b.compactMap { y -> ClosedRange<Double>? in
+                let lower = max(x.lowerBound, y.lowerBound), upper = min(x.upperBound, y.upperBound)
+                return lower <= upper ? lower...upper : nil
+            }
+        }
+        .sorted { $0.lowerBound < $1.lowerBound }
+    }
+
     /// A word without case or punctuation, for telling whether two tracks heard the same one.
     static func normalized(_ word: String) -> String {
         String(String.UnicodeScalarView(word.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }))

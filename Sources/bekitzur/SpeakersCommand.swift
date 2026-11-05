@@ -129,7 +129,8 @@ struct SpeakersCommand: AsyncParsableCommand {
             let language = info.language ?? result.transcript.language
             let system = try await transcribedLikeTheApp(lined.tracks.system, language: language)
             let microphone = try await transcribedLikeTheApp(lined.tracks.microphone, language: language)
-            segments = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: microphoneSpeech).segments
+            let speech = await ConversationProcessor.microphoneSpeech(microphoneSpeech, in: lined.tracks.microphone)
+            segments = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: speech).segments
         }
         for segment in Speakers.attribute(segments, turns: turns, speakers: found) {
             let input = segment.input.map { $0 == .microphone ? "mic" : "sys" } ?? "-  "
