@@ -186,10 +186,12 @@ struct SettingsView: View {
             }
 
             Section("Storage") {
-                LabeledContent("Conversations") {
+                LabeledContent("Data folder") {
                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([BekitzurPaths.conversations]) }
                 }
-                Text("Recordings, Transcripts, Notes, and voices stay on this Mac.").font(.callout).foregroundStyle(.secondary)
+                Text("It holds your Conversations, with their recordings, Transcripts, and Notes, your voiceprints and vocabulary, and the models. All of it stays on this Mac.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 LabeledContent("Bekitzur") {
                     Button("Delete Bekitzur…", role: .destructive) { model.deleteApp() }
                 }
