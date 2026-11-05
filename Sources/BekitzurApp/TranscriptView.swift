@@ -1,7 +1,7 @@
 import BekitzurDomain
 import SwiftUI
 
-/// One Speaker's consecutive speech, with each word numbered across the whole Transcript.
+/// One Speaker's speech, with each word numbered across the whole Transcript in the order it shows them.
 struct TranscriptLine: Identifiable {
     let id: Int
     let speaker: String
@@ -9,66 +9,8 @@ struct TranscriptLine: Identifiable {
     let words: [NumberedWord]
     /// The segments' text, shown as is when they have no word times.
     let text: String
-
-    /// The Transcript's lines with the user's fixes applied: corrected words show what was said, a phrase corrected
-    /// together shows as its first word, and words said by another Speaker sit in that Speaker's line.
-    static func lines(from transcript: Transcript, flags: TranscriptFlags) -> [TranscriptLine] {
-        let speakers = Array(Set(transcript.segments.compactMap(\.speaker))).sorted()
-        // The rest of each phrase, by when it starts, shown with its first word.
-        var phrases: [(start: Double, rest: [NumberedWord])] = []
-        for segment in transcript.segments {
-            for word in segment.words ?? [] {
-                guard let start = flags.flag(for: word)?.phrase else { continue }
-                let rest = NumberedWord(number: -1, word: word, text: "", transcribedSpeaker: segment.speaker)
-                if let index = phrases.firstIndex(where: { abs($0.start - start) < 0.005 }) {
-                    phrases[index].rest.append(rest)
-                } else {
-                    phrases.append((start, [rest]))
-                }
-            }
-        }
-        var lines: [TranscriptLine] = []
-        var number = 0
-        var speaker: String?
-        var start = 0.0
-        var words: [NumberedWord] = []
-        var texts: [String] = []
-
-        func finishLine() {
-            guard !texts.isEmpty else { return }
-            lines.append(TranscriptLine(id: lines.count, speaker: speaker ?? "Speaker", start: start, words: words, text: texts.joined(separator: " ")))
-            words = []
-            texts = []
-        }
-
-        for segment in transcript.segments {
-            guard let segmentWords = segment.words, !segmentWords.isEmpty else {
-                if !texts.isEmpty, segment.speaker != speaker { finishLine() }
-                if texts.isEmpty {
-                    speaker = segment.speaker
-                    start = segment.start
-                }
-                texts.append(segment.text)
-                continue
-            }
-            for word in segmentWords {
-                if flags.flag(for: word)?.phrase != nil { continue }
-                let said = flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers)
-                if !texts.isEmpty, said != speaker { finishLine() }
-                if texts.isEmpty {
-                    speaker = said
-                    start = word.start
-                }
-                let text = flags.text(of: word)
-                let rest = phrases.first { abs($0.start - word.start) < 0.005 }?.rest ?? []
-                words.append(NumberedWord(number: number, word: word, text: text, transcribedSpeaker: segment.speaker, rest: rest))
-                if !text.isEmpty { texts.append(text) }
-                number += 1
-            }
-        }
-        finishLine()
-        return lines
-    }
+    /// When each word starts, to tell which one is being said.
+    let starts: [Double]
 
     /// The word being said at `time`: the last one started, until the next one starts or 1.5 seconds pass.
     static func word(at time: Double, starts: [Double]) -> Int? {
@@ -86,6 +28,127 @@ struct TranscriptLine: Identifiable {
         guard let index = found else { return nil }
         let next = index + 1 < starts.count ? starts[index + 1] : .infinity
         return time < min(next, starts[index] + 1.5) ? index : nil
+    }
+}
+
+/// A line on its own, or the lines of people who talked at once.
+struct TranscriptRow: Identifiable {
+    let id: Int
+    let lines: [TranscriptLine]
+    let start: Double
+    let end: Double
+    /// Separating people who talk at once found some of its words.
+    let separated: Bool
+
+    /// The Transcript's rows with the user's fixes applied: corrected words show what was said, a phrase corrected
+    /// together shows as its first word, and words said by another Speaker sit in that Speaker's line. People who talked
+    /// at once have a line each in one row (`TranscriptRows`).
+    static func rows(from transcript: Transcript, flags: TranscriptFlags) -> [TranscriptRow] {
+        let speakers = Array(Set(transcript.segments.compactMap(\.speaker))).sorted()
+        // The rest of each phrase, by when it starts, shown with its first word.
+        var phrases: [(start: Double, rest: [NumberedWord])] = []
+        for segment in transcript.segments {
+            for word in segment.words ?? [] {
+                guard let start = flags.flag(for: word)?.phrase else { continue }
+                let rest = NumberedWord(number: -1, word: word, text: "", transcribedSpeaker: segment.speaker)
+                if let index = phrases.firstIndex(where: { abs($0.start - start) < 0.005 }) {
+                    phrases[index].rest.append(rest)
+                } else {
+                    phrases.append((start, [rest]))
+                }
+            }
+        }
+
+        /// A word, or a segment's text without word times.
+        struct Piece {
+            let word: TranscriptWord?
+            let text: String
+            let start: Double
+            let end: Double
+            let speaker: String
+            let transcribedSpeaker: String?
+            let rest: [NumberedWord]
+            let separated: Bool
+        }
+        var pieces: [Piece] = []
+        for segment in transcript.segments {
+            guard let words = segment.words, !words.isEmpty else {
+                pieces.append(Piece(word: nil, text: segment.text, start: segment.start, end: segment.end, speaker: segment.speaker ?? "Speaker",
+                                    transcribedSpeaker: segment.speaker, rest: [], separated: segment.separated == true))
+                continue
+            }
+            for word in words where flags.flag(for: word)?.phrase == nil {
+                pieces.append(Piece(
+                    word: word,
+                    text: flags.text(of: word),
+                    start: word.start,
+                    end: word.end,
+                    speaker: flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers) ?? "Speaker",
+                    transcribedSpeaker: segment.speaker,
+                    rest: phrases.first { abs($0.start - word.start) < 0.005 }?.rest ?? [],
+                    separated: segment.separated == true
+                ))
+            }
+        }
+
+        // Text without word times makes lines of its own.
+        let layout = TranscriptRows.layout(pieces.map { ($0.start, $0.end, $0.word == nil ? "\($0.speaker)\u{0}" : $0.speaker) })
+        var rows: [TranscriptRow] = []
+        var lineCount = 0
+        var number = 0
+        for row in layout {
+            var lines: [TranscriptLine] = []
+            for line in row {
+                let texts = line.map { pieces[$0].text }.filter { !$0.isEmpty }
+                guard !texts.isEmpty else { continue }
+                var words: [NumberedWord] = []
+                for piece in line.map({ pieces[$0] }) {
+                    guard let word = piece.word else { continue }
+                    words.append(NumberedWord(number: number, word: word, text: piece.text, transcribedSpeaker: piece.transcribedSpeaker, rest: piece.rest))
+                    number += 1
+                }
+                let first = pieces[line[0]]
+                lines.append(TranscriptLine(id: lineCount, speaker: first.speaker, start: first.start, words: words, text: texts.joined(separator: " "), starts: words.map(\.word.start)))
+                lineCount += 1
+            }
+            guard !lines.isEmpty else { continue }
+            let all = row.flatMap { $0 }.map { pieces[$0] }
+            rows.append(TranscriptRow(
+                id: rows.count,
+                lines: lines,
+                start: lines.map(\.start).min() ?? 0,
+                end: all.map(\.end).max() ?? 0,
+                separated: all.contains(where: \.separated)
+            ))
+        }
+        return rows
+    }
+
+    /// The word being said in each line at `time`, by line, and the row with the one started last, to follow.
+    static func playing(at time: Double, in rows: [TranscriptRow]) -> (words: [Int: Int], row: Int?) {
+        var low = 0, high = rows.count - 1
+        var found: Int?
+        while low <= high {
+            let middle = (low + high) / 2
+            if rows[middle].start <= time {
+                found = middle
+                low = middle + 1
+            } else {
+                high = middle - 1
+            }
+        }
+        guard let found else { return ([:], nil) }
+        var words: [Int: Int] = [:]
+        var latest: (start: Double, row: Int)?
+        // A row can start a little before the one before it ends.
+        for row in rows[max(0, found - 2)...found] where time < row.end + 1.5 {
+            for line in row.lines {
+                guard let index = TranscriptLine.word(at: time, starts: line.starts) else { continue }
+                words[line.id] = line.words[index].number
+                if line.starts[index] >= latest?.start ?? -.infinity { latest = (line.starts[index], row.id) }
+            }
+        }
+        return (words, latest?.row)
     }
 }
 
@@ -176,10 +239,10 @@ struct TranscriptView: View {
 
     var body: some View {
         let flags = model.flags[info.id] ?? TranscriptFlags()
-        let lines = TranscriptLine.lines(from: result.transcript, flags: flags)
+        let rows = TranscriptRow.rows(from: result.transcript, flags: flags)
+        let lines = rows.flatMap(\.lines)
         let words = lines.flatMap(\.words)
-        let starts = words.map(\.word.start)
-        let lineOfWord = lines.flatMap { line in line.words.map { _ in line.id } }
+        let rowOfWord = rows.flatMap { row in row.lines.flatMap { line in line.words.map { _ in row.id } } }
         let matches = finding ? TranscriptSearch.matches(of: query, in: words.map(\.text)) : []
         let currentMatch = matches.isEmpty ? nil : matches[min(match, matches.count - 1)]
         let selection = self.selection
@@ -229,8 +292,10 @@ struct TranscriptView: View {
                     .font(.callout)
                 }
                 Button("Mark word just played") {
-                    if let index = TranscriptLine.word(at: max(0, playback.time - 0.4), starts: starts) {
-                        model.toggleFlag(words[index].word, in: info.id)
+                    // With people talking at once, the words don't show in the order they're said.
+                    let said = words.indices.sorted { words[$0].word.start < words[$1].word.start }
+                    if let index = TranscriptLine.word(at: max(0, playback.time - 0.4), starts: said.map { words[$0].word.start }) {
+                        model.toggleFlag(words[said[index]].word, in: info.id)
                     }
                 }
                 .keyboardShortcut(typingQuery ? nil : KeyboardShortcut("f", modifiers: []))
@@ -254,9 +319,8 @@ struct TranscriptView: View {
                 Divider()
             }
             TranscriptLines(
-                lines: lines,
-                starts: starts,
-                lineOfWord: lineOfWord,
+                rows: rows,
+                rowOfWord: rowOfWord,
                 flags: flags,
                 speakers: result.speakers.map(\.displayName),
                 fallback: result.transcript.language == .hebrew ? .rightToLeft : .leftToRight,
@@ -368,11 +432,10 @@ private struct TranscriptHint: View {
     }
 }
 
-/// The lines, redrawn as playback moves; only the line with the current word changes.
+/// The lines, redrawn as playback moves; only the lines with a word being said change.
 private struct TranscriptLines: View {
-    let lines: [TranscriptLine]
-    let starts: [Double]
-    let lineOfWord: [Int]
+    let rows: [TranscriptRow]
+    let rowOfWord: [Int]
     let flags: TranscriptFlags
     let speakers: [String]
     /// For a line without letters to tell its direction by.
@@ -386,27 +449,28 @@ private struct TranscriptLines: View {
     let actions: TranscriptActions
 
     var body: some View {
-        let current = TranscriptLine.word(at: playback.time, starts: starts)
-        let currentLine = current.map { lineOfWord[$0] }
+        let playing = TranscriptRow.playing(at: playback.time, in: rows)
         let selected = selection.range
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    ForEach(lines) { line in
-                        LineView(
-                            line: line,
-                            current: currentLine == line.id ? current : nil,
-                            selected: Self.part(of: selected, in: line),
-                            matches: matches[line.id] ?? [],
-                            currentMatch: Self.part(of: currentMatch, in: line),
-                            flags: flags,
-                            speakers: speakers,
-                            fallback: fallback,
-                            selection: selection,
-                            actions: actions
-                        )
-                        .equatable()
-                        .id(line.id)
+                    ForEach(rows) { row in
+                        RowView(row: row, rightToLeft: fallback == .rightToLeft, play: actions.play) { line in
+                            LineView(
+                                line: line,
+                                current: playing.words[line.id],
+                                selected: Self.part(of: selected, in: line),
+                                matches: matches[line.id] ?? [],
+                                currentMatch: Self.part(of: currentMatch, in: line),
+                                flags: flags,
+                                speakers: speakers,
+                                fallback: fallback,
+                                selection: selection,
+                                actions: actions
+                            )
+                            .equatable()
+                        }
+                        .id(row.id)
                     }
                 }
                 .padding(16)
@@ -420,21 +484,21 @@ private struct TranscriptLines: View {
                         .onEnded { _ in selection.endDrag() }
                 )
             }
-            .onChange(of: currentLine) { _, line in
-                guard follow, playback.isPlaying, let line else { return }
-                withAnimation { proxy.scrollTo(line, anchor: .center) }
+            .onChange(of: playing.row) { _, row in
+                guard follow, playback.isPlaying, let row else { return }
+                withAnimation { proxy.scrollTo(row, anchor: .center) }
             }
             .onChange(of: currentMatch) { _, match in
                 guard let match else { return }
-                withAnimation { proxy.scrollTo(lineOfWord[match.lowerBound], anchor: .center) }
+                withAnimation { proxy.scrollTo(rowOfWord[match.lowerBound], anchor: .center) }
             }
             // A Source in the Notes or a quote in an answer opens the Transcript already playing, on a line that won't
             // change again for a while.
             .onAppear {
                 guard follow, playback.isPlaying else { return }
                 Task { @MainActor in
-                    if let word = TranscriptLine.word(at: playback.time, starts: starts) {
-                        proxy.scrollTo(lineOfWord[word], anchor: .center)
+                    if let row = TranscriptRow.playing(at: playback.time, in: rows).row {
+                        proxy.scrollTo(row, anchor: .center)
                     }
                 }
             }
@@ -448,6 +512,47 @@ private struct TranscriptLines: View {
     private static func part(of range: ClosedRange<Int>?, in line: TranscriptLine) -> ClosedRange<Int>? {
         guard let range, let first = line.words.first?.number, let last = line.words.last?.number, range.overlaps(first...last) else { return nil }
         return range.clamped(to: first...last)
+    }
+}
+
+/// A line on its own, or the lines of people who talked at once, stacked under a label saying so and joined by a bar on
+/// the reading side. Words separation added or gave to another Speaker look like any other.
+private struct RowView<Line: View>: View {
+    let row: TranscriptRow
+    let rightToLeft: Bool
+    let play: (Double) -> Void
+    @ViewBuilder let line: (TranscriptLine) -> Line
+
+    var body: some View {
+        if row.lines.count == 1 {
+            line(row.lines[0])
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.2.wave.2")
+                    Text("\(row.lines.count) people at once")
+                    Button(timestamp(row.start)) { play(row.start) }
+                        .buttonStyle(.link)
+                        .monospacedDigit()
+                        .help("Play from here")
+                    if row.separated {
+                        Text("· separated automatically")
+                            .help("Bekitzur separated these voices; listen to check")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                HStack(alignment: .top, spacing: 10) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.accentColor.opacity(0.6))
+                        .frame(width: 3)
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(row.lines) { line($0) }
+                    }
+                }
+                .environment(\.layoutDirection, rightToLeft ? .rightToLeft : .leftToRight)
+            }
+        }
     }
 }
 
