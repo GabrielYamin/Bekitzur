@@ -10,7 +10,7 @@ Bekitzur is open source, under the [MIT License](LICENSE). Its releases are on t
 - Shows a live Transcript while recording, and tells Hebrew from English by the first speech.
 - Offers to record when Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, and to stop once the call is over; or, if you choose, records the call on its own and stops when it ends.
 - Transcribes Hebrew with ivrit.ai's Whisper fine-tune and English with Whisper large-v3-turbo, through whisper.cpp. A call's two sides are transcribed each on its own, the microphone without the speakers' copy of the call, so two people talking at once are both written down. English terms spoken in Hebrew come out in English letters (the Vocabulary), and corrections teach it new spellings.
-- Separates Speakers with FluidAudio (pyannote community-1 and NVIDIA's Nemotron 3 Diarization), and names people it has heard before from their Voiceprints, which can be renamed in Settings, everywhere they appear.
+- Separates Speakers with FluidAudio (pyannote community-1 and NVIDIA's Nemotron 3 Diarization), and names people it has heard before from their Voiceprints, which can be renamed in Settings, everywhere they appear. Where people in a room, or on the same side of a call, talk at once, it separates their voices with Alibaba's MossFormer2 once the Notes are written, transcribes each on its own, and shows their lines together in the Transcript.
 - Writes the Notes with Gemma 4 26B-A4B through llama.cpp. Quotes are checked against the Transcript, and due dates are worked out in code.
 - For review: listen back along the Transcript, fix words and Speakers, update or edit the Notes, rename Conversations, check Action Items off and add the ones with a due day to your calendar, and ask questions that are answered only from the Transcript. Once every Action Item is done, it offers, now and then, to delete the Conversation.
 - Finds Conversations by the people in them and by what was said in them, in their titles, Notes, and Transcripts.
@@ -48,7 +48,19 @@ Bekitzur is provided as is, without warranty of any kind, and its authors aren't
 
 Bekitzur checks for new versions and asks before installing one; **Check for Updates…** in its menu checks right away. Updates keep your Conversations, names, and settings.
 
-To remove it, quit Bekitzur, then delete `~/Applications/Bekitzur.app` and `~/Library/Application Support/Bekitzur` (your Conversations and the models).
+## Uninstall
+
+Drag Bekitzur to the Trash, or choose **Delete Bekitzur…** in its Settings. It quits, and offers to move its data to the Trash too: only the speech models (about 18 GB), or everything, your Conversations included. You can put back what's in the Trash until you empty it.
+
+If Bekitzur wasn't running when you deleted it, nothing asks, and its data stays. To remove it yourself, quit Bekitzur and move these to the Trash (in Finder, **Go → Go to Folder…** opens them):
+
+- `~/Applications/Bekitzur.app`
+- `~/Library/Application Support/Bekitzur`: your Conversations, voiceprints, and vocabulary, and the speech models
+- `speaker-diarization`, `nemotron-3-diarization`, `silero-vad`, and `sortformer` in `~/Library/Application Support/FluidAudio/Models`: the speaker models, or the whole FluidAudio folder if no other app uses it
+- `~/Library/Caches/app.bekitzur.mac`, `~/Library/HTTPStorages/app.bekitzur.mac`, and `~/Library/Logs/Bekitzur`
+- `~/Library/Preferences/app.bekitzur.mac.plist`: your settings
+
+System Settings keeps listing Bekitzur under the microphone, screen and system audio recording, and notifications until you remove it there.
 
 ## Working on a new Mac
 
@@ -81,7 +93,7 @@ swift build -c release --product bekitzur
 .build/release/bekitzur transcribe --live --language auto recording.m4a
 ```
 
-Its commands are `process` (Transcript, Speakers, and Notes for one recording), `transcribe`, `language`, `speech`, `speakers`, `enroll`, `align`, `notes`, `vocabulary`, `ask`, `models`, and two experiments, `audio-check` and `english-terms`. `bekitzur help <command>` explains each one.
+Its commands are `process` (Transcript, Speakers, and Notes for one recording), `transcribe`, `language`, `speech`, `speakers`, `enroll`, `align`, `separate`, `notes`, `vocabulary`, `ask`, `models`, and two experiments, `audio-check` and `english-terms`. `bekitzur help <command>` explains each one.
 
 ## How the code is organized
 
@@ -131,8 +143,9 @@ And these models, which the app downloads and which aren't part of it:
 | [pyannote speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) with WeSpeaker and BUT Speech@FIT, [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/speaker-diarization-coreml) | Speaker embeddings and separation | CC BY 4.0 |
 | [NVIDIA Nemotron 3 Diarization](https://huggingface.co/nvidia/Nemotron-3-Diarization), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/nemotron-3-diarization-coreml) | Speaker separation | OpenMDW 1.1 |
 | [NVIDIA Streaming Sortformer](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1), [converted to Core ML by Fluid Inference](https://huggingface.co/FluidInference/diar-streaming-sortformer-coreml) | Speaker separation in installs from before Nemotron, until its model is downloaded | NVIDIA Open Model License |
+| [MossFormer2_SS_16K](https://huggingface.co/alibabasglab/MossFormer2_SS_16K) from Alibaba's [ClearerVoice-Studio](https://github.com/modelscope/ClearerVoice-Studio), [converted to Core ML](https://huggingface.co/Moipee/MossFormer2-SS-16K-CoreML) | Separating two people who talk at once | Apache 2.0 |
 
-Thanks to ivrit.ai for open Hebrew speech models, to the ggml authors for whisper.cpp and llama.cpp, to Fluid Inference for FluidAudio and its Core ML conversions, and to OpenAI, Google, pyannote, WeSpeaker, BUT Speech@FIT, Silero, and NVIDIA for releasing their models.
+Thanks to ivrit.ai for open Hebrew speech models, to the ggml authors for whisper.cpp and llama.cpp, to Fluid Inference for FluidAudio and its Core ML conversions, and to OpenAI, Google, Alibaba, pyannote, WeSpeaker, BUT Speech@FIT, Silero, and NVIDIA for releasing their models.
 
 The full license texts of the software in the app are in [App/Resources/Acknowledgements.txt](App/Resources/Acknowledgements.txt), which ships inside the app.
 

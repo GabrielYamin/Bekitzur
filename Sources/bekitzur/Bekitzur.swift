@@ -10,6 +10,7 @@ struct Bekitzur: AsyncParsableCommand {
         subcommands: [
             ProcessCommand.self, Transcribe.self, Enroll.self, SpeakersCommand.self, AlignCommand.self, LanguageCommand.self, NotesCommand.self, VocabularyCommand.self,
             AudioCheckCommand.self, EnglishTermsCommand.self, LiveHelperCommand.self, SpeechCommand.self, AskCommand.self, ModelsCommand.self,
+            SeparateCommand.self,
         ]
     )
 }

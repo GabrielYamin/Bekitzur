@@ -172,10 +172,11 @@ struct SettingsView: View {
             VocabularySection(model: model)
 
             Section("Models") {
-                ForEach(ModelFile.all) { file in
-                    LabeledContent(file.name) {
-                        let size = file.bytes.formatted(.byteCount(style: .file))
-                        Text(model.missingModels.contains(file) ? "Not downloaded, \(size)" : "Downloaded, \(size)").foregroundStyle(.secondary)
+                ForEach(ModelFile.groups) { group in
+                    LabeledContent(group.name) {
+                        let size = group.bytes.formatted(.byteCount(style: .file))
+                        let missing = group.files.contains(where: model.missingModels.contains)
+                        Text(missing ? "Not downloaded, \(size)" : "Downloaded, \(size)").foregroundStyle(.secondary)
                     }
                 }
                 ModelsNote(model: model)
@@ -185,10 +186,18 @@ struct SettingsView: View {
             }
 
             Section("Storage") {
-                LabeledContent("Conversations") {
+                LabeledContent("Data folder") {
                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([BekitzurPaths.conversations]) }
                 }
-                Text("Recordings, Transcripts, Notes, and voices stay on this Mac.").font(.callout).foregroundStyle(.secondary)
+                Text("It holds your Conversations, with their recordings, Transcripts, and Notes, your voiceprints and vocabulary, and the models. All of it stays on this Mac.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                LabeledContent("Bekitzur") {
+                    Button("Delete Bekitzur…", role: .destructive) { model.deleteApp() }
+                }
+                Text("Moves the app to the Trash, with its speech models or all its data if you choose, and quits. Dragging the app to the Trash does the same.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             Section("About and updates") {

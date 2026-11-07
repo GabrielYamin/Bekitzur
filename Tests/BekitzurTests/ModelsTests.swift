@@ -5,6 +5,14 @@ import Synchronization
 import Testing
 
 struct ModelsTests {
+    @Test func aModelOfSeveralFilesShowsOnceAndConversationsWaitOnlyForTheRequiredModels() {
+        #expect(ModelFile.groups.map(\.name) == ["Hebrew speech model", "English speech model", "Language model", "Voice separation model"])
+        #expect(ModelFile.groups.last?.files.count == 3)
+        let separationBytes: Int64 = 617 + 1_693_600 + 116_277_056
+        #expect(ModelFile.groups.last?.bytes == separationBytes)
+        #expect(ModelFile.required == [.hebrewSpeech, .englishSpeech, .languageModel])
+    }
+
     // MARK: Which models are in
 
     @Test func aModelIsInAsThePinnedFileOrALargeFileInItsPlace() throws {

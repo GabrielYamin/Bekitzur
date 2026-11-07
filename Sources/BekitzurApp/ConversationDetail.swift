@@ -58,6 +58,15 @@ struct ConversationDetail: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(info.displayTitle).font(.title2.bold()).textSelection(.enabled)
                 Text(subtitle).foregroundStyle(.secondary)
+                if info.separating == true, info.status == .unreviewed || info.status == .reviewed, model.separationsFound[info.id] == nil {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Separating people who talk at once…")
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .help("What people said over each other comes into the Transcript when it's done; everything else is ready.")
+                }
             }
             Spacer()
             if result != nil {
@@ -138,7 +147,11 @@ struct ConversationDetail: View {
                 VStack(spacing: 0) {
                     if model.notesAreBehind(info.id) {
                         HStack {
-                            Label("You've fixed the Transcript since the Notes were written.", systemImage: "pencil.circle")
+                            if model.fixedSinceNotes(info.id) {
+                                Label("You've fixed the Transcript since the Notes were written.", systemImage: "pencil.circle")
+                            } else {
+                                Label("Separating people who talked at once changed lines the Notes cite.", systemImage: "person.2.wave.2")
+                            }
                             Spacer()
                             Button("Update Notes") { model.replaceNotes(of: info.id) { model.updateNotes(info.id) } }
                         }

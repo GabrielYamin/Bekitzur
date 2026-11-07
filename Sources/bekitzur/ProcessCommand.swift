@@ -49,7 +49,10 @@ struct ProcessCommand: AsyncParsableCommand {
             language: language,
             voiceprints: try VoiceprintStore(url: URL(filePath: voiceprints)).load(),
             call: call,
-            vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load()
+            vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load(),
+            separation: BekitzurPaths.voiceSeparation.map { model in
+                OverlapSeparation.Resources(package: model.package, compiled: model.compiled, transcribe: transcribedLikeTheApp, log: log)
+            }
         ) { step in
             log(String(format: "%@ (%.1f s)", step.rawValue, Date().timeIntervalSince(started)))
         }
