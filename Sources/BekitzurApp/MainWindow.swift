@@ -297,11 +297,3 @@ struct DirectionalText: View {
 /// SwiftUI's `@State` is a macro on macOS 26 whose plugin ships only with Xcode. This names the property wrapper underneath,
 /// so the app builds with the Command Line Tools alone.
 typealias ViewState = SwiftUI.State
-
-func timestamp(_ seconds: Double?) -> String {
-    guard let seconds else { return "" }
-    let total = Int(seconds)
-    return total >= 3600
-        ? String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
-        : String(format: "%d:%02d", total / 60, total % 60)
-}

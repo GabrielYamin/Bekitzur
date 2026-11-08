@@ -1751,6 +1751,16 @@ final class AppModel {
         NSPasteboard.general.setString(NotesMarkdown.render(result.notes, startedAt: info.startedAt, endedAt: info.endedAt), forType: .string)
     }
 
+    /// The Transcript as it shows, with the user's fixes.
+    func copyTranscript(_ id: String) {
+        guard let info = conversations.first(where: { $0.id == id }), let result = results[id] else { return }
+        let rows = TranscriptRow.rows(from: result.transcript, flags: flags[id] ?? library.flags(for: id)).map { row in
+            row.lines.map { TranscriptMarkdown.Line(speaker: $0.speaker, start: $0.start, text: $0.text) }
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(TranscriptMarkdown.render(rows, title: info.displayTitle, startedAt: info.startedAt, endedAt: info.endedAt), forType: .string)
+    }
+
     func delete(_ id: String) {
         guard id != recordingID, id != processingID else { return }
         waiting.removeAll { $0 == id }

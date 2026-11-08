@@ -75,6 +75,11 @@ struct ConversationDetail: View {
                 } label: {
                     Label("Copy Notes", systemImage: "doc.on.doc")
                 }
+                Button {
+                    model.copyTranscript(info.id)
+                } label: {
+                    Label("Copy Transcript", systemImage: "text.quote")
+                }
                 if info.status == .unreviewed {
                     Button("Done reviewing") { model.markReviewed(info.id) }
                         .buttonStyle(.borderedProminent)
