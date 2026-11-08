@@ -92,6 +92,18 @@ struct TranscriptRowsTests {
         #expect(shape(TranscriptRows.layout(all), all) == [["A 2"], ["B 3"], ["A 3"]])
     }
 
+    /// B starts talking over A's last words, but speech recognition times B's first words as A finishes.
+    @Test func linesTheTimelineHeardAtOnceShareARow() {
+        var all = words("A", from: 15.83, count: 12)
+        all += words("B", from: 19.69, count: 6)
+        let heard: [(start: Double, end: Double, speakers: Set<String>)] = [(18.78, 20.49, ["A", "B"])]
+        let others: [(start: Double, end: Double, speakers: Set<String>)] = [(18.78, 20.49, ["A", "C"])]
+
+        #expect(shape(TranscriptRows.layout(all), all) == [["A 12"], ["B 6"]])
+        #expect(shape(TranscriptRows.layout(all, together: heard), all) == [["A 12", "B 6"]])
+        #expect(shape(TranscriptRows.layout(all, together: others), all) == [["A 12"], ["B 6"]])
+    }
+
     @Test func aSpeakersLinesInARowAreOne() {
         var all = words("A", from: 0, count: 6)
         all += word(1.0, 1.2, "C")

@@ -6,9 +6,14 @@ public enum TranscriptRows {
     ///
     /// A Speaker's words make a line until they pause for more than a second or someone else talks in their pause, so a
     /// reply in a pause reads as an exchange. Lines that overlap by 0.4 seconds, or a short line by half its length, go
-    /// in one row, a line per Speaker in the order they start. A row of one line right after another of the same
-    /// Speaker joins it, so speech without overlaps reads as it always has.
-    public static func layout(_ words: [(start: Double, end: Double, speaker: String)]) -> [[[Int]]] {
+    /// in one row, a line per Speaker in the order they start, as do lines of two Speakers who both reach into a
+    /// stretch `together` says they talked at once: speech recognition times the words of people who talk at once one
+    /// after the other. A row of one line right after another of the same Speaker joins it, so speech without overlaps
+    /// reads as it always has.
+    public static func layout(
+        _ words: [(start: Double, end: Double, speaker: String)],
+        together: [(start: Double, end: Double, speakers: Set<String>)] = []
+    ) -> [[[Int]]] {
         // A word's last token can be timed seconds late, and a word can be timed as taking no time at all.
         func end(_ index: Int) -> Double { min(max(words[index].end, words[index].start + 0.2), words[index].start + 0.6) }
         let order = words.indices.sorted { (words[$0].start, $0) < (words[$1].start, $1) }
@@ -32,10 +37,18 @@ public enum TranscriptRows {
         lines.sort { (words[$0[0]].start, $0[0]) < (words[$1[0]].start, $1[0]) }
 
         let spans = lines.map { line in (start: words[line[0]].start, end: line.map(end).max() ?? words[line[0]].start) }
+        func reaches(_ line: Int, into stretch: (start: Double, end: Double, speakers: Set<String>)) -> Bool {
+            spans[line].start < stretch.end && stretch.start < spans[line].end
+        }
         func overlap(_ a: Int, _ b: Int) -> Bool {
             let shared = min(spans[a].end, spans[b].end) - max(spans[a].start, spans[b].start)
             let shorter = min(spans[a].end - spans[a].start, spans[b].end - spans[b].start)
-            return shared > 0 && shared >= min(0.4, shorter / 2)
+            if shared > 0, shared >= min(0.4, shorter / 2) { return true }
+            let first = words[lines[a][0]].speaker, second = words[lines[b][0]].speaker
+            guard first != second else { return false }
+            return together.contains { stretch in
+                stretch.speakers.contains(first) && stretch.speakers.contains(second) && reaches(a, into: stretch) && reaches(b, into: stretch)
+            }
         }
         var rows: [[Int]] = []
         for line in lines.indices {

@@ -1757,8 +1757,10 @@ final class AppModel {
     /// The Transcript as it shows, with the user's fixes.
     func copyTranscript(_ id: String) {
         guard let info = conversations.first(where: { $0.id == id }), let result = results[id] else { return }
-        let rows = TranscriptRow.rows(from: result.transcript, flags: flags[id] ?? library.flags(for: id)).map { row in
-            row.lines.map { TranscriptMarkdown.Line(speaker: $0.speaker, start: $0.start, text: $0.text) }
+        let together = TranscriptRow.together(in: result)
+        let rows = TranscriptRow.rows(from: result.transcript, flags: flags[id] ?? library.flags(for: id), together: together).map { row -> TranscriptMarkdown.Row in
+            let lines = row.lines.map { TranscriptMarkdown.Line(speaker: $0.speaker, start: $0.start, text: $0.text) }
+            return TranscriptMarkdown.Row(lines: lines, atOnce: row.atOnce)
         }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(TranscriptMarkdown.render(rows, title: info.displayTitle, startedAt: info.startedAt, endedAt: info.endedAt), forType: .string)

@@ -316,6 +316,23 @@ struct OverlapSeparationTests {
         #expect(OverlapSeparation.labels(for: found, in: speakers) == ["a": "Speaker 2", "b": "Speaker 1"])
     }
 
+    /// One starting as another stops isn't talking at once.
+    @Test func whereTheTimelineHearsPeopleAtOnceIsKeptByTheirLabels() {
+        let turns = [
+            SpeakerTurn(voice: "S1", start: 15.48, end: 20.49, embedding: [1, 0]),
+            SpeakerTurn(voice: "S2", start: 18.78, end: 23.03, embedding: [0, 1]),
+            SpeakerTurn(voice: "S1", start: 22.8, end: 24, embedding: [1, 0]),
+        ]
+
+        let together = OverlapSeparation.together(turns, labels: ["S1": "Speaker 1", "S2": "Speaker 2"], length: 25)
+
+        #expect(together.count == 1)
+        #expect(together.first?.speakers == ["Speaker 1", "Speaker 2"])
+        let start: Double = together.first?.start ?? 0, end: Double = together.first?.end ?? 0
+        #expect(abs(start - 18.78) < 0.02)
+        #expect(abs(end - 20.49) < 0.02)
+    }
+
     @Test func transcriptionsOfOneWordMatch() {
         #expect(OverlapSeparation.sameWord("ושנבין", "שנבין"))
         #expect(OverlapSeparation.sameWord("נבין", "שנבין"))

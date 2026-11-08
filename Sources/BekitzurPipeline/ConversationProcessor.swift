@@ -240,7 +240,7 @@ public enum ConversationProcessor {
             )
         }
 
-        let separated = ProcessedConversation(
+        var separated = ProcessedConversation(
             transcript: transcript,
             speakers: speakers.map {
                 ConversationSpeaker(label: $0.label, speechSeconds: $0.speechSeconds, embedding: $0.centroid, naming: $0.naming)
@@ -248,6 +248,8 @@ public enum ConversationProcessor {
             turns: [],
             notes: Notes()
         )
+        let labels = Dictionary(speakers.map { ($0.voice, $0.label) }, uniquingKeysWith: { first, _ in first })
+        separated.together = OverlapSeparation.together(turns, labels: labels, length: Double(samples.count) / 16_000)
         return try rewriteNotes(separated, flags: flags, vocabulary: vocabulary, date: date, language: language, progress: progress)
     }
 

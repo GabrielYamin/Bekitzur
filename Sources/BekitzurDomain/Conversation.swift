@@ -63,6 +63,19 @@ public struct ConversationSpeaker: Codable, Sendable, Equatable {
     }
 }
 
+/// A stretch where two Speakers or more talked at once, by their labels, which naming them doesn't change.
+public struct TalkingAtOnce: Codable, Sendable, Equatable {
+    public var start: Double
+    public var end: Double
+    public var speakers: [String]
+
+    public init(start: Double, end: Double, speakers: [String]) {
+        self.start = start
+        self.end = end
+        self.speakers = speakers
+    }
+}
+
 /// Everything processing produces for a Conversation.
 public struct ProcessedConversation: Codable, Sendable, Equatable {
     public var transcript: Transcript
@@ -76,6 +89,10 @@ public struct ProcessedConversation: Codable, Sendable, Equatable {
     public var notesEdited: Bool?
     /// Separating people who talked at once, after the Notes were written, changed lines they cite.
     public var separationChangedNotes: Bool?
+    /// Where the Speakers' timeline heard two of them or more talk at once. Speech recognition, writing one stream of
+    /// words, times the words of people who talk at once one after the other, so the Transcript groups their lines by
+    /// these too.
+    public var together: [TalkingAtOnce]?
 
     public init(transcript: Transcript, speakers: [ConversationSpeaker], turns: [Turn], notes: Notes, notesFixes: Set<TranscriptFlags.Word>? = nil, notesEdited: Bool? = nil) {
         self.transcript = transcript

@@ -208,6 +208,18 @@ public enum OverlapSeparation {
         return Merged(transcript: transcript, moved: merged.moved, added: merged.added, changed: merged.changed)
     }
 
+    /// Where the timeline hears two Speakers or more of an input talk at once for 0.4 seconds or longer, by their labels;
+    /// shorter, it's one person starting as another stops.
+    public static func together(_ turns: [SpeakerTurn], labels: [String: String], length: Double) -> [TalkingAtOnce] {
+        let activity = Activity(turns, length: length)
+        var together: [TalkingAtOnce] = []
+        for moment in activity.moments() where moment.end - moment.start >= 0.4 {
+            let speakers: [String] = activity.voices(during: moment).compactMap { labels[$0] }
+            if speakers.count >= 2 { together.append(TalkingAtOnce(start: moment.start, end: moment.end, speakers: speakers)) }
+        }
+        return together
+    }
+
     /// Whether the changes are in a turn a Decision, Action Item, or Open Question cites, so the Notes may be behind.
     public static func changesSources(_ merged: Merged, of result: ProcessedConversation) -> Bool {
         let notes = result.notes
@@ -505,6 +517,16 @@ struct Activity: Sendable {
             }
         }
         return moments.sorted { $0.start < $1.start }
+    }
+
+    /// The voices of the stretch's input heard in it.
+    func voices(during stretch: OverlapSeparation.Stretch) -> [String] {
+        let range = window((stretch.start + stretch.end) / 2, (stretch.end - stretch.start) / 2)
+        var voices: [String] = []
+        for (key, active) in frames where key.input == stretch.input {
+            if range.contains(where: { active[$0] }) { voices.append(key.voice) }
+        }
+        return voices.sorted()
     }
 
     func together(_ input: RecordingInput?, around time: Double, within seconds: Double) -> Bool {
