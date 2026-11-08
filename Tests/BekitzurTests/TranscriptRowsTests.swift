@@ -105,6 +105,25 @@ struct TranscriptRowsTests {
         #expect(shape(TranscriptRows.layout(all, together: others), all) == [["A 12"], ["B 6"]])
     }
 
+    /// A starts two words before the timeline hears B too, and B goes on two words after: cut off, they'd read as lines
+    /// cut short.
+    @Test func aWordOrTwoAroundWhatWasSaidAtOnceStayWithIt() {
+        var all = words("A", from: 18.0, count: 5)
+        all += words("B", from: 19.69, count: 5)
+        let heard: [(start: Double, end: Double, speakers: Set<String>)] = [(18.78, 20.4, ["A", "B"])]
+
+        #expect(shape(TranscriptRows.layout(all, together: heard), all) == [["A 5", "B 5"]])
+    }
+
+    /// The same, but A's two words end a sentence, and so does what B says at once: theirs are sentences of their own.
+    @Test func aSentenceOfAWordOrTwoAroundWhatWasSaidAtOnceIsALineOfItsOwn() {
+        var all = words("A", from: 18.0, count: 5)
+        all += words("B", from: 19.69, count: 5)
+        let heard: [(start: Double, end: Double, speakers: Set<String>)] = [(18.78, 20.4, ["A", "B"])]
+
+        #expect(shape(TranscriptRows.layout(all, together: heard, endingSentences: [1, 7]), all) == [["A 2"], ["A 3", "B 3"], ["B 2"]])
+    }
+
     @Test func stretchesAMomentApartAreOne() {
         var all = words("A", from: 15.83, count: 12)
         all += words("B", from: 19.69, count: 9)

@@ -9,11 +9,13 @@ public enum TranscriptRows {
     /// in one row, a line per Speaker in the order they start, as do lines of two Speakers with words in a stretch
     /// `together` says they talked at once: speech recognition times the words of people who talk at once one after the
     /// other. A line is cut where it runs into or out of such a stretch, so what one person says alone around it reads as
-    /// a line of its own. A row of one line right after another of the same Speaker joins it, so speech without overlaps
-    /// reads as it always has.
+    /// a line of its own, but for a word or two that start or finish the sentence said at once. A row of one line right
+    /// after another of the same Speaker joins it, so speech without overlaps reads as it always has.
+    /// - Parameter endingSentences: The words, by index, that end a sentence.
     public static func layout(
         _ words: [(start: Double, end: Double, speaker: String)],
-        together: [(start: Double, end: Double, speakers: Set<String>)] = []
+        together: [(start: Double, end: Double, speakers: Set<String>)] = [],
+        endingSentences: Set<Int> = []
     ) -> [[[Int]]] {
         // A word's last token can be timed seconds late, and a word can be timed as taking no time at all.
         func end(_ index: Int) -> Double { min(max(words[index].end, words[index].start + 0.2), words[index].start + 0.6) }
@@ -52,9 +54,18 @@ public enum TranscriptRows {
         for stretch in stretches {
             lines = lines.flatMap { line -> [[Int]] in
                 guard stretch.speakers.contains(words[line[0]].speaker) else { return [line] }
-                let before = line.filter { words[$0].start < stretch.start - 0.2 }
-                let after = line.filter { words[$0].start > stretch.end + 0.2 }
-                let within = line.filter { inside($0, stretch) }
+                var before = line.filter { words[$0].start < stretch.start - 0.2 }
+                var after = line.filter { words[$0].start > stretch.end + 0.2 }
+                var within = line.filter { inside($0, stretch) }
+                // A word or two on their own would read as a line cut short.
+                if before.count <= 2, let last = before.last, !endingSentences.contains(last) {
+                    within = before + within
+                    before = []
+                }
+                if after.count <= 2, let last = within.last, !endingSentences.contains(last) {
+                    within += after
+                    after = []
+                }
                 return [before, within, after].filter { !$0.isEmpty }
             }
         }
