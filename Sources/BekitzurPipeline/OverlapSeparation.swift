@@ -460,9 +460,10 @@ public enum OverlapSeparation {
     /// Hebrew ("אדוני היושב-ראש").
     static func isNoise(_ word: String) -> Bool {
         let characters = Array(word)
-        if characters.count >= 3, (2..<characters.count).contains(where: { i in
-            characters[i].isLetter && characters[i] == characters[i - 1] && characters[i] == characters[i - 2]
-        }) { return true }
+        for i in characters.indices.dropFirst(2) {
+            let character: Character = characters[i]
+            if character.isLetter, character == characters[i - 1], character == characters[i - 2] { return true }
+        }
         return word.contains("אדוני") || word.contains("היושב")
     }
 }

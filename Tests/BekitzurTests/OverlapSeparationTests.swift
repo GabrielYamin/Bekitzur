@@ -37,8 +37,11 @@ struct OverlapSeparationTests {
 
         let moments = activity.moments()
 
+        let start: Double = moments[0].start, end: Double = moments[0].end
         #expect(moments.count == 1)
-        #expect(abs(moments[0].start - 5) < 0.02 && abs(moments[0].end - 7) < 0.02 && moments[0].input == nil)
+        #expect(abs(start - 5) < 0.02)
+        #expect(abs(end - 7) < 0.02)
+        #expect(moments[0].input == nil)
     }
 
     @Test func eachMomentIsSeparatedWithASecondAroundItJoinedWhereTheyMeet() {
@@ -64,7 +67,8 @@ struct OverlapSeparationTests {
 
         #expect(merged.segments.map(\.text) == ["אני חושב", "ושנבין", "את זה"])
         #expect(merged.segments.map(\.speaker) == ["Speaker 1", "Speaker 2", "Speaker 1"])
-        #expect(merged.moved == 1 && merged.added == 0)
+        #expect(merged.moved == 1)
+        #expect(merged.added == 0)
     }
 
     @Test func awayFromTwoPeopleAtOnceSeparationChangesNothing() {
@@ -129,20 +133,26 @@ struct OverlapSeparationTests {
             found(6.8, "נתחיל", voice: "S1", probability: 0.71), found(7.2, "כך.", voice: "S1", probability: 0.82),
         ], activity: activity)
 
-        #expect(merged.segments == segments && merged.moved == 0 && merged.added == 0)
+        #expect(merged.segments == segments)
+        #expect(merged.moved == 0)
+        #expect(merged.added == 0)
     }
 
     @Test func howSureSpeechRecognitionWasIsTakenPhraseByPhrase() async throws {
         let window = OverlapSeparation.Stretch(start: 10, end: 14, input: nil)
-        let words = [(0.5, "אתה", Float(0.2)), (0.7, "מבין", 0.4), (0.9, "את", 0.6), (2.5, "כן", 0.9), (2.8, "בטח", 0.9)]
-
-        let found = try await OverlapSeparation.transcribed([(window, [Float](repeating: 0, count: 64_000))], language: .hebrew) { _, _ in
-            let timed = words.map { TranscriptWord(start: $0.0, end: $0.0 + 0.15, text: $0.1, probability: $0.2) }
-            return Transcript(language: .hebrew, segments: [TranscriptSegment(start: 0.5, end: 2.95, text: "", words: timed)])
+        let words: [(start: Double, text: String, probability: Float)] = [(0.5, "אתה", 0.2), (0.7, "מבין", 0.4), (0.9, "את", 0.6), (2.5, "כן", 0.9), (2.8, "בטח", 0.9)]
+        let timed: [TranscriptWord] = words.map { word -> TranscriptWord in
+            TranscriptWord(start: word.start, end: word.start + 0.15, text: word.text, probability: word.probability)
         }
 
-        #expect(found.map { ($0.word.start * 100).rounded() } == [1050, 1070, 1090, 1250, 1280])
-        #expect(found.map { ($0.confidence * 100).rounded() } == [40, 40, 40, 90, 90])
+        let found = try await OverlapSeparation.transcribed([(window, [Float](repeating: 0, count: 64_000))], language: .hebrew) { _, _ in
+            Transcript(language: .hebrew, segments: [TranscriptSegment(start: 0.5, end: 2.95, text: "", words: timed)])
+        }
+
+        let starts: [Double] = found.map { item -> Double in (item.word.start * 100).rounded() }
+        let confidences: [Float] = found.map { item -> Float in (item.confidence * 100).rounded() }
+        #expect(starts == [1050, 1070, 1090, 1250, 1280])
+        #expect(confidences == [40, 40, 40, 90, 90])
     }
 
     @Test func someoneWithAWordThereAlreadyGetsNoOther() {
@@ -160,8 +170,10 @@ struct OverlapSeparationTests {
         let leaked = OverlapSeparation.merge(segments, found: [found(5.5, "כן", voice: "S1", probability: 0.3), found(5.52, "כן", voice: "S2")], activity: activity)
         let kept = OverlapSeparation.merge(segments, found: [found(5.5, "כן", voice: "S1"), found(5.52, "כן", voice: "S2", probability: 0.3)], activity: activity)
 
-        #expect(leaked.segments.map(\.speaker) == ["Speaker 1", "Speaker 2"] && leaked.added == 0)
-        #expect(kept.segments == segments && kept.added == 0)
+        #expect(leaked.segments.map(\.speaker) == ["Speaker 1", "Speaker 2"])
+        #expect(leaked.added == 0)
+        #expect(kept.segments == segments)
+        #expect(kept.added == 0)
     }
 
     @Test func eachSeparatedVoiceIsNamedAfterTheVoiceHeardWhenItIsLoud() {
@@ -170,7 +182,10 @@ struct OverlapSeparationTests {
             SpeakerTurn(voice: "B", start: 0.8, end: 2, embedding: [0, 1]),
         ], length: 2)
         func voice(loudFrom from: Int, to: Int) -> [Float] {
-            (0..<32_000).map { i in Float(sin(Double(i) * 0.3)) * ((from..<to).contains(i) ? 0.5 : 0.001) }
+            (0..<32_000).map { i -> Float in
+                let level: Float = (from..<to).contains(i) ? 0.5 : 0.001
+                return Float(sin(Double(i) * 0.3)) * level
+            }
         }
 
         let names = activity.voices(of: [voice(loudFrom: 16_000, to: 32_000), voice(loudFrom: 0, to: 16_000)], at: .init(start: 0.8, end: 1.2, input: nil), in: .init(start: 0, end: 2, input: nil))
@@ -187,7 +202,10 @@ struct OverlapSeparationTests {
         ], length: 6)
         let window = OverlapSeparation.Stretch(start: 0, end: 6, input: nil)
         func voice(loud: [Range<Int>]) -> [Float] {
-            (0..<96_000).map { i in Float(sin(Double(i) * 0.3)) * (loud.contains { $0.contains(i) } ? 0.5 : 0.001) }
+            (0..<96_000).map { i -> Float in
+                let level: Float = loud.contains { $0.contains(i) } ? 0.5 : 0.001
+                return Float(sin(Double(i) * 0.3)) * level
+            }
         }
         let separated = [voice(loud: [0..<32_000, 64_000..<96_000]), voice(loud: [24_000..<96_000])]
 
@@ -221,7 +239,8 @@ struct OverlapSeparationTests {
 
         let merged = OverlapSeparation.merge(segments, found: [found(5.52, "שנבין", voice: "S2")], activity: activity, flags: flags)
 
-        #expect(merged.segments == segments && merged.added == 0)
+        #expect(merged.segments == segments)
+        #expect(merged.added == 0)
     }
 
     @Test func aLineMarkedAsSomeoneElsesIsLeftAlone() {
@@ -260,7 +279,8 @@ struct OverlapSeparationTests {
         let once = OverlapSeparation.merge(separated, into: transcript, flags: TranscriptFlags(), names: [:])
         let twice = OverlapSeparation.merge(separated, into: once.transcript, flags: TranscriptFlags(), names: [:])
 
-        #expect(twice.transcript == once.transcript && twice.added == 1)
+        #expect(twice.transcript == once.transcript)
+        #expect(twice.added == 1)
     }
 
     @Test func theNotesAreBehindOnlyWhenALineTheyCiteChanged() {

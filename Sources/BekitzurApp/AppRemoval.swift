@@ -28,11 +28,11 @@ enum AppRemoval {
         let models = size(of: modelFolders).formatted(.byteCount(style: .file))
         let alert = NSAlert()
         alert.messageText = appInTrash ? "Bekitzur is in the Trash" : "Delete Bekitzur?"
-        alert.informativeText = [
-            appInTrash ? nil : "Bekitzur moves to the Trash and quits.",
-            recording ? "The recording is stopped, and kept with your Conversations." : nil,
-            "Its speech models take \(models), and your Conversations, voiceprints, and settings stay on this Mac for when you install Bekitzur again, unless you move them to the Trash too. You can put back what's in the Trash until you empty it.",
-        ].compactMap { $0 }.joined(separator: " ")
+        var text: [String] = []
+        if !appInTrash { text.append("Bekitzur moves to the Trash and quits.") }
+        if recording { text.append("The recording is stopped, and kept with your Conversations.") }
+        text.append("Its speech models take \(models), and your Conversations, voiceprints, and settings stay on this Mac for when you install Bekitzur again, unless you move them to the Trash too. You can put back what's in the Trash until you empty it.")
+        alert.informativeText = text.joined(separator: " ")
         alert.addButton(withTitle: appInTrash ? "Move the Models to the Trash" : "Delete with the Models")
         alert.addButton(withTitle: appInTrash ? "Move Everything to the Trash" : "Delete with Everything").hasDestructiveAction = true
         alert.addButton(withTitle: appInTrash ? "Keep Everything" : "Delete Only the App")
@@ -49,10 +49,13 @@ enum AppRemoval {
     /// Moves what `choice` names to the Trash, the app itself aside; returns what couldn't be moved.
     static func moveToTrash(_ choice: Choice) -> [URL] {
         guard choice != .appOnly else { return [] }
-        let items: [URL] = switch choice {
-        case .appOnly: []
-        case .models: modelFolders
-        case .everything: [BekitzurPaths.appSupport] + SpeakerModels.folders + [caches, AppLog.url.deletingLastPathComponent(), httpStorage]
+        var items: [URL] = []
+        if choice == .everything {
+            items.append(BekitzurPaths.appSupport)
+            items += SpeakerModels.folders
+            items += [caches, AppLog.url.deletingLastPathComponent(), httpStorage]
+        } else {
+            items = modelFolders
         }
         let fileManager = FileManager.default
         var failed: [URL] = []
@@ -60,7 +63,8 @@ enum AppRemoval {
             if (try? fileManager.trashItem(at: item, resultingItemURL: nil)) == nil { failed.append(item) }
         }
         // FluidAudio's folder goes too once no other app's models are in it.
-        let others = (fileManager.subpaths(atPath: SpeakerModels.root.path) ?? []).filter { !["Models", ".DS_Store", "Models/.DS_Store"].contains($0) }
+        let empty: Set<String> = ["Models", ".DS_Store", "Models/.DS_Store"]
+        let others = (fileManager.subpaths(atPath: SpeakerModels.root.path) ?? []).filter { !empty.contains($0) }
         if others.isEmpty { try? fileManager.trashItem(at: SpeakerModels.root, resultingItemURL: nil) }
         if choice == .everything {
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
@@ -78,9 +82,10 @@ enum AppRemoval {
         if choice == .everything { AppLog.stop() }
         let failed = moveToTrash(choice)
         guard !failed.isEmpty else { return }
+        let paths: [String] = failed.map { $0.path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }
         let alert = NSAlert()
         alert.messageText = "Some of Bekitzur's data couldn't be moved to the Trash"
-        alert.informativeText = "Move these to the Trash in Finder: " + failed.map { $0.path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }.joined(separator: ", ")
+        alert.informativeText = "Move these to the Trash in Finder: \(paths.joined(separator: ", "))"
         NSApp.activate()
         alert.runModal()
     }
@@ -130,10 +135,13 @@ enum AppRemoval {
     }
 
     private static func size(of folders: [URL]) -> Int64 {
-        folders.reduce(0) { total, folder in
-            let sizes = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.totalFileAllocatedSizeKey])?
-                .compactMap { ($0 as? URL).flatMap { try? $0.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize } } ?? []
-            return total + Int64(sizes.reduce(0, +))
+        var total: Int64 = 0
+        for folder in folders {
+            guard let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.totalFileAllocatedSizeKey]) else { continue }
+            for case let file as URL in files {
+                total += Int64((try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize) ?? 0)
+            }
         }
+        return total
     }
 }

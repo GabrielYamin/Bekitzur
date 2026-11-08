@@ -14,6 +14,12 @@ struct ConversationDetail: View {
 
     private var result: ProcessedConversation? { model.results[info.id] }
 
+    /// People who talked at once are being separated, after the Notes, and nothing is waiting to be shown yet.
+    private var isSeparating: Bool {
+        guard info.separating == true, model.separationsFound[info.id] == nil else { return false }
+        return info.status == .unreviewed || info.status == .reviewed
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -58,7 +64,7 @@ struct ConversationDetail: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(info.displayTitle).font(.title2.bold()).textSelection(.enabled)
                 Text(subtitle).foregroundStyle(.secondary)
-                if info.separating == true, info.status == .unreviewed || info.status == .reviewed, model.separationsFound[info.id] == nil {
+                if isSeparating {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
                         Text("Separating people who talk at once…")

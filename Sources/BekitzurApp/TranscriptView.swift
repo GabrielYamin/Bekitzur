@@ -78,21 +78,19 @@ struct TranscriptRow: Identifiable {
                 continue
             }
             for word in words where flags.flag(for: word)?.phrase == nil {
-                pieces.append(Piece(
-                    word: word,
-                    text: flags.text(of: word),
-                    start: word.start,
-                    end: word.end,
-                    speaker: flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers) ?? "Speaker",
-                    transcribedSpeaker: segment.speaker,
-                    rest: phrases.first { abs($0.start - word.start) < 0.005 }?.rest ?? [],
-                    separated: segment.separated == true
-                ))
+                let said = flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers) ?? "Speaker"
+                let rest = phrases.first { abs($0.start - word.start) < 0.005 }?.rest ?? []
+                pieces.append(Piece(word: word, text: flags.text(of: word), start: word.start, end: word.end, speaker: said,
+                                    transcribedSpeaker: segment.speaker, rest: rest, separated: segment.separated == true))
             }
         }
 
         // Text without word times makes lines of its own.
-        let layout = TranscriptRows.layout(pieces.map { ($0.start, $0.end, $0.word == nil ? "\($0.speaker)\u{0}" : $0.speaker) })
+        let timed: [(start: Double, end: Double, speaker: String)] = pieces.map { piece -> (start: Double, end: Double, speaker: String) in
+            let speaker = piece.word == nil ? piece.speaker + "\u{0}" : piece.speaker
+            return (piece.start, piece.end, speaker)
+        }
+        let layout = TranscriptRows.layout(timed)
         var rows: [TranscriptRow] = []
         var lineCount = 0
         var number = 0
@@ -112,16 +110,21 @@ struct TranscriptRow: Identifiable {
                 lineCount += 1
             }
             guard !lines.isEmpty else { continue }
-            let all = row.flatMap { $0 }.map { pieces[$0] }
-            rows.append(TranscriptRow(
-                id: rows.count,
-                lines: lines,
-                start: lines.map(\.start).min() ?? 0,
-                end: all.map(\.end).max() ?? 0,
-                separated: all.contains(where: \.separated)
-            ))
+            let all: [Piece] = row.flatMap { $0 }.map { pieces[$0] }
+            let start: Double = lines.map(\.start).min() ?? 0
+            let end: Double = all.map(\.end).max() ?? 0
+            rows.append(TranscriptRow(id: rows.count, lines: lines, start: start, end: end, separated: all.contains(where: \.separated)))
         }
         return rows
+    }
+
+    /// Each word's row, by word number.
+    static func rowOfWord(in rows: [TranscriptRow]) -> [Int] {
+        var rowOfWord: [Int] = []
+        for row in rows {
+            for line in row.lines { rowOfWord += [Int](repeating: row.id, count: line.words.count) }
+        }
+        return rowOfWord
     }
 
     /// The word being said in each line at `time`, by line, and the row with the one started last, to follow.
@@ -145,7 +148,9 @@ struct TranscriptRow: Identifiable {
             for line in row.lines {
                 guard let index = TranscriptLine.word(at: time, starts: line.starts) else { continue }
                 words[line.id] = line.words[index].number
-                if line.starts[index] >= latest?.start ?? -.infinity { latest = (line.starts[index], row.id) }
+                let start = line.starts[index]
+                if let last = latest, last.start > start { continue }
+                latest = (start, row.id)
             }
         }
         return (words, latest?.row)
@@ -242,7 +247,7 @@ struct TranscriptView: View {
         let rows = TranscriptRow.rows(from: result.transcript, flags: flags)
         let lines = rows.flatMap(\.lines)
         let words = lines.flatMap(\.words)
-        let rowOfWord = rows.flatMap { row in row.lines.flatMap { line in line.words.map { _ in row.id } } }
+        let rowOfWord = TranscriptRow.rowOfWord(in: rows)
         let matches = finding ? TranscriptSearch.matches(of: query, in: words.map(\.text)) : []
         let currentMatch = matches.isEmpty ? nil : matches[min(match, matches.count - 1)]
         let selection = self.selection
@@ -320,17 +325,10 @@ struct TranscriptView: View {
             }
             // Nothing in the Transcript moves while it's read: what separating found waits to be shown.
             if let found = model.separationsFound[info.id] {
-                HStack {
-                    Label("Separated \(found.places) \(found.places == 1 ? "place" : "places") where people talked at once.", systemImage: "person.2.wave.2")
-                    Spacer()
-                    Button("Show") {
-                        selection.range = nil
-                        model.mergeSeparation(info.id)
-                    }
+                SeparationNote(places: found.places) {
+                    selection.range = nil
+                    model.mergeSeparation(info.id)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.accentColor.opacity(0.08))
                 Divider()
             }
             TranscriptLines(
@@ -428,6 +426,24 @@ struct TranscriptView: View {
             }
         }
         return byLine
+    }
+}
+
+/// What separating people who talked at once found, waiting for Show while the Transcript is read.
+private struct SeparationNote: View {
+    let places: Int
+    let show: () -> Void
+
+    var body: some View {
+        let text = places == 1 ? "Separated 1 place where people talked at once." : "Separated \(places) places where people talked at once."
+        HStack {
+            Label(text, systemImage: "person.2.wave.2")
+            Spacer()
+            Button("Show", action: show)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.accentColor.opacity(0.08))
     }
 }
 

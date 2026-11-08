@@ -6,10 +6,13 @@ import Testing
 struct VoiceSeparatorTests {
     /// Two signals the stand-in model knows, unlike enough to tell apart.
     private static func voices(_ count: Int) -> [[Float]] {
-        [
-            (0..<count).map { sin(Float($0) * 0.0123) },
-            (0..<count).map { Float(($0 / 101) % 2 == 0 ? 0.4 : -0.4) + sin(Float($0) * 0.0517) * 0.3 },
-        ]
+        let first: [Float] = (0..<count).map { i -> Float in sin(Float(i) * 0.0123) }
+        let second: [Float] = (0..<count).map { i -> Float in
+            let square: Float = (i / 101) % 2 == 0 ? 0.4 : -0.4
+            let wave: Float = sin(Float(i) * 0.0517) * 0.3
+            return square + wave
+        }
+        return [first, second]
     }
 
     @Test(arguments: [10_000, VoiceSeparator.window, VoiceSeparator.window + 1, 100_000])
@@ -20,7 +23,12 @@ struct VoiceSeparatorTests {
         let separated = VoiceSeparator.separate(mix) { window in
             defer { step += 1 }
             let at = step * VoiceSeparator.stride
-            let parts = truth.map { voice in (0..<window.count).map { at + $0 < voice.count ? voice[at + $0] : 0 } }
+            let parts: [[Float]] = truth.map { voice -> [Float] in
+                (0..<window.count).map { i -> Float in
+                    let sample = at + i
+                    return sample < voice.count ? voice[sample] : 0
+                }
+            }
             return step.isMultiple(of: 2) ? parts : parts.reversed()
         }
 
@@ -36,7 +44,7 @@ struct VoiceSeparatorTests {
     func theModelGivesTwoVoicesAsLongAsTheAudio() async throws {
         let model = try #require(Self.model)
         let separator = try await VoiceSeparator(package: model.package, compiled: model.compiled)
-        let samples = (0..<40_000).map { sin(Float($0) * 0.05) * 0.3 }
+        let samples: [Float] = (0..<40_000).map { i -> Float in sin(Float(i) * 0.05) * 0.3 }
 
         let voices = try separator.separate(samples)
 

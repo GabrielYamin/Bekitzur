@@ -219,7 +219,9 @@ final class AppModel {
             enqueue(info.id)
         }
         // And before these had their people who talked at once separated.
-        separationWaiting = conversations.reversed().filter { $0.separating == true && ($0.status == .unreviewed || $0.status == .reviewed) }.map(\.id)
+        for info in conversations.reversed() where info.separating == true {
+            if info.status == .unreviewed || info.status == .reviewed { separationWaiting.append(info.id) }
+        }
         separateNext()
         // Coming back from System Settings makes the app active.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -1120,7 +1122,8 @@ final class AppModel {
         }
         results[id] = result
         update(id) { $0.separating = nil }
-        AppLog.write("\(id): merged what people said at once in \(merged.places) places: \(merged.moved) words given to another Speaker, \(merged.added) added\(behind ? ", in lines the Notes cite" : "")")
+        let cited = behind ? ", in lines the Notes cite" : ""
+        AppLog.write("\(id): merged what people said at once in \(merged.places) places: \(merged.moved) words given to another Speaker, \(merged.added) added\(cited)")
     }
 
     /// What separating found, or is finding, no longer fits the Conversation, which is processed again or deleted.
