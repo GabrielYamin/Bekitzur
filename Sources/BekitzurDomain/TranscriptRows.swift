@@ -6,9 +6,10 @@ public enum TranscriptRows {
     ///
     /// A Speaker's words make a line until they pause for more than a second or someone else talks in their pause, so a
     /// reply in a pause reads as an exchange. Lines that overlap by 0.4 seconds, or a short line by half its length, go
-    /// in one row, a line per Speaker in the order they start, as do lines of two Speakers who both reach into a
-    /// stretch `together` says they talked at once: speech recognition times the words of people who talk at once one
-    /// after the other. A row of one line right after another of the same Speaker joins it, so speech without overlaps
+    /// in one row, a line per Speaker in the order they start, as do lines of two Speakers with words in a stretch
+    /// `together` says they talked at once: speech recognition times the words of people who talk at once one after the
+    /// other. A line is cut where it runs into or out of such a stretch, so what one person says alone around it reads as
+    /// a line of its own. A row of one line right after another of the same Speaker joins it, so speech without overlaps
     /// reads as it always has.
     public static func layout(
         _ words: [(start: Double, end: Double, speaker: String)],
@@ -34,11 +35,34 @@ public enum TranscriptRows {
             open[word.speaker]?.position = position
         }
         lines += open.values.map(\.line)
+
+        // Stretches less than a second apart are one, so a short pause between them doesn't cut a sentence.
+        var stretches: [(start: Double, end: Double, speakers: Set<String>)] = []
+        for stretch in together.sorted(by: { $0.start < $1.start }) {
+            if let last = stretches.last, stretch.start - last.end < 1 {
+                stretches[stretches.count - 1] = (last.start, max(last.end, stretch.end), last.speakers.union(stretch.speakers))
+            } else {
+                stretches.append(stretch)
+            }
+        }
+        // A word's time can be a little off, more so when people talk at once.
+        func inside(_ index: Int, _ stretch: (start: Double, end: Double, speakers: Set<String>)) -> Bool {
+            words[index].start >= stretch.start - 0.2 && words[index].start <= stretch.end + 0.2
+        }
+        for stretch in stretches {
+            lines = lines.flatMap { line -> [[Int]] in
+                guard stretch.speakers.contains(words[line[0]].speaker) else { return [line] }
+                let before = line.filter { words[$0].start < stretch.start - 0.2 }
+                let after = line.filter { words[$0].start > stretch.end + 0.2 }
+                let within = line.filter { inside($0, stretch) }
+                return [before, within, after].filter { !$0.isEmpty }
+            }
+        }
         lines.sort { (words[$0[0]].start, $0[0]) < (words[$1[0]].start, $1[0]) }
 
         let spans = lines.map { line in (start: words[line[0]].start, end: line.map(end).max() ?? words[line[0]].start) }
         func reaches(_ line: Int, into stretch: (start: Double, end: Double, speakers: Set<String>)) -> Bool {
-            spans[line].start < stretch.end && stretch.start < spans[line].end
+            lines[line].contains { inside($0, stretch) }
         }
         func overlap(_ a: Int, _ b: Int) -> Bool {
             let shared = min(spans[a].end, spans[b].end) - max(spans[a].start, spans[b].start)
@@ -46,7 +70,7 @@ public enum TranscriptRows {
             if shared > 0, shared >= min(0.4, shorter / 2) { return true }
             let first = words[lines[a][0]].speaker, second = words[lines[b][0]].speaker
             guard first != second else { return false }
-            return together.contains { stretch in
+            return stretches.contains { stretch in
                 stretch.speakers.contains(first) && stretch.speakers.contains(second) && reaches(a, into: stretch) && reaches(b, into: stretch)
             }
         }

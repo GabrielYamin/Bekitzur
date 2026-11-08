@@ -92,16 +92,25 @@ struct TranscriptRowsTests {
         #expect(shape(TranscriptRows.layout(all), all) == [["A 2"], ["B 3"], ["A 3"]])
     }
 
-    /// B starts talking over A's last words, but speech recognition times B's first words as A finishes.
-    @Test func linesTheTimelineHeardAtOnceShareARow() {
+    /// B starts talking over A's last words, but speech recognition times B's first words as A finishes. What each says
+    /// alone, before and after, reads as a line of its own.
+    @Test func whatTheTimelineHeardAtOnceSharesARow() {
         var all = words("A", from: 15.83, count: 12)
         all += words("B", from: 19.69, count: 6)
-        let heard: [(start: Double, end: Double, speakers: Set<String>)] = [(18.78, 20.49, ["A", "B"])]
-        let others: [(start: Double, end: Double, speakers: Set<String>)] = [(18.78, 20.49, ["A", "C"])]
+        let heard: [(start: Double, end: Double, speakers: Set<String>)] = [(18.78, 20.4, ["A", "B"])]
+        let others: [(start: Double, end: Double, speakers: Set<String>)] = [(18.78, 20.4, ["A", "C"])]
 
         #expect(shape(TranscriptRows.layout(all), all) == [["A 12"], ["B 6"]])
-        #expect(shape(TranscriptRows.layout(all, together: heard), all) == [["A 12", "B 6"]])
+        #expect(shape(TranscriptRows.layout(all, together: heard), all) == [["A 9"], ["A 3", "B 3"], ["B 3"]])
         #expect(shape(TranscriptRows.layout(all, together: others), all) == [["A 12"], ["B 6"]])
+    }
+
+    @Test func stretchesAMomentApartAreOne() {
+        var all = words("A", from: 15.83, count: 12)
+        all += words("B", from: 19.69, count: 9)
+        let heard: [(start: Double, end: Double, speakers: Set<String>)] = [(18.78, 20.4, ["A", "B"]), (20.77, 22.8, ["A", "B"])]
+
+        #expect(shape(TranscriptRows.layout(all, together: heard), all) == [["A 9"], ["A 3", "B 9"]])
     }
 
     @Test func aSpeakersLinesInARowAreOne() {
