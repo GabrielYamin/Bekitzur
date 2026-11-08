@@ -44,8 +44,16 @@ public enum SpeakerModels {
         cache.appending(path: Repo.sortformer.folderName)
     }
 
+    /// The folders of the models Bekitzur uses in FluidAudio's cache, which other apps with FluidAudio can share.
+    public static var folders: [URL] {
+        [Repo.diarizer, .nemotron3Diarization, .vad, .sortformer].map { cache.appending(path: $0.folderName) }
+    }
+
+    /// FluidAudio's folder, which holds its cache.
+    public static let root = URL.applicationSupportDirectory.appending(path: "FluidAudio")
+
     /// FluidAudio's default cache.
     private static var cache: URL {
-        URL.applicationSupportDirectory.appending(path: "FluidAudio/Models")
+        root.appending(path: "Models")
     }
 }

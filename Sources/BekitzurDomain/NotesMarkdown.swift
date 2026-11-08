@@ -4,11 +4,7 @@ import Foundation
 public enum NotesMarkdown {
     public static func render(_ notes: Notes, startedAt: Date, endedAt: Date?) -> String {
         var lines = ["# \(notes.title)", ""]
-        var when = startedAt.formatted(.dateTime.weekday(.wide).day().month(.abbreviated).year().hour().minute())
-        if let endedAt {
-            when += " · \(max(1, Int(endedAt.timeIntervalSince(startedAt) / 60))) min"
-        }
-        lines += [when, "", notes.summary]
+        lines += [when(startedAt, endedAt), "", notes.summary]
 
         if !notes.decisions.isEmpty {
             lines += ["", "## Decisions"] + notes.decisions.map { "- \($0.text)" }
@@ -24,6 +20,15 @@ public enum NotesMarkdown {
             lines += ["", "## Open Questions"] + notes.openQuestions.map { "- \($0.text)" }
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// When the Conversation was, and how long: "Thursday, Oct 22, 2026 at 14:03 · 20 min".
+    static func when(_ startedAt: Date, _ endedAt: Date?) -> String {
+        var when = startedAt.formatted(.dateTime.weekday(.wide).day().month(.abbreviated).year().hour().minute())
+        if let endedAt {
+            when += " · \(max(1, Int(endedAt.timeIntervalSince(startedAt) / 60))) min"
+        }
+        return when
     }
 
     /// "Thu, Oct 22" when the due date was resolved, otherwise the spoken phrase in quotes.

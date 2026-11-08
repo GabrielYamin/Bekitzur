@@ -21,6 +21,9 @@ enum Entry {
             guard language != nil || argument == LiveTranscriptionHelper.detect else { exit(2) }
             exit(LiveTranscriptionHelper.serve(language: language))
         }
+        if let index = arguments.firstIndex(of: AppRemoval.afterQuitArgument) {
+            exit(AppRemoval.afterQuit(Array(arguments.dropFirst(index + 1))))
+        }
         BekitzurApp.main()
     }
 }
@@ -58,6 +61,10 @@ private struct MenuBarLabel: View {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private var terminationSignal: DispatchSourceSignal?
+    /// The build and install scripts quit the app with SIGTERM to replace it, which isn't removing it.
+    private var quitBySignal = false
+    /// The app that asked this one to quit, for the log.
+    private var quitBy: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
@@ -74,8 +81,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // SIGTERM (pkill, the build script) would otherwise end the process before a recording's files are finished.
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        source.setEventHandler {
-            MainActor.assumeIsolated { NSApp.terminate(nil) }
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                self?.quitBySignal = true
+                NSApp.terminate(nil)
+            }
         }
         source.resume()
         terminationSignal = source
@@ -98,9 +108,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         Task { await AppModel.shared.importRecordings(urls) }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if let event = NSAppleEventManager.shared().currentAppleEvent, event.eventID == kAEQuitApplication,
+           let pid = event.attributeDescriptor(forKeyword: keySenderPIDAttr)?.int32Value {
+            quitBy = NSRunningApplication(processIdentifier: pid)?.localizedName
+        }
+        return .terminateNow
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         AppModel.shared.stopRecordingForQuit()
-        AppLog.write("Quit")
+        if !quitBySignal, !AppModel.shared.isRemoving { AppRemoval.watchAfterQuitting() }
+        AppLog.write(quitBy.map { "Quit, asked by \($0)" } ?? "Quit")
         AppLog.flush()
     }
 

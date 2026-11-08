@@ -1,6 +1,6 @@
 import BekitzurDomain
-import BekitzurPipeline
 import Testing
+@testable import BekitzurPipeline
 @testable import BekitzurSpeakers
 
 /// A call's tracks transcribed each on its own, then put together.
@@ -41,6 +41,19 @@ struct EachTrackTests {
         let merged = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: [64.1...65.0])
 
         #expect(merged.segments.filter { $0.input == .microphone }.map(\.text) == ["מה הבעיה?"])
+    }
+
+    /// Keystrokes are as loud as speech to the echo check, and speech recognition wrote "Hvað er það?" over them; the
+    /// speech detector hears no speech there.
+    @Test func microphoneWordsTheSpeechDetectorDoesntHearGo() {
+        let microphone = Transcript(language: .english, segments: [segment([(17.26, "Hey"), (17.5, "guys.")]), segment([(68.41, "Hvað"), (68.55, "er"), (68.65, "það?")])])
+        let system = Transcript(language: .english, segments: [segment([(67.65, "with"), (68.73, "the"), (68.99, "savvy")])])
+        let speech = ConversationProcessor.overlaps([14.0...18.7, 68.2...68.9], [14.04...14.89, 16.85...18.73])
+
+        let merged = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: speech)
+
+        #expect(speech == [14.04...14.89, 16.85...18.7])
+        #expect(merged.segments.filter { $0.input == .microphone }.map(\.text) == ["Hey guys."])
     }
 
     @Test func aStretchFromOneTrackGoesToAVoiceHeardThere() {

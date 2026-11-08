@@ -1,29 +1,41 @@
 import Foundation
 
-/// A model file Bekitzur reads, pinned to one revision of its publisher's repository on Hugging Face.
+/// A model file Bekitzur reads, pinned to one revision of a repository on Hugging Face.
 public struct ModelFile: Sendable, Equatable, Identifiable {
-    /// What the app calls it, like "Hebrew speech model".
+    /// What the app calls it, like "Hebrew speech model"; the files of a model made of several share it.
     public let name: String
     /// Where it goes, relative to the models folder.
     public let path: String
     public let url: URL
-    /// The Git LFS hash Hugging Face publishes for that revision.
+    /// The file's SHA-256 at that revision, which Hugging Face publishes as the Git LFS hash for large files.
     public let sha256: String
     public let bytes: Int64
     /// Files this one replaces, relative to the models folder. Until it's downloaded the app reads the first of them
     /// that's there; once it's in, they're deleted.
     public let replaces: [String]
+    /// Whether Conversations wait for it to be processed; without an optional model, processing skips what it's for.
+    public let required: Bool
 
     public var id: String { path }
 
-    public init(name: String, path: String, url: URL, sha256: String, bytes: Int64, replaces: [String] = []) {
+    public init(name: String, path: String, url: URL, sha256: String, bytes: Int64, replaces: [String] = [], required: Bool = true) {
         self.name = name
         self.path = path
         self.url = url
         self.sha256 = sha256
         self.bytes = bytes
         self.replaces = replaces
+        self.required = required
     }
+}
+
+/// A model as the app shows it: the files that share a name.
+public struct ModelGroup: Sendable, Identifiable {
+    public let name: String
+    public let files: [ModelFile]
+
+    public var id: String { name }
+    public var bytes: Int64 { files.reduce(0) { $0 + $1.bytes } }
 }
 
 extension ModelFile {
@@ -53,7 +65,39 @@ extension ModelFile {
         bytes: 14_439_363_584
     )
 
-    /// Every model the app needs, in the order they download: the speech models first, so recordings are transcribed
+    /// Where the voice separation model's Core ML package goes, relative to the models folder.
+    public static let voiceSeparationPackage = "mossformer2-ss-16k-coreml/MossFormer2_SS_16K.mlpackage"
+
+    /// Alibaba's MossFormer2 (ClearerVoice-Studio), converted to Core ML: a package of three files, which separates two
+    /// people talking at once. Optional: Conversations are processed without it, only not separated.
+    public static let voiceSeparation = [
+        ("Manifest.json", "cc4e38523902de698c8bea7dc9142ff00e0cff0d8541da1bd27c1a432c668565", Int64(617)),
+        ("Data/com.apple.CoreML/model.mlmodel", "f0e936c3119f36f759f132c7270857b29e7d5f7810d94a00ccdf1977b435d185", Int64(1_693_600)),
+        ("Data/com.apple.CoreML/weights/weight.bin", "d5cbff35650793d91e880bd43074aea6ad1c5b48781d057244a0039c56249cc2", Int64(116_277_056)),
+    ].map { file, sha256, bytes in
+        ModelFile(
+            name: "Voice separation model",
+            path: "\(voiceSeparationPackage)/\(file)",
+            url: URL(string: "https://huggingface.co/Moipee/MossFormer2-SS-16K-CoreML/resolve/b937109e10cb0af3aac8577b6fa4c4c615a42e48/MossFormer2_SS_16K.mlpackage/\(file)")!,
+            sha256: sha256,
+            bytes: bytes,
+            required: false
+        )
+    }
+
+    /// Every model the app reads, in the order they download: the speech models first, so recordings are transcribed
     /// live sooner.
-    public static let all = [hebrewSpeech, englishSpeech, languageModel]
+    public static let all = [hebrewSpeech, englishSpeech, languageModel] + voiceSeparation
+
+    /// The models Conversations wait for.
+    public static let required = all.filter(\.required)
+
+    /// The models as the app shows them, each once, in the order they download.
+    public static let groups = groups(of: all)
+
+    public static func groups(of files: [ModelFile]) -> [ModelGroup] {
+        var names: [String] = []
+        for file in files where !names.contains(file.name) { names.append(file.name) }
+        return names.map { name in ModelGroup(name: name, files: files.filter { $0.name == name }) }
+    }
 }

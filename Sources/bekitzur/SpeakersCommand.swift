@@ -129,7 +129,8 @@ struct SpeakersCommand: AsyncParsableCommand {
             let language = info.language ?? result.transcript.language
             let system = try await transcribedLikeTheApp(lined.tracks.system, language: language)
             let microphone = try await transcribedLikeTheApp(lined.tracks.microphone, language: language)
-            segments = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: microphoneSpeech).segments
+            let speech = await ConversationProcessor.microphoneSpeech(microphoneSpeech, in: lined.tracks.microphone)
+            segments = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: speech).segments
         }
         for segment in Speakers.attribute(segments, turns: turns, speakers: found) {
             let input = segment.input.map { $0 == .microphone ? "mic" : "sys" } ?? "-  "
@@ -139,20 +140,20 @@ struct SpeakersCommand: AsyncParsableCommand {
         }
         log(String(format: "%d turns, %d Speakers in %.1f s", turns.count, found.count, Date().timeIntervalSince(started)))
     }
-
-    /// Transcribed as the app does, in chunks through a helper process: whisper.cpp's word timing aborts on short speech
-    /// in a long silence, as in a microphone with the other side silenced, when it gets the whole track at once.
-    private func transcribedLikeTheApp(_ samples: [Float], language: ConversationLanguage) async throws -> Transcript {
-        let helper = HelperChunkTranscriber(executable: Bundle.main.executableURL ?? URL(filePath: CommandLine.arguments[0]), arguments: ["live-helper", language.rawValue])
-        let transcriber = LiveTranscriber(language: language, chunks: helper, tracks: 1) { _ in }
-        samples.withUnsafeBufferPointer { buffer in
-            for start in stride(from: 0, to: buffer.count, by: 4_096) {
-                transcriber.receive(UnsafeBufferPointer(rebasing: buffer[start..<min(start + 4_096, buffer.count)]), sampleRate: AudioLoader.sampleRate, track: 0)
-            }
-        }
-        guard let transcript = await transcriber.finish() else { throw ValidationError("Transcription failed") }
-        return transcript
-    }
 }
 
 extension SpeakerSeparation.Timeline: ExpressibleByArgument {}
+
+/// Transcribed as the app does, in chunks through a helper process: whisper.cpp's word timing aborts on short speech in
+/// a long silence, as in a microphone with the other side silenced, when it gets the whole track at once.
+func transcribedLikeTheApp(_ samples: [Float], language: ConversationLanguage) async throws -> Transcript {
+    let helper = HelperChunkTranscriber(executable: Bundle.main.executableURL ?? URL(filePath: CommandLine.arguments[0]), arguments: ["live-helper", language.rawValue])
+    let transcriber = LiveTranscriber(language: language, chunks: helper, tracks: 1) { _ in }
+    samples.withUnsafeBufferPointer { buffer in
+        for start in stride(from: 0, to: buffer.count, by: 4_096) {
+            transcriber.receive(UnsafeBufferPointer(rebasing: buffer[start..<min(start + 4_096, buffer.count)]), sampleRate: AudioLoader.sampleRate, track: 0)
+        }
+    }
+    guard let transcript = await transcriber.finish() else { throw ValidationError("Transcription failed") }
+    return transcript
+}

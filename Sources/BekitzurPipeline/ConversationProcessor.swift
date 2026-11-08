@@ -9,6 +9,7 @@ import Foundation
 public enum ProcessingStep: String, Sendable {
     case transcribing = "Transcribing"
     case recognizingSpeakers = "Recognizing speakers"
+    case separatingVoices = "Separating people who talk at once"
     case checkingTerms = "Checking English terms"
     case writingNotes = "Writing Notes"
 }
@@ -138,6 +139,27 @@ public enum ConversationProcessor {
         return Transcript(language: system.language, segments: (microphoneSegments + systemSegments).sorted { $0.start < $1.start })
     }
 
+    /// Where a call's microphone has speech of its own: above what's left of the other side and the room's noise
+    /// (`CallTracks.removingEcho`), and speech to the speech detector too, since keystrokes are loud enough for the first
+    /// and speech recognition writes words over them ("Hvað er það?"). Without the detector, the first alone.
+    /// - Parameter microphone: The microphone without the other side (`CallTracks.removingEcho`).
+    public static func microphoneSpeech(_ ownSpeech: [ClosedRange<Double>], in microphone: [Float]) async -> [ClosedRange<Double>] {
+        // Surer than live transcription asks for (0.5), at which a burst of keystrokes passes as speech.
+        guard let detected = try? await SpeechDetector().speech(in: microphone, threshold: 0.7) else { return ownSpeech }
+        return overlaps(ownSpeech, detected)
+    }
+
+    /// Where stretches of the one and of the other overlap.
+    static func overlaps(_ a: [ClosedRange<Double>], _ b: [ClosedRange<Double>]) -> [ClosedRange<Double>] {
+        a.flatMap { x in
+            b.compactMap { y -> ClosedRange<Double>? in
+                let lower = max(x.lowerBound, y.lowerBound), upper = min(x.upperBound, y.upperBound)
+                return lower <= upper ? lower...upper : nil
+            }
+        }
+        .sorted { $0.lowerBound < $1.lowerBound }
+    }
+
     /// A word without case or punctuation, for telling whether two tracks heard the same one.
     static func normalized(_ word: String) -> String {
         String(String.UnicodeScalarView(word.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }))
@@ -165,6 +187,7 @@ public enum ConversationProcessor {
     ///   - transcript: A Transcript already made in this language, to separate Speakers again without transcribing.
     ///   - flags: The user's marks on that Transcript; their fixes go into the Notes.
     ///   - vocabulary: The user's own terms and taught spellings, on top of the built-in terms.
+    ///   - separation: What separating people who talk at once needs, when its model is downloaded.
     public static func process(
         _ samples: [Float],
         date: Date,
@@ -175,11 +198,13 @@ public enum ConversationProcessor {
         transcript existing: Transcript? = nil,
         flags: TranscriptFlags = TranscriptFlags(),
         vocabulary: Vocabulary = Vocabulary(),
+        separation: OverlapSeparation.Resources? = nil,
         progress: @Sendable (ProcessingStep) -> Void = { _ in }
     ) async throws -> ProcessedConversation {
         var transcript: Transcript
         if let existing, existing.language == language {
             transcript = existing
+            transcript.segments.removeAll { $0.separated == true }
         } else {
             progress(.transcribing)
             transcript = try Transcript(
@@ -196,6 +221,24 @@ public enum ConversationProcessor {
         }
         let speakers = Speakers.name(Speakers.speakers(from: turns), with: voiceprints)
         transcript.segments = Speakers.attribute(transcript.segments, turns: turns, speakers: speakers)
+        if let separation {
+            progress(.separatingVoices)
+            transcript.segments = try await OverlapSeparation.apply(
+                to: transcript.segments,
+                turns: turns,
+                speakers: speakers,
+                language: language,
+                length: Double(samples.count) / 16_000,
+                audio: { input in
+                    switch input {
+                    case .microphone: call?.microphone ?? samples
+                    case .systemAudio: call?.system ?? samples
+                    case nil: samples
+                    }
+                },
+                resources: separation
+            )
+        }
 
         let separated = ProcessedConversation(
             transcript: transcript,
@@ -229,6 +272,7 @@ public enum ConversationProcessor {
         result.notes = try NotesWriter(model: model).write(turns: turns, date: date, language: language).notes
         result.turns = turns
         result.notesFixes = flags.fixes
+        result.separationChangedNotes = nil
         return result
     }
 

@@ -7,12 +7,15 @@ public struct TranscriptWord: Codable, Sendable, Equatable {
     public var text: String
     /// What speech recognition wrote, when the Vocabulary rewrote it ("רדיס" for "Redis").
     public var transcribed: String?
+    /// How sure speech recognition was of the word: its least likely token's probability, 0 to 1.
+    public var probability: Float?
 
-    public init(start: Double, end: Double, text: String, transcribed: String? = nil) {
+    public init(start: Double, end: Double, text: String, transcribed: String? = nil, probability: Float? = nil) {
         self.start = start
         self.end = end
         self.text = text
         self.transcribed = transcribed
+        self.probability = probability
     }
 }
 
@@ -33,14 +36,18 @@ public struct TranscriptSegment: Codable, Sendable, Equatable {
     /// The track it was transcribed from, when a call's tracks are transcribed each on its own; its words go to a voice
     /// heard there.
     public var input: RecordingInput?
+    /// Words only separating two people who talked at once found (`OverlapSeparation`); separating Speakers again
+    /// replaces them.
+    public var separated: Bool?
 
-    public init(start: Double, end: Double, text: String, speaker: String? = nil, words: [TranscriptWord]? = nil, input: RecordingInput? = nil) {
+    public init(start: Double, end: Double, text: String, speaker: String? = nil, words: [TranscriptWord]? = nil, input: RecordingInput? = nil, separated: Bool? = nil) {
         self.start = start
         self.end = end
         self.text = text
         self.speaker = speaker
         self.words = words
         self.input = input
+        self.separated = separated
     }
 
     /// The segment with its times and its words' times moved later by `seconds`, for a stretch transcribed on its own.

@@ -69,7 +69,6 @@ public enum LiveChunks {
         with transcriber: Transcriber,
         language: ConversationLanguage
     ) throws -> [TranscriptSegment] {
-        let duration = Double(samples.count) / AudioLoader.sampleRate
         var segments: [TranscriptSegment] = []
         var from = 0.0
         for _ in 0..<5 {

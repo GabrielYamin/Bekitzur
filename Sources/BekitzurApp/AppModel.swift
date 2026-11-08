@@ -171,6 +171,9 @@ final class AppModel {
         }
     }
 
+    @ObservationIgnored private var trashWatch: TrashWatch?
+    /// The app is being moved to the Trash, with as much of its data as the user chose.
+    @ObservationIgnored private var removing = false
     @ObservationIgnored private var recorder: ConversationRecorder?
     /// Keeps macOS from slowing Bekitzur down in the background, or sleeping, while it records.
     @ObservationIgnored private var recordingActivity: NSObjectProtocol?
@@ -181,6 +184,18 @@ final class AppModel {
     /// Conversations whose next processing only writes the Notes again, from the Transcript with the user's fixes.
     @ObservationIgnored private var notesOnly = Set<String>()
     @ObservationIgnored private var processingID: String?
+    /// Conversations whose people who talked at once are still to be separated, one at a time, after their Notes.
+    @ObservationIgnored private var separationWaiting: [String] = []
+    /// The Conversation whose people who talked at once are being separated.
+    private(set) var separatingID: String?
+    @ObservationIgnored private var separation: Task<Void, Never>?
+    /// Conversations processed again or deleted while their people who talked at once were being separated.
+    @ObservationIgnored private var separationDropped = Set<String>()
+    /// What separating found, with how many places it changes, waiting to be merged: while the Conversation's Transcript
+    /// is on screen, until Show or until it's left; while the Conversation is processed, until that's done.
+    private(set) var separationsFound: [String: (separated: OverlapSeparation.Separated, places: Int)] = [:]
+    /// The Conversation whose Transcript is on screen.
+    @ObservationIgnored private var transcriptOnScreen: String?
     @ObservationIgnored private lazy var mainWindow = WindowController(title: "Bekitzur", autosaveName: "Main", size: NSSize(width: 1040, height: 720)) {
         MainWindow(model: self)
     }
@@ -203,6 +218,11 @@ final class AppModel {
         for info in conversations.reversed() where info.status == .recording || info.status == .processing {
             enqueue(info.id)
         }
+        // And before these had their people who talked at once separated.
+        for info in conversations.reversed() where info.separating == true {
+            if info.status == .unreviewed || info.status == .reviewed { separationWaiting.append(info.id) }
+        }
+        separateNext()
         // Coming back from System Settings makes the app active.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
@@ -222,6 +242,7 @@ final class AppModel {
         refreshMicrophones()
         AppLog.write("Microphones: \(microphones.map(\.name).joined(separator: ", ")); the Mac's default is \(defaultMicrophone?.name ?? "none"); recording \(recordingMicrophone?.name ?? "none")")
         microphonesWatch = AudioInputWatch { Task { @MainActor in AppModel.shared.refreshMicrophones() } }
+        trashWatch = TrashWatch(app: Bundle.main.bundleURL) { [weak self] in self?.movedToTrash() }
     }
 
     func refreshMicrophones() {
@@ -489,7 +510,7 @@ final class AppModel {
         let store = BekitzurPaths.modelStore
         let missing = store.missing()
         if missing != missingModels {
-            AppLog.write(missing.isEmpty ? "Every model downloaded" : "Models to download: " + missing.map(\.name).joined(separator: ", "))
+            AppLog.write(missing.isEmpty ? "Every model downloaded" : "Models to download: " + ModelFile.groups(of: missing).map(\.name).joined(separator: ", "))
         }
         missingModels = missing
         modelBytesLeft = store.remainingBytes(missing)
@@ -498,9 +519,10 @@ final class AppModel {
     /// What the models note says before a download starts.
     var modelsMessage: String {
         let size = modelBytesLeft.formatted(.byteCount(style: .file))
-        if missingModels.allSatisfy({ BekitzurPaths.modelStore.installed($0) != nil }) {
-            return missingModels.count == 1
-                ? "A new \(missingModels[0].name.lowercased()) is ready to download (\(size))."
+        if missingModels.allSatisfy({ !$0.required || BekitzurPaths.modelStore.installed($0) != nil }) {
+            let models = ModelFile.groups(of: missingModels)
+            return models.count == 1
+                ? "A new \(models[0].name.lowercased()) is ready to download (\(size))."
                 : "New models are ready to download (\(size))."
         }
         return "Bekitzur needs its speech and language models to transcribe and write Notes: \(size) to download."
@@ -524,7 +546,7 @@ final class AppModel {
             AppLog.write("Models not downloaded: \(failure)")
             return
         }
-        AppLog.write("Downloading the models: \(files.map(\.name).joined(separator: ", ")), \(total.formatted(.byteCount(style: .file))) to go")
+        AppLog.write("Downloading the models: \(ModelFile.groups(of: files).map(\.name).joined(separator: ", ")), \(total.formatted(.byteCount(style: .file))) to go")
         modelDownload = ModelDownload(step: "Starting the download", total: total)
         modelTask = Task { await runModelDownload(files, into: store) }
     }
@@ -903,12 +925,57 @@ final class AppModel {
             $0.endedAt = Date()
             $0.status = .processing
         }
+        recorder = nil
+        recordingID = nil
+    }
+
+    // MARK: Removing Bekitzur
+
+    /// The app was moved to the Trash, which leaves it running, and its data on this Mac: it stops, offers to move its
+    /// data to the Trash too, and quits.
+    func movedToTrash() {
+        guard !removing else { return }
+        removing = true
+        AppLog.write("Moved to the Trash")
+        let recording = recordingID != nil
+        stopRecordingForQuit()
+        finishRemoving(AppRemoval.ask(appInTrash: true, recording: recording) ?? .appOnly)
+    }
+
+    /// Delete Bekitzur… in Settings: moves the app to the Trash with as much of its data as the user chooses, and quits.
+    func deleteApp() {
+        guard !removing, let choice = AppRemoval.ask(appInTrash: false, recording: recordingID != nil) else { return }
+        removing = true
+        do {
+            try FileManager.default.trashItem(at: Bundle.main.bundleURL, resultingItemURL: nil)
+        } catch {
+            removing = false
+            alert = "Couldn't move Bekitzur to the Trash: \(error.localizedDescription)"
+            return
+        }
+        AppLog.write("Moved to the Trash from Settings")
+        stopRecordingForQuit()
+        finishRemoving(choice)
+    }
+
+    /// The app is being moved to the Trash, which quitting needn't watch for.
+    var isRemoving: Bool { removing }
+
+    private func finishRemoving(_ choice: AppRemoval.Choice) {
+        guard choice != .appOnly else { return NSApp.terminate(nil) }
+        modelTask?.cancel()
+        separation?.cancel()
+        AppRemoval.moveToTrashSayingWhatFailed(choice)
+        // Quitting writes to the log and the settings, which would come back after going to the Trash.
+        if choice == .everything { exit(0) }
+        NSApp.terminate(nil)
     }
 
     // MARK: Processing
 
     /// Writes the Notes again from the same Transcript, so words marked in it stay marked.
     func writeNotesAgain(_ id: String) {
+        dropSeparation(id)
         keepTranscript.insert(id)
         reprocess(id)
     }
@@ -920,14 +987,21 @@ final class AppModel {
     }
 
     /// The user has fixed the Transcript since its Notes were written.
-    func notesAreBehind(_ id: String) -> Bool {
+    func fixedSinceNotes(_ id: String) -> Bool {
         guard let result = results[id] else { return false }
         return (flags[id]?.fixes ?? []) != (result.notesFixes ?? [])
+    }
+
+    /// The user has fixed the Transcript since its Notes were written, or separating people who talked at once has
+    /// changed lines they cite.
+    func notesAreBehind(_ id: String) -> Bool {
+        fixedSinceNotes(id) || results[id]?.separationChangedNotes == true
     }
 
     /// Transcribes the Recording again, in `language`, or detecting it when nil. Marks on the old Transcript's words are
     /// dropped, since its words are gone.
     func transcribeAgain(_ id: String, language: ConversationLanguage?) {
+        dropSeparation(id)
         library.deleteFlags(for: id)
         flags[id] = nil
         liveTranscripts[id] = nil
@@ -947,6 +1021,7 @@ final class AppModel {
     /// Separates Speakers again, for as many people as the user says spoke (nil to let separation decide), then
     /// writes the Notes again. The Transcript is kept.
     func separateSpeakersAgain(_ id: String, people: Int?) {
+        dropSeparation(id)
         update(id) {
             $0.people = people
             $0.status = .processing
@@ -957,6 +1032,127 @@ final class AppModel {
         enqueue(id)
     }
 
+    // MARK: Separating people who talk at once
+
+    /// After the Notes are written, separates the people who talked at once, if the model is downloaded; the
+    /// Conversation is ready meanwhile.
+    private func separateLater(_ id: String) {
+        guard BekitzurPaths.voiceSeparation != nil else { return }
+        update(id) { $0.separating = true }
+        if !separationWaiting.contains(id) { separationWaiting.append(id) }
+        separateNext()
+    }
+
+    /// Separates the next Conversation waiting, while nothing is recorded or processed, which come first.
+    private func separateNext() {
+        guard separatingID == nil, processingID == nil, waiting.isEmpty, recordingID == nil, !separationWaiting.isEmpty else { return }
+        guard let model = BekitzurPaths.voiceSeparation else {
+            for id in separationWaiting { update(id) { $0.separating = nil } }
+            separationWaiting = []
+            return
+        }
+        let id = separationWaiting.removeFirst()
+        guard let info = conversations.first(where: { $0.id == id }), info.separating == true, info.status == .unreviewed || info.status == .reviewed,
+              let result = results[id] ?? library.result(for: id) else { return separateNext() }
+        separatingID = id
+        let tracks = library.audioTracks(for: id), folder = library.folder(for: id)
+        let started = Date()
+        AppLog.write("\(id): separating people who talked at once")
+        separation = Task {
+            var found: OverlapSeparation.Separated?
+            var failed = false
+            do {
+                found = try await Self.separate(tracks: tracks, folder: folder, info: info, result: result, model: model)
+            } catch {
+                failed = true
+                if !(error is CancellationError) { AppLog.write("\(id): separating people who talked at once failed: \(error)") }
+            }
+            separatingID = nil
+            separation = nil
+            if separationDropped.remove(id) == nil {
+                if failed {
+                    update(id) { $0.separating = nil }
+                } else {
+                    foundSeparation(found, for: id, after: started)
+                }
+            }
+            separateNext()
+        }
+    }
+
+    /// Keeps what separating found, to merge when the Transcript isn't on screen; with nothing to change, it's done.
+    private func foundSeparation(_ found: OverlapSeparation.Separated?, for id: String, after started: Date) {
+        let seconds = Date().timeIntervalSince(started)
+        guard let found, let result = results[id] ?? library.result(for: id) else {
+            AppLog.write(String(format: "%@: no one talked at once (%.0f s)", id, seconds))
+            update(id) { $0.separating = nil }
+            return
+        }
+        let merged = OverlapSeparation.merge(found, into: result.transcript, flags: flags[id] ?? library.flags(for: id), names: Self.names(in: result))
+        guard merged.moved + merged.added > 0 else {
+            AppLog.write(String(format: "%@: separating people who talked at once changed nothing (%.0f s)", id, seconds))
+            update(id) { $0.separating = nil }
+            return
+        }
+        AppLog.write(String(format: "%@: found what people said at once in %d places (%.0f s)", id, merged.places, seconds))
+        separationsFound[id] = (found, merged.places)
+        mergeSeparationWhenFree(id)
+    }
+
+    /// Merges what separating found, unless the Transcript is on screen, which waits for Show or for leaving it, or the
+    /// Conversation is being processed, which waits for that.
+    private func mergeSeparationWhenFree(_ id: String) {
+        guard separationsFound[id] != nil, transcriptOnScreen != id, processingID != id, !waiting.contains(id) else { return }
+        mergeSeparation(id)
+    }
+
+    /// Merges what separating found into the Transcript as it is now, leaving what the user fixed as it is. When that
+    /// changes a line the Notes cite, they're behind.
+    func mergeSeparation(_ id: String) {
+        guard let found = separationsFound.removeValue(forKey: id), var result = results[id] ?? library.result(for: id) else { return }
+        let merged = OverlapSeparation.merge(found.separated, into: result.transcript, flags: flags[id] ?? library.flags(for: id), names: Self.names(in: result))
+        result.transcript = merged.transcript
+        let behind = OverlapSeparation.changesSources(merged, of: result)
+        if behind { result.separationChangedNotes = true }
+        do {
+            try library.save(result, for: id)
+        } catch {
+            alert = "Couldn't save what people said at once: \(error.localizedDescription)"
+            return
+        }
+        results[id] = result
+        update(id) { $0.separating = nil }
+        let cited = behind ? ", in lines the Notes cite" : ""
+        AppLog.write("\(id): merged what people said at once in \(merged.places) places: \(merged.moved) words given to another Speaker, \(merged.added) added\(cited)")
+    }
+
+    /// What separating found, or is finding, no longer fits the Conversation, which is processed again or deleted.
+    private func dropSeparation(_ id: String) {
+        separationWaiting.removeAll { $0 == id }
+        separationsFound[id] = nil
+        update(id) { $0.separating = nil }
+        if separatingID == id {
+            separationDropped.insert(id)
+            separation?.cancel()
+        }
+    }
+
+    /// The Conversation's Transcript came on screen: what separating finds for it waits for Show meanwhile.
+    func transcriptAppeared(_ id: String) {
+        transcriptOnScreen = id
+    }
+
+    /// The Transcript went off screen, so what separating found for it can be merged.
+    func transcriptDisappeared(_ id: String) {
+        if transcriptOnScreen == id { transcriptOnScreen = nil }
+        mergeSeparationWhenFree(id)
+    }
+
+    /// The name each Speaker label shows as.
+    private static func names(in result: ProcessedConversation) -> [String: String] {
+        Dictionary(result.speakers.map { ($0.label, $0.displayName) }, uniquingKeysWith: { first, _ in first })
+    }
+
     private func enqueue(_ id: String) {
         if !waiting.contains(id) { waiting.append(id) }
         processNext()
@@ -964,7 +1160,7 @@ final class AppModel {
 
     private func processNext() {
         guard processingID == nil, !waiting.isEmpty else { return }
-        guard BekitzurPaths.modelStore.usable() else {
+        guard BekitzurPaths.modelStore.usable(ModelFile.required) else {
             for id in waiting { update(id) { $0.step = "Waiting for the models" } }
             return
         }
@@ -1053,6 +1249,7 @@ final class AppModel {
                 ))
                 if let warning { AppLog.write("\(id): warning: \(warning)") }
                 notifyNotesReady(id: id, title: result.notes.title)
+                if notesOnly == nil { separateLater(id) }
             } catch {
                 AppLog.write("\(id): failed after \(Int(Date().timeIntervalSince(started))) s: \(error)")
                 update(id) {
@@ -1062,7 +1259,9 @@ final class AppModel {
                 }
             }
             processingID = nil
+            mergeSeparationWhenFree(id)
             processNext()
+            separateNext()
         }
     }
 
@@ -1136,6 +1335,53 @@ final class AppModel {
             let minutes = Int(((salvage.segments.last?.end ?? 0) / 60).rounded(.up))
             return (result, "The audio couldn't be read because the app quit before finishing it, so these Notes come from the live Transcript of the first \(minutes) minutes, without Speakers.", nil, nil)
         }
+        let prepared = Self.prepared(audio, microphoneDelay: microphoneDelay, systemAudioDelays: systemAudioDelays)
+        let samples = prepared.samples, call = prepared.call
+        // A call's tracks are transcribed each on its own, so two people talking at once both make it into the
+        // Transcript; the live Transcript, from both tracks summed, doesn't do for a call.
+        var eachTrack: CallTracks?
+        if let tracks = call, try await SpeakerSeparation.isCall(system: tracks.system) { eachTrack = tracks }
+        let transcript: Transcript
+        if let given, language == nil || given.language == language, !(givenIsLive && eachTrack != nil) {
+            transcript = given
+        } else if let tracks = eachTrack {
+            progress(.transcribing)
+            let system = try await transcribeInHelper(tracks.system, language: language ?? given?.language, assumed: assumed)
+            let microphone = try await transcribeInHelper(tracks.microphone, language: system.language, assumed: assumed)
+            let speech = await ConversationProcessor.microphoneSpeech(prepared.microphoneSpeech, in: tracks.microphone)
+            transcript = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: speech)
+        } else {
+            progress(.transcribing)
+            transcript = try await transcribeInHelper(samples, language: language, assumed: assumed)
+        }
+        let voiceprints = (try? VoiceprintStore(url: BekitzurPaths.voiceprints).load()) ?? []
+        let result = try await ConversationProcessor.process(
+            samples,
+            date: date,
+            language: transcript.language,
+            voiceprints: voiceprints,
+            people: people,
+            call: call,
+            transcript: transcript,
+            flags: flags,
+            vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load(),
+            progress: progress
+        )
+        let silent = Set(audio.silentTracks.map { $0.deletingPathExtension().lastPathComponent })
+        var warning: String?
+        // With the permission, silent system audio means nothing played, as in a room.
+        if silent.contains(ConversationRecorder.Track.systemAudio.name), SystemAudioRecorder.access != .granted {
+            warning = "No computer audio was recorded, so these Notes only have what your microphone heard. If this was a call, allow Bekitzur in System Settings → Privacy & Security → Screen & System Audio Recording."
+        } else if silent.contains(ConversationRecorder.Track.microphone.name) {
+            warning = "Your microphone recorded only silence. Check the input device in System Settings → Sound."
+        }
+        return (result, warning, prepared.measuredDelay, prepared.measuredDelays)
+    }
+
+    /// The Recording's audio as processing uses it: a call's two tracks lined up, measuring by how much when that isn't
+    /// known yet, with the speakers' copy of the call taken out of the microphone.
+    private nonisolated static func prepared(_ audio: MixedAudio, microphoneDelay: Double?, systemAudioDelays: [TrackDelay]?)
+        -> (samples: [Float], call: CallTracks?, measuredDelay: Double?, measuredDelays: [TrackDelay]?, microphoneSpeech: [ClosedRange<Double>]) {
         let byName = Dictionary(audio.tracks.map { ($0.key.deletingPathExtension().lastPathComponent, $0.value) }, uniquingKeysWith: { first, _ in first })
         var call = byName[ConversationRecorder.Track.microphone.name].flatMap { microphone in
             byName[ConversationRecorder.Track.systemAudio.name].map { CallTracks(microphone: microphone, system: $0) }
@@ -1173,44 +1419,33 @@ final class AppModel {
             samples = cleaned.mixed
             microphoneSpeech = cleaned.microphoneSpeech
         }
-        // A call's tracks are transcribed each on its own, so two people talking at once both make it into the
-        // Transcript; the live Transcript, from both tracks summed, doesn't do for a call.
-        var eachTrack: CallTracks?
-        if let tracks = call, try await SpeakerSeparation.isCall(system: tracks.system) { eachTrack = tracks }
-        let transcript: Transcript
-        if let given, language == nil || given.language == language, !(givenIsLive && eachTrack != nil) {
-            transcript = given
-        } else if let tracks = eachTrack {
-            progress(.transcribing)
-            let system = try await transcribeInHelper(tracks.system, language: language ?? given?.language, assumed: assumed)
-            let microphone = try await transcribeInHelper(tracks.microphone, language: system.language, assumed: assumed)
-            transcript = ConversationProcessor.merging(microphone: microphone, system: system, microphoneSpeech: microphoneSpeech)
-        } else {
-            progress(.transcribing)
-            transcript = try await transcribeInHelper(samples, language: language, assumed: assumed)
-        }
-        let voiceprints = (try? VoiceprintStore(url: BekitzurPaths.voiceprints).load()) ?? []
-        let result = try await ConversationProcessor.process(
-            samples,
-            date: date,
-            language: transcript.language,
-            voiceprints: voiceprints,
-            people: people,
-            call: call,
-            transcript: transcript,
-            flags: flags,
-            vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load(),
-            progress: progress
+        return (samples, call, measuredDelay, measuredDelays, microphoneSpeech)
+    }
+
+    /// What separating the people who talked at once finds in a processed Conversation: its audio as processing had
+    /// it, lined up by the delays measured then, and its Speakers.
+    @concurrent
+    private nonisolated static func separate(
+        tracks: [URL],
+        folder: URL,
+        info: ConversationInfo,
+        result: ProcessedConversation,
+        model: (package: URL, compiled: URL)
+    ) async throws -> OverlapSeparation.Separated? {
+        let audio = prepared(try ConversationProcessor.loadMixed(tracks), microphoneDelay: info.microphoneDelay, systemAudioDelays: info.systemAudioDelays)
+        return try await OverlapSeparation.find(
+            in: audio.samples,
+            call: audio.call,
+            people: info.people,
+            speakers: result.speakers,
+            language: result.transcript.language,
+            resources: OverlapSeparation.Resources(
+                package: model.package,
+                compiled: model.compiled,
+                transcribe: { samples, language in try await transcribeInHelper(samples, language: language, assumed: language) },
+                log: { AppLog.write("\(folder.lastPathComponent): \($0)") }
+            )
         )
-        let silent = Set(audio.silentTracks.map { $0.deletingPathExtension().lastPathComponent })
-        var warning: String?
-        // With the permission, silent system audio means nothing played, as in a room.
-        if silent.contains(ConversationRecorder.Track.systemAudio.name), SystemAudioRecorder.access != .granted {
-            warning = "No computer audio was recorded, so these Notes only have what your microphone heard. If this was a call, allow Bekitzur in System Settings → Privacy & Security → Screen & System Audio Recording."
-        } else if silent.contains(ConversationRecorder.Track.microphone.name) {
-            warning = "Your microphone recorded only silence. Check the input device in System Settings → Sound."
-        }
-        return (result, warning, measuredDelay, measuredDelays)
     }
 
     /// Transcribes a whole Recording as live transcription does, in the helper process: a crash in whisper.cpp then fails
@@ -1519,9 +1754,20 @@ final class AppModel {
         NSPasteboard.general.setString(NotesMarkdown.render(result.notes, startedAt: info.startedAt, endedAt: info.endedAt), forType: .string)
     }
 
+    /// The Transcript as it shows, with the user's fixes.
+    func copyTranscript(_ id: String) {
+        guard let info = conversations.first(where: { $0.id == id }), let result = results[id] else { return }
+        let rows = TranscriptRow.rows(from: result.transcript, flags: flags[id] ?? library.flags(for: id)).map { row in
+            row.lines.map { TranscriptMarkdown.Line(speaker: $0.speaker, start: $0.start, text: $0.text) }
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(TranscriptMarkdown.render(rows, title: info.displayTitle, startedAt: info.startedAt, endedAt: info.endedAt), forType: .string)
+    }
+
     func delete(_ id: String) {
         guard id != recordingID, id != processingID else { return }
         waiting.removeAll { $0 == id }
+        dropSeparation(id)
         do {
             try library.delete(id)
         } catch {
@@ -1543,6 +1789,7 @@ final class AppModel {
         let ids = Set(conversations.map(\.id))
         results = Dictionary(uniqueKeysWithValues: results.keys.filter(ids.contains).compactMap { id in library.result(for: id).map { (id, $0) } })
         flags = Dictionary(uniqueKeysWithValues: flags.keys.filter(ids.contains).map { ($0, library.flags(for: $0)) })
+        separationsFound = separationsFound.filter { ids.contains($0.key) }
         if let selected = selection, !ids.contains(selected) { selection = nil }
         for info in conversations.reversed() where (info.status == .recording || info.status == .processing) && info.id != recordingID && info.id != processingID {
             enqueue(info.id)
