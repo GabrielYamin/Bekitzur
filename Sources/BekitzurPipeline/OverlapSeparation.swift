@@ -307,8 +307,9 @@ public enum OverlapSeparation {
 
     /// Today's words where people talk at once given to the voice separation found them in, and words only separation
     /// found there added, unless speech recognition was unsure of that voice's words, the person already has a word
-    /// there, or it's a sound speech recognition writes over noise. What the user fixed stays as it is
-    /// (`untouched(_:flags:)`), and nothing is added where they corrected a word or said who said it.
+    /// there, anyone has the same word within 1.2 seconds, since a separated voice's word can be timed that far from the
+    /// same word in the Transcript, or it's a sound speech recognition writes over noise. What the user fixed stays as
+    /// it is (`untouched(_:flags:)`), and nothing is added where they corrected a word or said who said it.
     /// - Parameter names: The name each Speaker label shows as; a label without one shows as itself.
     static func merge(
         _ segments: [TranscriptSegment],
@@ -366,7 +367,7 @@ public enum OverlapSeparation {
                   !isNoise(item.word.text),
                   !fixed.contains(where: { abs($0 - time) <= 0.6 }),
                   !kept.contains(where: { $0.speaker == speaker(item) && abs(moment(of: $0.word) - time) <= 0.4 }),
-                  !kept.contains(where: { abs(moment(of: $0.word) - time) <= ($0.speaker == speaker(item) ? 1.2 : 0.6) && sameWord($0.word.text, item.word.text) }),
+                  !kept.contains(where: { abs(moment(of: $0.word) - time) <= 1.2 && sameWord($0.word.text, item.word.text) }),
                   !added.contains(where: { $0.label != item.label && abs(moment(of: $0.word) - time) <= 0.6 && sameWord($0.word.text, item.word.text) })
             else { continue }
             added.append(item)

@@ -117,6 +117,16 @@ struct OverlapSeparationTests {
         #expect(merged.added == 0)
     }
 
+    /// The same when speech recognition gave the word to the person talking over them: separation finds it 0.8 seconds
+    /// away in the other voice, and adding it would show it twice.
+    @Test func aWordSomeoneElseHasASecondAwayIsntAddedAgain() {
+        let segments = [segment([(5.0, "אוקיי"), (6.1, "בדיוק")], speaker: "Speaker 1")]
+
+        let merged = OverlapSeparation.merge(segments, found: [found(5.3, "בדיוק", voice: "S2")], activity: activity)
+
+        #expect(merged.added == 0)
+    }
+
     /// One person stops and the next answers "כן, בואו נתחיל ככה": separation keeps both in the first one's voice.
     @Test func aWordStaysWithItsSpeakerWhenTheVoiceItsFoundInCarriesThemToo() {
         let activity = Activity([
