@@ -58,21 +58,36 @@ public final class MicrophoneRecorder: @unchecked Sendable {
 
     private func tap(into writer: AudioFileWriter) {
         let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        guard format.channelCount > 0 else { return }
-        // A device at another rate than the file's is converted, and its blocks are placed by when they were captured,
-        // since the converter's blocks don't follow the device's count.
-        let converter = format.sampleRate == writer.format.sampleRate ? nil : AVAudioFormat(
-            standardFormatWithSampleRate: writer.format.sampleRate,
-            channels: format.channelCount
-        ).flatMap { AVAudioConverter(from: format, to: $0) }
-        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, when in
+        guard input.outputFormat(forBus: 0).channelCount > 0 else { return }
+        // The tap takes the input's format as it is when installed: given one, it raises an exception if the device has
+        // changed since it was read ("Failed to create tap due to format mismatch").
+        let conversion = Conversion(to: writer.format.sampleRate)
+        input.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, when in
             let hostTime = when.isHostTimeValid ? when.hostTime : nil
-            if let converter {
+            if let converter = conversion.converter(for: buffer.format) {
                 if let converted = Self.convert(buffer, with: converter) { writer.write(converted, at: hostTime) }
             } else {
                 writer.write(buffer, at: hostTime, sampleTime: when.isSampleTimeValid ? Double(when.sampleTime) : nil)
             }
+        }
+    }
+
+    /// Converts a device's blocks at another rate than the file's, which are then placed by when they were captured,
+    /// since the converter's blocks don't follow the device's count.
+    private final class Conversion: @unchecked Sendable {
+        private let rate: Double
+        private var current: AVAudioConverter?
+
+        init(to rate: Double) {
+            self.rate = rate
+        }
+
+        /// Nil for blocks at the file's rate. Called on the tap's thread only.
+        func converter(for format: AVAudioFormat) -> AVAudioConverter? {
+            guard format.sampleRate != rate else { return nil }
+            if let current, current.inputFormat == format { return current }
+            current = AVAudioFormat(standardFormatWithSampleRate: rate, channels: format.channelCount).flatMap { AVAudioConverter(from: format, to: $0) }
+            return current
         }
     }
 
