@@ -18,7 +18,7 @@ public struct AudioInputDevice: Identifiable, Hashable, Sendable {
     public static func all() -> [AudioInputDevice] {
         deviceIDs()
             .compactMap { device -> AudioInputDevice? in
-                guard inputChannels(of: device) > 0,
+                guard channels(of: device, scope: kAudioObjectPropertyScopeInput) > 0,
                       ![kAudioDeviceTransportTypeVirtual, kAudioDeviceTransportTypeAggregate].contains(transportType(of: device)),
                       let id = string(kAudioDevicePropertyDeviceUID, of: device),
                       let name = string(kAudioObjectPropertyName, of: device),
@@ -29,7 +29,7 @@ public struct AudioInputDevice: Identifiable, Hashable, Sendable {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    private static func transportType(of device: AudioObjectID) -> UInt32 {
+    static func transportType(of device: AudioObjectID) -> UInt32 {
         var address = Self.address(kAudioDevicePropertyTransportType)
         var transport: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
@@ -64,7 +64,7 @@ public struct AudioInputDevice: Identifiable, Hashable, Sendable {
         return device
     }
 
-    private static func deviceIDs() -> [AudioObjectID] {
+    static func deviceIDs() -> [AudioObjectID] {
         var address = Self.address(kAudioHardwarePropertyDevices)
         var size: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr else { return [] }
@@ -73,10 +73,10 @@ public struct AudioInputDevice: Identifiable, Hashable, Sendable {
         return ids
     }
 
-    private static func inputChannels(of device: AudioObjectID) -> Int {
+    static func channels(of device: AudioObjectID, scope: AudioObjectPropertyScope) -> Int {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreamConfiguration,
-            mScope: kAudioObjectPropertyScopeInput,
+            mScope: scope,
             mElement: kAudioObjectPropertyElementMain
         )
         var size: UInt32 = 0
@@ -87,7 +87,7 @@ public struct AudioInputDevice: Identifiable, Hashable, Sendable {
         return UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self)).reduce(0) { $0 + Int($1.mNumberChannels) }
     }
 
-    private static func string(_ selector: AudioObjectPropertySelector, of device: AudioObjectID) -> String? {
+    static func string(_ selector: AudioObjectPropertySelector, of device: AudioObjectID) -> String? {
         var address = Self.address(selector)
         var value: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
