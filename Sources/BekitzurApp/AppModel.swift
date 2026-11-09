@@ -1088,7 +1088,8 @@ final class AppModel {
             update(id) { $0.separating = nil }
             return
         }
-        let merged = OverlapSeparation.merge(found, into: result.transcript, flags: flags[id] ?? library.flags(for: id), names: Self.names(in: result))
+        let merged = OverlapSeparation.merge(found, into: result.transcript, flags: flags[id] ?? library.flags(for: id), names: Self.names(in: result),
+                                             together: result.together ?? [])
         guard merged.moved + merged.added > 0 else {
             AppLog.write(String(format: "%@: separating people who talked at once changed nothing (%.0f s)", id, seconds))
             update(id) { $0.separating = nil }
@@ -1110,7 +1111,8 @@ final class AppModel {
     /// changes a line the Notes cite, they're behind.
     func mergeSeparation(_ id: String) {
         guard let found = separationsFound.removeValue(forKey: id), var result = results[id] ?? library.result(for: id) else { return }
-        let merged = OverlapSeparation.merge(found.separated, into: result.transcript, flags: flags[id] ?? library.flags(for: id), names: Self.names(in: result))
+        let merged = OverlapSeparation.merge(found.separated, into: result.transcript, flags: flags[id] ?? library.flags(for: id), names: Self.names(in: result),
+                                             together: result.together ?? [])
         result.transcript = merged.transcript
         let behind = OverlapSeparation.changesSources(merged, of: result)
         if behind { result.separationChangedNotes = true }
@@ -1333,7 +1335,11 @@ final class AppModel {
                 progress: progress
             )
             let minutes = Int(((salvage.segments.last?.end ?? 0) / 60).rounded(.up))
-            return (result, "The audio couldn't be read because the app quit before finishing it, so these Notes come from the live Transcript of the first \(minutes) minutes, without Speakers.", nil, nil)
+            return (result, "The audio couldn't be read, so these Notes come from the live Transcript of the first \(minutes) minutes, without Speakers.", nil, nil)
+        }
+        let unreadable = Set(audio.unreadableTracks.map { $0.deletingPathExtension().lastPathComponent })
+        if !unreadable.isEmpty {
+            AppLog.write("\(folder.lastPathComponent): processing without \(audio.unreadableTracks.map(\.lastPathComponent).joined(separator: ", ")), which couldn't be read")
         }
         let prepared = Self.prepared(audio, microphoneDelay: microphoneDelay, systemAudioDelays: systemAudioDelays)
         let samples = prepared.samples, call = prepared.call
@@ -1369,8 +1375,12 @@ final class AppModel {
         )
         let silent = Set(audio.silentTracks.map { $0.deletingPathExtension().lastPathComponent })
         var warning: String?
-        // With the permission, silent system audio means nothing played, as in a room.
-        if silent.contains(ConversationRecorder.Track.systemAudio.name), SystemAudioRecorder.access != .granted {
+        if unreadable.contains(ConversationRecorder.Track.systemAudio.name) {
+            warning = "The call's sound couldn't be read, so these Notes only have what your microphone heard."
+        } else if unreadable.contains(ConversationRecorder.Track.microphone.name) {
+            warning = "Your microphone's recording couldn't be read, so these Notes only have the call's sound."
+        } else if silent.contains(ConversationRecorder.Track.systemAudio.name), SystemAudioRecorder.access != .granted {
+            // With the permission, silent system audio means nothing played, as in a room.
             warning = "No computer audio was recorded, so these Notes only have what your microphone heard. If this was a call, allow Bekitzur in System Settings → Privacy & Security → Screen & System Audio Recording."
         } else if silent.contains(ConversationRecorder.Track.microphone.name) {
             warning = "Your microphone recorded only silence. Check the input device in System Settings → Sound."
@@ -1757,8 +1767,10 @@ final class AppModel {
     /// The Transcript as it shows, with the user's fixes.
     func copyTranscript(_ id: String) {
         guard let info = conversations.first(where: { $0.id == id }), let result = results[id] else { return }
-        let rows = TranscriptRow.rows(from: result.transcript, flags: flags[id] ?? library.flags(for: id)).map { row in
-            row.lines.map { TranscriptMarkdown.Line(speaker: $0.speaker, start: $0.start, text: $0.text) }
+        let together = TranscriptRow.together(in: result)
+        let rows = TranscriptRow.rows(from: result.transcript, flags: flags[id] ?? library.flags(for: id), together: together).map { row -> TranscriptMarkdown.Row in
+            let lines = row.lines.map { TranscriptMarkdown.Line(speaker: $0.speaker, start: $0.start, text: $0.text) }
+            return TranscriptMarkdown.Row(lines: lines, atOnce: row.atOnce)
         }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(TranscriptMarkdown.render(rows, title: info.displayTitle, startedAt: info.startedAt, endedAt: info.endedAt), forType: .string)

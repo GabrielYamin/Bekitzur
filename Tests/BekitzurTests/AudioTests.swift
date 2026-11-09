@@ -205,4 +205,35 @@ struct AudioTests {
         #expect(mixed.silentTracks == [silence])
         #expect((0.15...0.25).contains(mixed.samples.prefix(16_000).map(abs).max() ?? 0))
     }
+
+    /// A track left unreadable, as system audio recorded through a headset that changed mode, leaves the other one.
+    @Test func anUnreadableTrackIsLeftOutAndReported() throws {
+        let speech = temporaryURL("wav"), damaged = temporaryURL("aac")
+        defer { [speech, damaged].forEach { try? FileManager.default.removeItem(at: $0) } }
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1))
+        do {
+            let file = try AVAudioFile(forWriting: speech, settings: format.settings)
+            let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16_000))
+            buffer.frameLength = buffer.frameCapacity
+            for i in 0..<16_000 { buffer.floatChannelData![0][i] = tone(0.2, frame: i, rate: 16_000) }
+            try file.write(from: buffer)
+        }
+        try Data().write(to: damaged)
+
+        let mixed = try ConversationProcessor.loadMixed([speech, damaged])
+
+        #expect(mixed.samples.count == 16_000)
+        #expect(mixed.unreadableTracks == [damaged])
+        #expect(throws: (any Error).self) { try ConversationProcessor.loadMixed([damaged]) }
+    }
+
+    /// During a change of device, as a Bluetooth headset switching to its call mode, the microphone can report a rate its
+    /// hardware has already left, and a tap installed in it raises an exception that ends the app.
+    @Test func aMicrophoneIsTappedOnlyAtTheRateItsHardwareRuns() throws {
+        let current = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1))
+        let headset = try #require(AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1))
+
+        #expect(MicrophoneRecorder.canTap(current, hardware: current))
+        #expect(!MicrophoneRecorder.canTap(current, hardware: headset))
+    }
 }

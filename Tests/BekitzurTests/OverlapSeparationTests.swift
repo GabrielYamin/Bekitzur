@@ -117,6 +117,16 @@ struct OverlapSeparationTests {
         #expect(merged.added == 0)
     }
 
+    /// The same when speech recognition gave the word to the person talking over them: separation finds it 0.8 seconds
+    /// away in the other voice, and adding it would show it twice.
+    @Test func aWordSomeoneElseHasASecondAwayIsntAddedAgain() {
+        let segments = [segment([(5.0, "אוקיי"), (6.1, "בדיוק")], speaker: "Speaker 1")]
+
+        let merged = OverlapSeparation.merge(segments, found: [found(5.3, "בדיוק", voice: "S2")], activity: activity)
+
+        #expect(merged.added == 0)
+    }
+
     /// One person stops and the next answers "כן, בואו נתחיל ככה": separation keeps both in the first one's voice.
     @Test func aWordStaysWithItsSpeakerWhenTheVoiceItsFoundInCarriesThemToo() {
         let activity = Activity([
@@ -253,6 +263,21 @@ struct OverlapSeparationTests {
         #expect(merged.segments == segments)
     }
 
+    /// The Transcript cuts the line where the timeline heard Speaker 2 too, and the user marked the part said at once.
+    @Test func aLineMarkedAsSomeoneElsesIsFoundAsTheTranscriptShowsIt() {
+        let segments = [
+            segment([(3.5, "אז"), (3.9, "אני"), (4.3, "חושב"), (5.2, "ושנבין"), (5.6, "את"), (6.0, "זה")], speaker: "Speaker 1"),
+            segment([(6.4, "אני"), (6.7, "מסכים")], speaker: "Speaker 2"),
+        ]
+        var flags = TranscriptFlags()
+        flags.toggleSpeaker(lineStartingAt: 5.2, speaker: "Speaker 1")
+        let together = [TalkingAtOnce(start: 5, end: 7, speakers: ["Speaker 1", "Speaker 2"])]
+
+        let merged = OverlapSeparation.merge(segments, found: [found(5.22, "שנבין", voice: "S2")], activity: activity, flags: flags, together: together)
+
+        #expect(merged.segments == segments)
+    }
+
     @Test func nothingIsAddedWhereTheUserCorrectedAWord() {
         let segments = [segment([(5.0, "אז"), (5.4, "בוא")], speaker: "Speaker 1")]
         var flags = TranscriptFlags()
@@ -314,6 +339,23 @@ struct OverlapSeparationTests {
         ]
 
         #expect(OverlapSeparation.labels(for: found, in: speakers) == ["a": "Speaker 2", "b": "Speaker 1"])
+    }
+
+    /// One starting as another stops isn't talking at once.
+    @Test func whereTheTimelineHearsPeopleAtOnceIsKeptByTheirLabels() {
+        let turns = [
+            SpeakerTurn(voice: "S1", start: 15.48, end: 20.49, embedding: [1, 0]),
+            SpeakerTurn(voice: "S2", start: 18.78, end: 23.03, embedding: [0, 1]),
+            SpeakerTurn(voice: "S1", start: 22.8, end: 24, embedding: [1, 0]),
+        ]
+
+        let together = OverlapSeparation.together(turns, labels: ["S1": "Speaker 1", "S2": "Speaker 2"], length: 25)
+
+        #expect(together.count == 1)
+        #expect(together.first?.speakers == ["Speaker 1", "Speaker 2"])
+        let start: Double = together.first?.start ?? 0, end: Double = together.first?.end ?? 0
+        #expect(abs(start - 18.78) < 0.02)
+        #expect(abs(end - 20.49) < 0.02)
     }
 
     @Test func transcriptionsOfOneWordMatch() {

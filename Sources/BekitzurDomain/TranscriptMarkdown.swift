@@ -16,16 +16,28 @@ public enum TranscriptMarkdown {
         }
     }
 
-    /// - Parameter rows: A line on its own, or the lines of people who talked at once.
-    public static func render(_ rows: [[Line]], title: String, startedAt: Date, endedAt: Date?) -> String {
+    /// A line on its own, or the lines of people who talked at once.
+    public struct Row: Sendable, Equatable {
+        public let lines: [Line]
+        /// When a second person starts talking.
+        public let atOnce: Double?
+
+        public init(lines: [Line], atOnce: Double? = nil) {
+            self.lines = lines
+            self.atOnce = atOnce
+        }
+    }
+
+    public static func render(_ rows: [Row], title: String, startedAt: Date, endedAt: Date?) -> String {
         var lines = ["# \(title)", "", NotesMarkdown.when(startedAt, endedAt)]
-        for row in rows where !row.isEmpty {
+        for row in rows where !row.lines.isEmpty {
             lines.append("")
-            if row.count == 1 {
-                lines.append(text(row[0]))
+            if row.lines.count == 1 {
+                lines.append(text(row.lines[0]))
             } else {
-                lines.append("\(row.count) people at once, \(timestamp(row.map(\.start).min())):")
-                lines += row.map { "- " + text($0) }
+                let at: Double? = row.atOnce ?? row.lines.map(\.start).min()
+                lines.append("\(row.lines.count) people at once, \(timestamp(at)):")
+                lines += row.lines.map { "- " + text($0) }
             }
         }
         return lines.joined(separator: "\n") + "\n"

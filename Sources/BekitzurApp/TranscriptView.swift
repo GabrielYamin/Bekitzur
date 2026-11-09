@@ -37,13 +37,20 @@ struct TranscriptRow: Identifiable {
     let lines: [TranscriptLine]
     let start: Double
     let end: Double
+    /// When a second person starts talking; the row's start for a line on its own.
+    let atOnce: Double
     /// Separating people who talk at once found some of its words.
     let separated: Bool
 
     /// The Transcript's rows with the user's fixes applied: corrected words show what was said, a phrase corrected
     /// together shows as its first word, and words said by another Speaker sit in that Speaker's line. People who talked
     /// at once have a line each in one row (`TranscriptRows`).
-    static func rows(from transcript: Transcript, flags: TranscriptFlags) -> [TranscriptRow] {
+    /// - Parameter together: Where the Speakers' timeline heard them talk at once, by the names they show as.
+    static func rows(
+        from transcript: Transcript,
+        flags: TranscriptFlags,
+        together: [(start: Double, end: Double, speakers: Set<String>)] = []
+    ) -> [TranscriptRow] {
         let speakers = Array(Set(transcript.segments.compactMap(\.speaker))).sorted()
         // The rest of each phrase, by when it starts, shown with its first word.
         var phrases: [(start: Double, rest: [NumberedWord])] = []
@@ -90,7 +97,8 @@ struct TranscriptRow: Identifiable {
             let speaker = piece.word == nil ? piece.speaker + "\u{0}" : piece.speaker
             return (piece.start, piece.end, speaker)
         }
-        let layout = TranscriptRows.layout(timed)
+        let endingSentences = Set(pieces.indices.filter { TranscriptRows.endsSentence(pieces[$0].text) })
+        let layout = TranscriptRows.layout(timed, together: together, endingSentences: endingSentences)
         var rows: [TranscriptRow] = []
         var lineCount = 0
         var number = 0
@@ -113,9 +121,32 @@ struct TranscriptRow: Identifiable {
             let all: [Piece] = row.flatMap { $0 }.map { pieces[$0] }
             let start: Double = lines.map(\.start).min() ?? 0
             let end: Double = all.map(\.end).max() ?? 0
-            rows.append(TranscriptRow(id: rows.count, lines: lines, start: start, end: end, separated: all.contains(where: \.separated)))
+            let atOnce = Self.atOnce(lines, from: start, together: together)
+            rows.append(TranscriptRow(id: rows.count, lines: lines, start: start, end: end, atOnce: atOnce, separated: all.contains(where: \.separated)))
         }
         return rows
+    }
+
+    /// When a second person starts talking in a row: the second line's start, or earlier where the timeline heard two
+    /// of the row's people at once, since their words can be timed late.
+    private static func atOnce(_ lines: [TranscriptLine], from start: Double, together: [(start: Double, end: Double, speakers: Set<String>)]) -> Double {
+        guard lines.count > 1 else { return start }
+        let speakers = Set(lines.map(\.speaker))
+        var atOnce: Double = lines.map(\.start).sorted()[1]
+        for stretch in together where stretch.start < atOnce && stretch.end > start {
+            if stretch.speakers.intersection(speakers).count >= 2 { atOnce = max(start, stretch.start) }
+        }
+        return atOnce
+    }
+
+    /// Where the Speakers' timeline heard people talk at once, by the names the Speakers show as now.
+    static func together(in result: ProcessedConversation) -> [(start: Double, end: Double, speakers: Set<String>)] {
+        var names: [String: String] = [:]
+        for speaker in result.speakers { names[speaker.label] = speaker.displayName }
+        return (result.together ?? []).map { stretch -> (start: Double, end: Double, speakers: Set<String>) in
+            let speakers = Set(stretch.speakers.map { names[$0] ?? $0 })
+            return (stretch.start, stretch.end, speakers)
+        }
     }
 
     /// Each word's row, by word number.
@@ -127,7 +158,8 @@ struct TranscriptRow: Identifiable {
         return rowOfWord
     }
 
-    /// The word being said in each line at `time`, by line, and the row with the one started last, to follow.
+    /// The word each Speaker is saying at `time`, by line, and the row with the one started last, to follow. One word a
+    /// Speaker: the last word of a line stays lit a moment after it's said, while their next line may have begun.
     static func playing(at time: Double, in rows: [TranscriptRow]) -> (words: [Int: Int], row: Int?) {
         var low = 0, high = rows.count - 1
         var found: Int?
@@ -141,17 +173,22 @@ struct TranscriptRow: Identifiable {
             }
         }
         guard let found else { return ([:], nil) }
-        var words: [Int: Int] = [:]
-        var latest: (start: Double, row: Int)?
+        var said: [String: (start: Double, line: Int, number: Int, row: Int)] = [:]
         // A row can start a little before the one before it ends.
         for row in rows[max(0, found - 2)...found] where time < row.end + 1.5 {
             for line in row.lines {
                 guard let index = TranscriptLine.word(at: time, starts: line.starts) else { continue }
-                words[line.id] = line.words[index].number
                 let start = line.starts[index]
-                if let last = latest, last.start > start { continue }
-                latest = (start, row.id)
+                if let current = said[line.speaker], current.start > start { continue }
+                said[line.speaker] = (start, line.id, line.words[index].number, row.id)
             }
+        }
+        var words: [Int: Int] = [:]
+        var latest: (start: Double, row: Int)?
+        for word in said.values {
+            words[word.line] = word.number
+            if let last = latest, last.start > word.start { continue }
+            latest = (word.start, word.row)
         }
         return (words, latest?.row)
     }
@@ -244,7 +281,7 @@ struct TranscriptView: View {
 
     var body: some View {
         let flags = model.flags[info.id] ?? TranscriptFlags()
-        let rows = TranscriptRow.rows(from: result.transcript, flags: flags)
+        let rows = TranscriptRow.rows(from: result.transcript, flags: flags, together: TranscriptRow.together(in: result))
         let lines = rows.flatMap(\.lines)
         let words = lines.flatMap(\.words)
         let rowOfWord = TranscriptRow.rowOfWord(in: rows)
@@ -568,7 +605,7 @@ private struct RowView<Line: View>: View {
                 HStack(spacing: 6) {
                     Image(systemName: "person.2.wave.2")
                     Text("\(row.lines.count) people at once")
-                    Button(timestamp(row.start)) { play(row.start) }
+                    Button(timestamp(row.atOnce)) { play(row.atOnce) }
                         .buttonStyle(.link)
                         .monospacedDigit()
                         .help("Play from here")

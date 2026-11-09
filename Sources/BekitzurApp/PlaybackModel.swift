@@ -36,12 +36,15 @@ final class PlaybackModel {
     func load(_ tracks: [URL], microphoneDelay: Double = 0, systemAudioDelays: [TrackDelay] = []) async {
         stop()
         let composition = AVMutableComposition()
-        do {
-            for url in tracks {
+        // A track that can't be read, as one left damaged when its device stopped, leaves the others to play.
+        for url in tracks {
+            var lane: AVMutableCompositionTrack?
+            do {
                 let asset = AVURLAsset(url: url)
                 guard let track = try await asset.loadTracks(withMediaType: .audio).first else { continue }
                 let length = try await asset.load(.duration)
-                guard let lane = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
+                lane = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+                guard let lane else { continue }
                 let name = url.deletingPathExtension().lastPathComponent
                 if name == ConversationRecorder.Track.systemAudio.name, !systemAudioDelays.isEmpty {
                     try Self.insert(track, into: lane, pieces: TrackDelay.pieces(systemAudioDelays, duration: length.seconds))
@@ -49,10 +52,10 @@ final class PlaybackModel {
                     let start = name == ConversationRecorder.Track.microphone.name ? CMTime(seconds: microphoneDelay, preferredTimescale: 48_000) : .zero
                     try lane.insertTimeRange(CMTimeRange(start: .zero, duration: length), of: track, at: start)
                 }
+            } catch {
+                if let lane { composition.removeTrack(lane) }
+                AppLog.write("Playback left out \(url.lastPathComponent): \(error)")
             }
-        } catch {
-            AppLog.write("Playback couldn't load \(tracks.map(\.lastPathComponent)): \(error)")
-            return
         }
         guard !composition.tracks.isEmpty else { return }
 

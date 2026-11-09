@@ -64,20 +64,20 @@ public final class SystemAudioRecorder {
         )
         try check(AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &description), "read the system audio format")
 
-        let outputUID = try Self.defaultOutputDeviceUID()
+        let clockUID = try Self.clockDeviceUID()
         let aggregate: [String: Any] = [
             kAudioAggregateDeviceNameKey: Self.deviceName,
             kAudioAggregateDeviceUIDKey: UUID().uuidString,
-            kAudioAggregateDeviceMainSubDeviceKey: outputUID,
+            kAudioAggregateDeviceMainSubDeviceKey: clockUID,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,
             kAudioAggregateDeviceTapAutoStartKey: true,
-            kAudioAggregateDeviceSubDeviceListKey: [[kAudioSubDeviceUIDKey: outputUID]],
+            kAudioAggregateDeviceSubDeviceListKey: [[kAudioSubDeviceUIDKey: clockUID]],
             kAudioAggregateDeviceTapListKey: [[kAudioSubTapDriftCompensationKey: true, kAudioSubTapUIDKey: tap.uuid.uuidString]],
         ]
         try check(AudioHardwareCreateAggregateDevice(aggregate as CFDictionary, &aggregateID), "create the recording device")
 
-        // Drift compensation resamples the tap to the aggregate device's clock, which follows the output device.
+        // Drift compensation resamples the tap to the aggregate device's clock, which follows the clock device.
         var sampleRate = Float64(0)
         size = UInt32(MemoryLayout<Float64>.size)
         address.mSelector = kAudioDevicePropertyNominalSampleRate
@@ -129,6 +129,21 @@ public final class SystemAudioRecorder {
         report?.overloads = overloads.total
         writer = nil
         return report
+    }
+
+    /// The device the recording keeps time by: the Mac's own speakers when it has them, the default output otherwise. The
+    /// tap hears every app wherever its sound goes, but a recording timed by headphones stops when they change, as a
+    /// Bluetooth headset does when a call takes its microphone, or when they're turned off.
+    private static func clockDeviceUID() throws -> String {
+        var builtIn: [String] = []
+        for device in AudioInputDevice.deviceIDs() where AudioInputDevice.transportType(of: device) == kAudioDeviceTransportTypeBuiltIn {
+            guard AudioInputDevice.channels(of: device, scope: kAudioObjectPropertyScopeOutput) > 0,
+                  let uid = AudioInputDevice.string(kAudioDevicePropertyDeviceUID, of: device) else { continue }
+            builtIn.append(uid)
+        }
+        // Wired headphones can be a built-in output too, one that leaves when they're unplugged.
+        if let speakers = builtIn.first(where: { $0.localizedCaseInsensitiveContains("speaker") }) ?? builtIn.first { return speakers }
+        return try defaultOutputDeviceUID()
     }
 
     private static func defaultOutputDeviceUID() throws -> String {
