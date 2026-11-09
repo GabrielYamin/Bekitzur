@@ -37,6 +37,21 @@ struct LocalizationTests {
         #expect(hebrew["NSAudioCaptureUsageDescription"] != nil)
     }
 
+    /// In Hebrew the app is בקיצור, in its own text and in macOS's menus, which show a translated name only for an app
+    /// that says it has one. A file name and a link keep Bekitzur.
+    @Test func inHebrewTheAppsNameIsInHebrewLetters() throws {
+        let info = try Self.strings("he.lproj/InfoPlist.strings")
+        #expect(info["CFBundleName"] == "בקיצור")
+        #expect(info["CFBundleDisplayName"] == "בקיצור")
+        let plist = try #require(NSDictionary(contentsOf: Self.resources.deletingLastPathComponent().appending(path: "Info.plist")))
+        #expect(plist["LSHasLocalizedDisplayName"] as? Bool == true)
+
+        for value in Array(try Self.strings("he.lproj/Localizable.strings").values) + Array(info.values) {
+            let text = value.replacingOccurrences(of: "Bekitzur.app", with: "").replacingOccurrences(of: "GabrielYamin/Bekitzur", with: "")
+            #expect(!text.contains("Bekitzur"), "\(value)")
+        }
+    }
+
     /// macOS offers a language for an app only when the app has a folder for it, English too.
     @Test func englishIsALanguageOfItsOwn() throws {
         #expect(try Self.strings("en.lproj/Localizable.strings").isEmpty)

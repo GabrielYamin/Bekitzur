@@ -225,7 +225,7 @@ final class AppModel {
     private(set) var separationsFound: [String: (separated: OverlapSeparation.Separated, places: Int)] = [:]
     /// The Conversation whose Transcript is on screen.
     @ObservationIgnored private var transcriptOnScreen: String?
-    @ObservationIgnored private lazy var mainWindow = WindowController(title: "Bekitzur", autosaveName: "Main", size: NSSize(width: 1040, height: 720)) {
+    @ObservationIgnored private lazy var mainWindow = WindowController(title: String(localized: "Bekitzur"), autosaveName: "Main", size: NSSize(width: 1040, height: 720)) {
         MainWindow(model: self)
     }
     @ObservationIgnored private lazy var settingsWindow = WindowController(title: String(localized: "Bekitzur Settings"), autosaveName: "Settings", size: NSSize(width: 560, height: 640)) {
