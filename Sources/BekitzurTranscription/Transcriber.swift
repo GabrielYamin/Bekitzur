@@ -2,7 +2,7 @@ import BekitzurDomain
 import Foundation
 import whisper
 
-public enum TranscriberError: Error, CustomStringConvertible {
+public enum TranscriberError: Error, CustomStringConvertible, LocalizedError {
     case modelNotLoaded(URL)
     case transcriptionFailed(Int32)
 
@@ -10,6 +10,13 @@ public enum TranscriberError: Error, CustomStringConvertible {
         switch self {
         case .modelNotLoaded(let url): "Can't load the speech model at \(url.path)"
         case .transcriptionFailed(let code): "Transcription failed (whisper.cpp error \(code))"
+        }
+    }
+
+    public var errorDescription: String? {
+        switch self {
+        case .modelNotLoaded(let url): String(localized: "Can't load the speech model at \(url.path)")
+        case .transcriptionFailed(let code): String(localized: "Transcription failed (whisper.cpp error \(code))")
         }
     }
 }

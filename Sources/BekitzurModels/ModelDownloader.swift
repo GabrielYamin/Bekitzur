@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-public enum ModelDownloadError: Error, Equatable, CustomStringConvertible {
+public enum ModelDownloadError: Error, Equatable, CustomStringConvertible, LocalizedError {
     case unreachable(Int)
     case checksum(String)
 
@@ -9,6 +9,13 @@ public enum ModelDownloadError: Error, Equatable, CustomStringConvertible {
         switch self {
         case .unreachable(let status): "Hugging Face answered with HTTP \(status)."
         case .checksum(let name): "The \(name.lowercased()) didn't match its checksum, so it was deleted."
+        }
+    }
+
+    public var errorDescription: String? {
+        switch self {
+        case .unreachable(let status): String(localized: "Hugging Face answered with HTTP \(status).")
+        case .checksum: String(localized: "A downloaded model didn't match its checksum, so it was deleted.")
         }
     }
 }

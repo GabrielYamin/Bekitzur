@@ -24,7 +24,7 @@ struct ConversationDetail: View {
         VStack(spacing: 0) {
             header
             if let warning = info.warning, result != nil {
-                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                Label(NotesWarning(saved: warning)?.shown ?? warning, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout)
                     .foregroundStyle(.orange)
                     .padding(.horizontal, 20)
@@ -227,7 +227,7 @@ struct ConversationDetail: View {
 
     private func speakersTabTitle(_ result: ProcessedConversation) -> String {
         let unnamed = result.speakers.filter { if case .named = $0.naming { false } else { true } }.count
-        return unnamed > 0 ? "Speakers (\(unnamed) to name)" : "Speakers"
+        return unnamed > 0 ? String(localized: "Speakers (\(unnamed) to name)") : String(localized: "Speakers")
     }
 }
 

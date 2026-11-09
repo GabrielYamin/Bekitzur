@@ -355,7 +355,7 @@ final class AppModel {
             }
         } catch {
             AppLog.write("Update check failed: \(error)")
-            if manually { inform(String(localized: "Couldn't check for updates"), String(describing: error)) }
+            if manually { inform(String(localized: "Couldn't check for updates"), error.localizedDescription) }
         }
     }
 
@@ -391,7 +391,7 @@ final class AppModel {
                 updateStep = nil
                 updateProgress = nil
                 AppLog.write("Update \(manifest.version) failed: \(error)")
-                inform(String(localized: "Couldn't install Bekitzur \(manifest.version)"), String(describing: error))
+                inform(String(localized: "Couldn't install Bekitzur \(manifest.version)"), error.localizedDescription)
             }
         }
     }
@@ -627,7 +627,7 @@ final class AppModel {
             modelDownload = nil
             AppLog.write("Model download stopped; the next one continues from here")
         } catch {
-            var reason = (error as? ModelDownloadError)?.description ?? error.localizedDescription
+            var reason = error.localizedDescription
             if !reason.hasSuffix(".") { reason += "." }
             modelDownload?.failure = String(localized: "The download stopped: \(reason) Trying again continues from where it stopped.")
             AppLog.write("Model download failed: \(error)")
@@ -744,7 +744,7 @@ final class AppModel {
             checkCall()
         } catch {
             AppLog.write("Recording not started: \(error)")
-            alert = String(localized: "Couldn't start recording: \(String(describing: error))")
+            alert = String(localized: "Couldn't start recording: \(error.localizedDescription)")
         }
     }
 
@@ -1304,7 +1304,7 @@ final class AppModel {
                 update(id) {
                     $0.status = .failed
                     $0.step = nil
-                    $0.error = String(describing: error)
+                    $0.error = error.localizedDescription
                 }
             }
             processingID = nil
@@ -1382,7 +1382,7 @@ final class AppModel {
                 progress: progress
             )
             let minutes = Int(((salvage.segments.last?.end ?? 0) / 60).rounded(.up))
-            return (result, String(localized: "The audio couldn't be read, so these Notes come from the live Transcript of the first \(minutes) minutes, without Speakers."), nil, nil)
+            return (result, NotesWarning.liveTranscriptOnly(minutes: minutes).saved, nil, nil)
         }
         let unreadable = Set(audio.unreadableTracks.map { $0.deletingPathExtension().lastPathComponent })
         if !unreadable.isEmpty {
@@ -1421,18 +1421,18 @@ final class AppModel {
             progress: progress
         )
         let silent = Set(audio.silentTracks.map { $0.deletingPathExtension().lastPathComponent })
-        var warning: String?
+        var warning: NotesWarning?
         if unreadable.contains(ConversationRecorder.Track.systemAudio.name) {
-            warning = String(localized: "The call's sound couldn't be read, so these Notes only have what your microphone heard.")
+            warning = .callUnreadable
         } else if unreadable.contains(ConversationRecorder.Track.microphone.name) {
-            warning = String(localized: "Your microphone's recording couldn't be read, so these Notes only have the call's sound.")
+            warning = .microphoneUnreadable
         } else if silent.contains(ConversationRecorder.Track.systemAudio.name), SystemAudioRecorder.access != .granted {
             // With the permission, silent system audio means nothing played, as in a room.
-            warning = String(localized: "No computer audio was recorded, so these Notes only have what your microphone heard. If this was a call, allow Bekitzur in System Settings → Privacy & Security → Screen & System Audio Recording.")
+            warning = .noComputerAudio
         } else if silent.contains(ConversationRecorder.Track.microphone.name) {
-            warning = String(localized: "Your microphone recorded only silence. Check the input device in System Settings → Sound.")
+            warning = .silentMicrophone
         }
-        return (result, warning, prepared.measuredDelay, prepared.measuredDelays)
+        return (result, warning?.saved, prepared.measuredDelay, prepared.measuredDelays)
     }
 
     /// The Recording's audio as processing uses it: a call's two tracks lined up, measuring by how much when that isn't
@@ -1718,7 +1718,7 @@ final class AppModel {
             try VoiceprintStore(url: BekitzurPaths.voiceprints).add(speaker.embedding, to: name)
             reloadPeople()
         } catch {
-            alert = String(localized: "Couldn't save the name: \(String(describing: error))")
+            alert = String(localized: "Couldn't save the name: \(error.localizedDescription)")
         }
     }
 
@@ -1830,7 +1830,7 @@ final class AppModel {
         do {
             try library.delete(id)
         } catch {
-            alert = String(localized: "Couldn't delete the Conversation: \(String(describing: error))")
+            alert = String(localized: "Couldn't delete the Conversation: \(error.localizedDescription)")
         }
         results[id] = nil
         searchEntries[id] = nil
@@ -1877,7 +1877,7 @@ final class AppModel {
                     question, about: id, transcript: transcript, date: info.startedAt, language: result.transcript.language, after: earlier
                 )
             } catch {
-                failure = String(describing: error)
+                failure = error.localizedDescription
             }
             if let last = exchanges[id]?.indices.last {
                 exchanges[id]?[last].answer = answer
@@ -2005,7 +2005,7 @@ final class AppModel {
         do {
             try microphone.start(writingTo: url, device: microphoneForRecording())
         } catch {
-            voiceSample = .failed(String(localized: "Couldn't record: \(String(describing: error))"))
+            voiceSample = .failed(String(localized: "Couldn't record: \(error.localizedDescription)"))
             return
         }
         voiceSample = .recording(until: Date().addingTimeInterval(Self.voiceSampleSeconds))
@@ -2019,7 +2019,7 @@ final class AppModel {
             AppLog.write("Voice sample learned")
         } catch {
             AppLog.write("Voice sample failed: \(error)")
-            voiceSample = .failed(String(describing: error))
+            voiceSample = .failed(error.localizedDescription)
         }
         reloadPeople()
     }

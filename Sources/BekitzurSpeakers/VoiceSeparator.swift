@@ -1,12 +1,18 @@
 import CoreML
 import Foundation
 
-public enum VoiceSeparatorError: Error, CustomStringConvertible {
+public enum VoiceSeparatorError: Error, CustomStringConvertible, LocalizedError {
     case noVoices
 
     public var description: String {
         switch self {
         case .noVoices: "The voice separation model returned no voices"
+        }
+    }
+
+    public var errorDescription: String? {
+        switch self {
+        case .noVoices: String(localized: "The voice separation model returned no voices")
         }
     }
 }

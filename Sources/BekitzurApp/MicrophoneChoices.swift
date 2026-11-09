@@ -5,11 +5,17 @@ import SwiftUI
 /// one chosen while it isn't connected.
 @MainActor @ViewBuilder
 func microphoneChoices(_ model: AppModel) -> some View {
-    Text(model.defaultMicrophone.map { "Mac's default (\($0.name))" } ?? "Mac's default").tag(String?.none)
+    Text(macDefault(model)).tag(String?.none)
     ForEach(model.microphones) { device in
         Text(device.name).tag(Optional(device.id))
     }
     if let id = model.microphoneUID, !model.microphones.contains(where: { $0.id == id }) {
-        Text("\(model.microphoneName ?? "The microphone chosen"), not connected").tag(Optional(id))
+        Text("\(model.microphoneName ?? String(localized: "The microphone chosen")), not connected").tag(Optional(id))
     }
+}
+
+@MainActor
+private func macDefault(_ model: AppModel) -> String {
+    guard let microphone = model.defaultMicrophone else { return String(localized: "Mac's default") }
+    return String(localized: "Mac's default (\(microphone.name))")
 }

@@ -62,7 +62,7 @@ struct MenuBarContent: View {
                         }
                         .pickerStyle(.inline)
                     } label: {
-                        Label(model.recordingMicrophone?.name ?? "Microphone", systemImage: "mic")
+                        Label(model.recordingMicrophone?.name ?? String(localized: "Microphone"), systemImage: "mic")
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
@@ -109,7 +109,7 @@ struct MenuBarContent: View {
             }
             .buttonStyle(PanelRowStyle())
             if model.canUpdate {
-                Button(model.updateStep ?? "Check for Updates…") { Task { await model.checkForUpdates(manually: true) } }
+                Button(model.updateStep ?? String(localized: "Check for Updates…")) { Task { await model.checkForUpdates(manually: true) } }
                     .buttonStyle(PanelRowStyle())
                     .disabled(model.updateStep != nil)
             }

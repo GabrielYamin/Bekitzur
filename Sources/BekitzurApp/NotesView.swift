@@ -88,7 +88,7 @@ struct NotesView: View {
                                 done: Binding(get: { item.done == true }, set: { setDone(index, $0) })
                             ) {
                                 HStack(spacing: 6) {
-                                    Chip(item.owner ?? String(localized: "No Owner"), systemImage: "person", prominent: item.owner != nil)
+                                    Chip(item.owner.map(ShownNames.speaker) ?? String(localized: "No Owner"), systemImage: "person", prominent: item.owner != nil)
                                     if let due = NotesMarkdown.dueText(item) {
                                         let said = item.duePhrase.map { String(localized: "Said: \"\($0)\"") }
                                         if item.dueDate != nil {
@@ -291,7 +291,7 @@ private struct ActionItemDetails: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "person").foregroundStyle(.secondary)
-            TextField("No Owner", text: Binding(get: { item.owner ?? "" }, set: { item.owner = $0 }))
+            TextField("No Owner", text: Binding(get: { item.owner.map(ShownNames.speaker) ?? "" }, set: { item.owner = $0 }))
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 200)
             Image(systemName: "calendar").foregroundStyle(.secondary).padding(.leading, 6)
@@ -414,7 +414,7 @@ private struct NoteItem<Details: View>: View {
                             Button {
                                 play(turn.start ?? 0)
                             } label: {
-                                Label("\(turn.speaker) \(timestamp(turn.start))", systemImage: "play.fill")
+                                Label("\(ShownNames.speaker(turn.speaker)) \(timestamp(turn.start))", systemImage: "play.fill")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .padding(.horizontal, 6)

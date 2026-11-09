@@ -1,12 +1,18 @@
 import BekitzurDomain
 import Foundation
 
-public enum NotesWriterError: Error, CustomStringConvertible {
+public enum NotesWriterError: Error, CustomStringConvertible, LocalizedError {
     case unreadableOutput(String)
 
     public var description: String {
         switch self {
         case .unreadableOutput(let text): "The language model's Notes aren't valid JSON: \(text.prefix(200))…"
+        }
+    }
+
+    public var errorDescription: String? {
+        switch self {
+        case .unreadableOutput(let text): String(localized: "The language model's Notes aren't valid JSON: \(String(text.prefix(200)))…")
         }
     }
 }

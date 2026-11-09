@@ -1,6 +1,6 @@
 import AVFoundation
 
-public enum AudioLoaderError: Error, CustomStringConvertible {
+public enum AudioLoaderError: Error, CustomStringConvertible, LocalizedError {
     case unsupportedFormat(URL)
     case conversionFailed(URL, String)
 
@@ -8,6 +8,13 @@ public enum AudioLoaderError: Error, CustomStringConvertible {
         switch self {
         case .unsupportedFormat(let url): "Can't read audio from \(url.path)"
         case .conversionFailed(let url, let reason): "Can't convert \(url.path): \(reason)"
+        }
+    }
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedFormat(let url): String(localized: "Can't read audio from \(url.path)")
+        case .conversionFailed(let url, let reason): String(localized: "Can't convert \(url.path): \(reason)")
         }
     }
 }

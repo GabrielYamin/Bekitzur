@@ -327,9 +327,9 @@ struct TranscriptView: View {
                     let moved = flags.words.filter { $0.saidBy != nil || $0.otherSpeaker == true }.count
                     let wrong = flags.words.filter { !$0.isFix }.count
                     Text([
-                        corrected > 0 ? "\(corrected) corrected" : nil,
-                        moved > 0 ? "\(moved) moved to another speaker" : nil,
-                        wrong + flags.speakers.count > 0 ? "\(wrong + flags.speakers.count) marked wrong" : nil,
+                        corrected > 0 ? String(localized: "\(corrected) corrected") : nil,
+                        moved > 0 ? String(localized: "\(moved) moved to another speaker") : nil,
+                        wrong + flags.speakers.count > 0 ? String(localized: "\(wrong + flags.speakers.count) marked wrong") : nil,
                     ].compactMap { $0 }.joined(separator: " · "))
                     .font(.callout)
                 }
@@ -658,7 +658,7 @@ private struct LineView: View, @MainActor Equatable {
         let runs = TextDirection.runs(texts, in: direction)
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Text(line.speaker).font(.headline)
+                Text(ShownNames.speaker(line.speaker)).font(.headline)
                 Button(timestamp(line.start)) { actions.play(line.start) }
                     .buttonStyle(.link)
                     .font(.caption.monospacedDigit())
@@ -723,11 +723,11 @@ private struct SaidByMenu: View {
     var body: some View {
         let others = speakers.filter { $0 != current }
         if others.count == 1 {
-            Button("Said by \(others[0])") { choose(others[0]) }
+            Button("Said by \(ShownNames.speaker(others[0]))") { choose(others[0]) }
         } else if !others.isEmpty {
             Menu("Said by") {
                 ForEach(others, id: \.self) { name in
-                    Button(name) { choose(name) }
+                    Button(ShownNames.speaker(name)) { choose(name) }
                 }
             }
         }
@@ -814,11 +814,15 @@ private struct WordView: View {
     private var tip: String? {
         var parts: [String] = []
         if notSaid {
-            parts.append("Not said: part of what you typed for the words before it")
+            parts.append(String(localized: "Not said: part of what you typed for the words before it"))
         } else if corrected || rewritten {
-            parts.append("Transcribed as “\(item.phrase.map { $0.word.transcribed ?? $0.word.text }.joined(separator: " "))”")
+            let transcribed = item.phrase.map { $0.word.transcribed ?? $0.word.text }.joined(separator: " ")
+            parts.append(String(localized: "Transcribed as “\(transcribed)”"))
         }
-        if moved { parts.append("Transcribed as said by \(item.transcribedSpeaker ?? "another speaker")") }
+        if moved {
+            parts.append(item.transcribedSpeaker.map { String(localized: "Transcribed as said by \(ShownNames.speaker($0))") }
+                ?? String(localized: "Transcribed as said by another speaker"))
+        }
         return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 

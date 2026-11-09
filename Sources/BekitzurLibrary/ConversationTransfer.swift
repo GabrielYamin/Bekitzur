@@ -13,9 +13,9 @@ extension ConversationLibrary {
 
         public var errorDescription: String? {
             switch self {
-            case .notAConversation: "It isn't a Conversation exported from Bekitzur."
-            case .unsafe(let name): "\(name) in it points outside the Conversation, so nothing was imported."
-            case .failed(let tool, let status): "\(tool) stopped with error \(status)."
+            case .notAConversation: String(localized: "It isn't a Conversation exported from Bekitzur.")
+            case .unsafe(let name): String(localized: "\(name) in it points outside the Conversation, so nothing was imported.")
+            case .failed(let tool, let status): String(localized: "\(tool) stopped with error \(status).")
             }
         }
     }

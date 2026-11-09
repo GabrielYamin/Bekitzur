@@ -1,3 +1,8 @@
+import BekitzurAudio
+import BekitzurModels
+import BekitzurNotes
+import BekitzurPipeline
+import BekitzurUpdates
 import Foundation
 import Testing
 
@@ -35,5 +40,21 @@ struct LocalizationTests {
     /// macOS offers a language for an app only when the app has a folder for it, English too.
     @Test func englishIsALanguageOfItsOwn() throws {
         #expect(try Self.strings("en.lproj/Localizable.strings").isEmpty)
+    }
+
+    /// The app shows an error in its own words, translated, where macOS would say only "The operation couldn't be
+    /// completed"; in English they're the words the log has, though numbers from 1,000 up are grouped.
+    @Test(arguments: [
+        ProcessingError.noAudio, ProcessingError.noSpeech, ProcessingError.transcriptionStopped,
+        UpdateError.unreachable(503), UpdateError.unsigned, UpdateError.checksum, UpdateError.noApp, UpdateError.notBekitzur(-67050),
+        UpdateError.unzip(1), UpdateError.notWritable(URL(filePath: "/Applications")),
+        ModelDownloadError.unreachable(404),
+        LanguageModelError.modelNotLoaded(URL(filePath: "/tmp/model.gguf")), LanguageModelError.contextNotCreated,
+        LanguageModelError.invalidGrammar, LanguageModelError.promptTooLong(tokens: 900, limit: 512), LanguageModelError.decodeFailed(-1),
+        NotesWriterError.unreadableOutput("{\"title\":"),
+        AudioLoaderError.unsupportedFormat(URL(filePath: "/tmp/a.m4a")), AudioLoaderError.conversionFailed(URL(filePath: "/tmp/a.m4a"), "no frames"),
+    ] as [any Error])
+    func anErrorShowsItsOwnWords(_ error: any Error) {
+        #expect(error.localizedDescription == String(describing: error))
     }
 }

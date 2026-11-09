@@ -66,7 +66,7 @@ private struct SpeakerRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Text(speaker.displayName).font(.headline)
+                Text(ShownNames.speaker(speaker.displayName)).font(.headline)
                 Text(Duration.seconds(speaker.speechSeconds).formatted(.units(allowed: [.minutes, .seconds], width: .abbreviated)))
                     .foregroundStyle(.secondary)
                 Spacer()
