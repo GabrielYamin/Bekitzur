@@ -205,4 +205,14 @@ struct AudioTests {
         #expect(mixed.silentTracks == [silence])
         #expect((0.15...0.25).contains(mixed.samples.prefix(16_000).map(abs).max() ?? 0))
     }
+
+    /// During a change of device, as a Bluetooth headset switching to its call mode, the microphone can report a rate its
+    /// hardware has already left, and a tap installed in it raises an exception that ends the app.
+    @Test func aMicrophoneIsTappedOnlyAtTheRateItsHardwareRuns() throws {
+        let current = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1))
+        let headset = try #require(AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1))
+
+        #expect(MicrophoneRecorder.canTap(current, hardware: current))
+        #expect(!MicrophoneRecorder.canTap(current, hardware: headset))
+    }
 }

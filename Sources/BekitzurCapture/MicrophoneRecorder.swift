@@ -7,6 +7,9 @@ public final class MicrophoneRecorder: @unchecked Sendable {
     private var writer: AudioFileWriter?
     private var configurationChanges: NSObjectProtocol?
     private let restarts = DispatchQueue(label: "bekitzur.microphone-restarts")
+    /// The restart waiting for the device to settle, and whether the recording has stopped; only used on `restarts`.
+    private var pendingRestart: DispatchWorkItem?
+    private var stopped = false
     /// The chosen microphone's UID; nil for the Mac's default, which the engine follows by itself.
     private var device: String?
 
@@ -31,9 +34,16 @@ public final class MicrophoneRecorder: @unchecked Sendable {
     ///   - device: The UID of the microphone to record (`AudioInputDevice`); nil for the Mac's default.
     public func start(writingTo url: URL, origin: UInt64? = nil, listener: AudioListener? = nil, device: String? = nil) throws {
         self.device = device
+        restarts.sync { stopped = false }
         useDevice()
+        // A microphone in the middle of a change, as a Bluetooth headset connecting, has no format to record in yet.
+        var waited = 0
+        while !Self.isSettled(engine.inputNode), waited < 20 {
+            Thread.sleep(forTimeInterval: 0.1)
+            waited += 1
+        }
         let format = engine.inputNode.outputFormat(forBus: 0)
-        guard format.channelCount > 0, let mono = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 1) else {
+        guard Self.isSettled(engine.inputNode), let mono = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 1) else {
             throw CaptureError(step: "find a microphone", status: kAudioHardwareBadDeviceError)
         }
         let writer = try AudioFileWriter(url: url, format: mono, origin: origin, listener: listener)
@@ -41,8 +51,7 @@ public final class MicrophoneRecorder: @unchecked Sendable {
         tap(into: writer)
         // A change of input device, or of its format, stops the engine; the recording goes on from the new device.
         configurationChanges = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
-            guard let self else { return }
-            restarts.async { self.restart() }
+            self?.restartWhenSettled()
         }
         try engine.start()
     }
@@ -74,13 +83,46 @@ public final class MicrophoneRecorder: @unchecked Sendable {
         AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &id, UInt32(MemoryLayout<AudioObjectID>.size))
     }
 
-    private func restart() {
-        guard let writer else { return }
-        engine.inputNode.removeTap(onBus: 0)
+    /// Restarts on the device in use once it has gone 0.3 seconds without another change, and again while its format
+    /// isn't settled: a Bluetooth headset changes format in steps as a call app takes its microphone, and a tap installed
+    /// in a format the device has just left raises an exception, which ends the app.
+    private func restartWhenSettled(attempt: Int = 0) {
+        restarts.async { [self] in
+            guard !stopped else { return }
+            pendingRestart?.cancel()
+            let restart = DispatchWorkItem { [weak self] in self?.restart(attempt: attempt) }
+            pendingRestart = restart
+            restarts.asyncAfter(deadline: .now() + 0.3, execute: restart)
+        }
+    }
+
+    private func restart(attempt: Int) {
+        guard !stopped, let writer else { return }
+        let input = engine.inputNode
+        input.removeTap(onBus: 0)
         useDevice()
+        guard Self.isSettled(input) else {
+            if attempt < 20 { restartWhenSettled(attempt: attempt + 1) }
+            return
+        }
         writer.restarted()
         tap(into: writer)
-        try? engine.start()
+        do {
+            try engine.start()
+        } catch {
+            if attempt < 20 { restartWhenSettled(attempt: attempt + 1) }
+        }
+    }
+
+    private static func isSettled(_ input: AVAudioInputNode) -> Bool {
+        canTap(input.outputFormat(forBus: 0), hardware: input.inputFormat(forBus: 0))
+    }
+
+    /// Whether a tap can be installed in the input's format: during a change, a device can have no channels or rate, or
+    /// a rate its hardware has already left.
+    static func canTap(_ format: AVAudioFormat, hardware: AVAudioFormat) -> Bool {
+        guard format.channelCount > 0, format.sampleRate > 0 else { return false }
+        return format.sampleRate == hardware.sampleRate
     }
 
     private static func convert(_ buffer: AVAudioPCMBuffer, with converter: AVAudioConverter) -> AVAudioPCMBuffer? {
@@ -106,7 +148,11 @@ public final class MicrophoneRecorder: @unchecked Sendable {
     public func stop() -> TrackReport? {
         if let configurationChanges { NotificationCenter.default.removeObserver(configurationChanges) }
         configurationChanges = nil
-        restarts.sync {}
+        restarts.sync {
+            stopped = true
+            pendingRestart?.cancel()
+            pendingRestart = nil
+        }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         let report = writer?.close()
