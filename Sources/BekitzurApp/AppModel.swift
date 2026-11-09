@@ -1335,7 +1335,11 @@ final class AppModel {
                 progress: progress
             )
             let minutes = Int(((salvage.segments.last?.end ?? 0) / 60).rounded(.up))
-            return (result, "The audio couldn't be read because the app quit before finishing it, so these Notes come from the live Transcript of the first \(minutes) minutes, without Speakers.", nil, nil)
+            return (result, "The audio couldn't be read, so these Notes come from the live Transcript of the first \(minutes) minutes, without Speakers.", nil, nil)
+        }
+        let unreadable = Set(audio.unreadableTracks.map { $0.deletingPathExtension().lastPathComponent })
+        if !unreadable.isEmpty {
+            AppLog.write("\(folder.lastPathComponent): processing without \(audio.unreadableTracks.map(\.lastPathComponent).joined(separator: ", ")), which couldn't be read")
         }
         let prepared = Self.prepared(audio, microphoneDelay: microphoneDelay, systemAudioDelays: systemAudioDelays)
         let samples = prepared.samples, call = prepared.call
@@ -1371,8 +1375,12 @@ final class AppModel {
         )
         let silent = Set(audio.silentTracks.map { $0.deletingPathExtension().lastPathComponent })
         var warning: String?
-        // With the permission, silent system audio means nothing played, as in a room.
-        if silent.contains(ConversationRecorder.Track.systemAudio.name), SystemAudioRecorder.access != .granted {
+        if unreadable.contains(ConversationRecorder.Track.systemAudio.name) {
+            warning = "The call's sound couldn't be read, so these Notes only have what your microphone heard."
+        } else if unreadable.contains(ConversationRecorder.Track.microphone.name) {
+            warning = "Your microphone's recording couldn't be read, so these Notes only have the call's sound."
+        } else if silent.contains(ConversationRecorder.Track.systemAudio.name), SystemAudioRecorder.access != .granted {
+            // With the permission, silent system audio means nothing played, as in a room.
             warning = "No computer audio was recorded, so these Notes only have what your microphone heard. If this was a call, allow Bekitzur in System Settings → Privacy & Security → Screen & System Audio Recording."
         } else if silent.contains(ConversationRecorder.Track.microphone.name) {
             warning = "Your microphone recorded only silence. Check the input device in System Settings → Sound."

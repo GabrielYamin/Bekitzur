@@ -19,6 +19,8 @@ public struct MixedAudio: Sendable {
     public let samples: [Float]
     /// Tracks that exist but recorded only silence, like system audio when the permission was denied.
     public let silentTracks: [URL]
+    /// Tracks that exist but couldn't be read, like system audio from a device that stopped before it wrote anything.
+    public let unreadableTracks: [URL]
     /// Each track, 16 kHz mono.
     public let tracks: [URL: [Float]]
 }
@@ -165,20 +167,31 @@ public enum ConversationProcessor {
         String(String.UnicodeScalarView(word.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }))
     }
 
-    /// Loads the tracks that exist and sums them into one signal.
+    /// Loads the tracks that exist and sums them into one signal, leaving out one that can't be read; it fails when none
+    /// can be.
     public static func loadMixed(_ tracks: [URL]) throws -> MixedAudio {
         var mixed: [Float] = []
         var silent: [URL] = []
+        var unreadable: [URL] = []
+        var failure: Error?
         var loaded: [URL: [Float]] = [:]
         for url in tracks where FileManager.default.fileExists(atPath: url.path) {
-            let track = try AudioLoader.loadMono16k(url)
+            let track: [Float]
+            do {
+                track = try AudioLoader.loadMono16k(url)
+            } catch {
+                unreadable.append(url)
+                failure = failure ?? error
+                continue
+            }
             if track.allSatisfy({ abs($0) < 0.0005 }) { silent.append(url) }
             if track.count > mixed.count { mixed += [Float](repeating: 0, count: track.count - mixed.count) }
             for i in track.indices { mixed[i] += track[i] }
             loaded[url] = track
         }
+        if mixed.isEmpty, let failure { throw failure }
         guard !mixed.isEmpty else { throw ProcessingError.noAudio }
-        return MixedAudio(samples: mixed, silentTracks: silent, tracks: loaded)
+        return MixedAudio(samples: mixed, silentTracks: silent, unreadableTracks: unreadable, tracks: loaded)
     }
 
     /// - Parameters:
