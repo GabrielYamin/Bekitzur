@@ -199,11 +199,20 @@ public enum OverlapSeparation {
     }
 
     /// The Transcript with what separating found merged in, words it merged before replaced, and what the user fixed
-    /// left as it is (`merge(_:found:activity:flags:names:)`).
-    /// - Parameter names: The name each Speaker label shows as now.
-    public static func merge(_ separated: Separated, into transcript: Transcript, flags: TranscriptFlags, names: [String: String]) -> Merged {
+    /// left as it is (`merge(_:found:activity:flags:names:together:)`).
+    /// - Parameters:
+    ///   - names: The name each Speaker label shows as now.
+    ///   - together: Where the timeline heard people at once, by their labels, which the Transcript's lines follow.
+    public static func merge(
+        _ separated: Separated,
+        into transcript: Transcript,
+        flags: TranscriptFlags,
+        names: [String: String],
+        together: [TalkingAtOnce] = []
+    ) -> Merged {
         var transcript = transcript
-        let merged = merge(transcript.segments.filter { $0.separated != true }, found: separated.found, activity: separated.activity, flags: flags, names: names)
+        let merged = merge(transcript.segments.filter { $0.separated != true }, found: separated.found, activity: separated.activity, flags: flags,
+                           names: names, together: together)
         transcript.segments = merged.segments
         return Merged(transcript: transcript, moved: merged.moved, added: merged.added, changed: merged.changed)
     }
@@ -309,20 +318,26 @@ public enum OverlapSeparation {
     /// found there added, unless speech recognition was unsure of that voice's words, the person already has a word
     /// there, anyone has the same word within 1.2 seconds, since a separated voice's word can be timed that far from the
     /// same word in the Transcript, or it's a sound speech recognition writes over noise. What the user fixed stays as
-    /// it is (`untouched(_:flags:)`), and nothing is added where they corrected a word or said who said it.
-    /// - Parameter names: The name each Speaker label shows as; a label without one shows as itself.
+    /// it is (`untouched(_:flags:together:)`), and nothing is added where they corrected a word or said who said it.
+    /// - Parameters:
+    ///   - names: The name each Speaker label shows as; a label without one shows as itself.
+    ///   - together: Where the timeline heard people at once, by their labels.
     static func merge(
         _ segments: [TranscriptSegment],
         found: [Found],
         activity: Activity,
         flags: TranscriptFlags = TranscriptFlags(),
-        names: [String: String] = [:]
+        names: [String: String] = [:],
+        together: [TalkingAtOnce] = []
     ) -> (segments: [TranscriptSegment], moved: Int, added: Int, changed: [Double]) {
         func speaker(_ item: Found) -> String { names[item.label] ?? item.label }
         // A word one voice has leaked into the other comes out in both, less sure in the voice it leaked into.
         let found = found.sorted { ($0.word.probability ?? 1, -$0.word.start, $0.voice) > ($1.word.probability ?? 1, -$1.word.start, $1.voice) }
         var speakers = segments.map { segment in (segment.words ?? []).map { _ in segment.speaker } }
-        let untouched = untouched(segments, flags: flags)
+        let heardAtOnce = together.map { stretch -> (start: Double, end: Double, speakers: Set<String>) in
+            (stretch.start, stretch.end, Set(stretch.speakers.map { names[$0] ?? $0 }))
+        }
+        let untouched = untouched(segments, flags: flags, together: heardAtOnce)
         let fixed = segments.flatMap { segment in (segment.words ?? []).filter { flags.flag(for: $0)?.isFix == true }.map { moment(of: $0) } }
         let alone = segments.flatMap { segment in
             (segment.words ?? []).filter { !activity.together(segment.input, around: moment(of: $0), within: margin) }
@@ -397,23 +412,35 @@ public enum OverlapSeparation {
 
     /// The words separating leaves where they are: the ones the user marked, corrected, or said someone else said, and
     /// every word of a line they marked as someone else's, in the lines the Transcript shows (`TranscriptRows`).
-    static func untouched(_ segments: [TranscriptSegment], flags: TranscriptFlags) -> Set<Position> {
+    /// - Parameter together: Where the timeline heard people at once, by the names they show as.
+    static func untouched(
+        _ segments: [TranscriptSegment],
+        flags: TranscriptFlags,
+        together: [(start: Double, end: Double, speakers: Set<String>)] = []
+    ) -> Set<Position> {
         var untouched = Set<Position>()
         let speakers = Array(Set(segments.compactMap(\.speaker))).sorted()
-        // A word corrected with the one before it isn't shown on its own, so it starts no line.
-        var shown: [(position: Position, word: TranscriptWord, speaker: String)] = []
+        // A word corrected with the one before it isn't shown on its own, so it starts no line, and a segment's text
+        // without word times is a line of its own.
+        var shown: [(position: Position?, start: Double, end: Double, speaker: String, text: String)] = []
         for (s, segment) in segments.enumerated() {
-            for (w, word) in (segment.words ?? []).enumerated() {
+            guard let words = segment.words, !words.isEmpty else {
+                shown.append((nil, segment.start, segment.end, (segment.speaker ?? "Speaker") + "\u{0}", segment.text))
+                continue
+            }
+            for (w, word) in words.enumerated() {
                 let flag = flags.flag(for: word)
                 if flag != nil { untouched.insert(Position(segment: s, word: w)) }
                 guard flag?.phrase == nil else { continue }
-                shown.append((Position(segment: s, word: w), word, flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers) ?? "Speaker"))
+                let speaker = flags.speaker(of: word, transcribedAs: segment.speaker, among: speakers) ?? "Speaker"
+                shown.append((Position(segment: s, word: w), word.start, word.end, speaker, flags.text(of: word)))
             }
         }
         guard !flags.speakers.isEmpty else { return untouched }
-        for row in TranscriptRows.layout(shown.map { ($0.word.start, $0.word.end, $0.speaker) }) {
-            for line in row where flags.isSpeakerFlagged(lineStartingAt: shown[line[0]].word.start) {
-                untouched.formUnion(line.map { shown[$0].position })
+        let endingSentences = Set(shown.indices.filter { TranscriptRows.endsSentence(shown[$0].text) })
+        for row in TranscriptRows.layout(shown.map { ($0.start, $0.end, $0.speaker) }, together: together, endingSentences: endingSentences) {
+            for line in row where flags.isSpeakerFlagged(lineStartingAt: shown[line[0]].start) {
+                untouched.formUnion(line.compactMap { shown[$0].position })
             }
         }
         return untouched

@@ -1088,7 +1088,8 @@ final class AppModel {
             update(id) { $0.separating = nil }
             return
         }
-        let merged = OverlapSeparation.merge(found, into: result.transcript, flags: flags[id] ?? library.flags(for: id), names: Self.names(in: result))
+        let merged = OverlapSeparation.merge(found, into: result.transcript, flags: flags[id] ?? library.flags(for: id), names: Self.names(in: result),
+                                             together: result.together ?? [])
         guard merged.moved + merged.added > 0 else {
             AppLog.write(String(format: "%@: separating people who talked at once changed nothing (%.0f s)", id, seconds))
             update(id) { $0.separating = nil }
@@ -1110,7 +1111,8 @@ final class AppModel {
     /// changes a line the Notes cite, they're behind.
     func mergeSeparation(_ id: String) {
         guard let found = separationsFound.removeValue(forKey: id), var result = results[id] ?? library.result(for: id) else { return }
-        let merged = OverlapSeparation.merge(found.separated, into: result.transcript, flags: flags[id] ?? library.flags(for: id), names: Self.names(in: result))
+        let merged = OverlapSeparation.merge(found.separated, into: result.transcript, flags: flags[id] ?? library.flags(for: id), names: Self.names(in: result),
+                                             together: result.together ?? [])
         result.transcript = merged.transcript
         let behind = OverlapSeparation.changesSources(merged, of: result)
         if behind { result.separationChangedNotes = true }

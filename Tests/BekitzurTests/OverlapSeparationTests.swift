@@ -263,6 +263,21 @@ struct OverlapSeparationTests {
         #expect(merged.segments == segments)
     }
 
+    /// The Transcript cuts the line where the timeline heard Speaker 2 too, and the user marked the part said at once.
+    @Test func aLineMarkedAsSomeoneElsesIsFoundAsTheTranscriptShowsIt() {
+        let segments = [
+            segment([(3.5, "אז"), (3.9, "אני"), (4.3, "חושב"), (5.2, "ושנבין"), (5.6, "את"), (6.0, "זה")], speaker: "Speaker 1"),
+            segment([(6.4, "אני"), (6.7, "מסכים")], speaker: "Speaker 2"),
+        ]
+        var flags = TranscriptFlags()
+        flags.toggleSpeaker(lineStartingAt: 5.2, speaker: "Speaker 1")
+        let together = [TalkingAtOnce(start: 5, end: 7, speakers: ["Speaker 1", "Speaker 2"])]
+
+        let merged = OverlapSeparation.merge(segments, found: [found(5.22, "שנבין", voice: "S2")], activity: activity, flags: flags, together: together)
+
+        #expect(merged.segments == segments)
+    }
+
     @Test func nothingIsAddedWhereTheUserCorrectedAWord() {
         let segments = [segment([(5.0, "אז"), (5.4, "בוא")], speaker: "Speaker 1")]
         var flags = TranscriptFlags()
