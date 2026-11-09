@@ -99,7 +99,7 @@ struct ConversationDetail: View {
                     Button("Write Notes again") { model.replaceNotes(of: info.id) { model.writeNotesAgain(info.id) } }
                     Button("Transcribe again") { model.replaceNotes(of: info.id) { model.transcribeAgain(info.id, language: info.language) } }
                     ForEach(ConversationLanguage.allCases.filter { $0 != info.language }, id: \.self) { language in
-                        Button("Transcribe again as \(language.name)") { model.replaceNotes(of: info.id) { model.transcribeAgain(info.id, language: language) } }
+                        Button("Transcribe again as \(ShownNames.language(language))") { model.replaceNotes(of: info.id) { model.transcribeAgain(info.id, language: language) } }
                     }
                 }
                 Button("Rename…") { model.renaming = info.id }
@@ -121,11 +121,11 @@ struct ConversationDetail: View {
 
     private var subtitle: String {
         var parts = [info.startedAt.formatted(.dateTime.weekday(.wide).day().month(.wide).year().hour().minute())]
-        if let minutes = info.minutes { parts.append("\(minutes) min") }
+        if let minutes = info.minutes { parts.append(String(localized: "\(minutes) min")) }
         if let language = info.language {
-            parts.append(language.name)
+            parts.append(ShownNames.language(language))
         } else if info.status == .recording {
-            parts.append("Detecting the language")
+            parts.append(String(localized: "Detecting the language"))
         }
         return parts.joined(separator: " · ")
     }
@@ -139,7 +139,7 @@ struct ConversationDetail: View {
             LiveTranscriptView(model: model, info: info)
         case .processing:
             ContentUnavailableView {
-                Label(info.step ?? "Processing", systemImage: "hourglass")
+                Label(ShownNames.step(info.step), systemImage: "hourglass")
             } description: {
                 Text("Everything runs on this Mac. An hour-long Conversation takes a few minutes.")
             } actions: {

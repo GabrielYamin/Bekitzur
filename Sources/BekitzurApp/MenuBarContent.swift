@@ -75,7 +75,7 @@ struct MenuBarContent: View {
             if let processing = model.processing {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("\(processing.step ?? "Processing")…").foregroundStyle(.secondary)
+                    Text("\(ShownNames.step(processing.step))…").foregroundStyle(.secondary)
                 }
             }
 
@@ -146,10 +146,10 @@ extension ConversationInfo {
     var displayTitle: String {
         if let title { return title }
         return switch status {
-        case .recording: "Recording…"
-        case .processing: "Processing…"
-        case .failed: "Couldn't write Notes"
-        default: "Conversation"
+        case .recording: String(localized: "Recording…")
+        case .processing: String(localized: "Processing…")
+        case .failed: String(localized: "Couldn't write Notes")
+        default: String(localized: "Conversation")
         }
     }
 
@@ -180,11 +180,11 @@ struct StatusDot: View {
 
     private var help: String {
         switch status {
-        case .recording: "Recording"
-        case .processing: "Processing"
-        case .unreviewed: "Not reviewed yet"
-        case .reviewed: "Reviewed"
-        case .failed: "Failed"
+        case .recording: String(localized: "Recording")
+        case .processing: String(localized: "Processing")
+        case .unreviewed: String(localized: "Not reviewed yet")
+        case .reviewed: String(localized: "Reviewed")
+        case .failed: String(localized: "Failed")
         }
     }
 }

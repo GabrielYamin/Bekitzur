@@ -472,7 +472,7 @@ private struct SeparationNote: View {
     let show: () -> Void
 
     var body: some View {
-        let text = places == 1 ? "Separated 1 place where people talked at once." : "Separated \(places) places where people talked at once."
+        let text = places == 1 ? String(localized: "Separated 1 place where people talked at once.") : String(localized: "Separated \(places) places where people talked at once.")
         HStack {
             Label(text, systemImage: "person.2.wave.2")
             Spacer()

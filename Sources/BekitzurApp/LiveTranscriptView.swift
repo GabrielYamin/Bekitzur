@@ -28,7 +28,7 @@ struct LiveTranscriptView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ProgressView().controlSize(.small)
-                    Text(info.step ?? "Processing").font(.callout)
+                    Text(ShownNames.step(info.step)).font(.callout)
                 }
                 Spacer()
                 Toggle("Follow", isOn: $follow).toggleStyle(.checkbox)

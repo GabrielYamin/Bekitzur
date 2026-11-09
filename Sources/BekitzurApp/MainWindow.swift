@@ -181,7 +181,7 @@ private struct StartButtons: View {
 /// A neutral box with its icon in `tint`, or, `filled`, the whole box in it, for a recording going on: a red Record box
 /// would look like recording while nothing is.
 private struct BoxButton<Subtitle: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let tint: Color
     var filled = false
@@ -250,7 +250,7 @@ struct ConversationRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 if info.status == .processing {
-                    Text(info.step ?? "Processing").font(.caption).foregroundStyle(.secondary)
+                    Text(ShownNames.step(info.step)).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

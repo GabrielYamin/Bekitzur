@@ -8,6 +8,11 @@
 	<string>PaZJpCM6cc7tu/mfUgTv4DG1AZft4ZHF5bTo0Kgsh/Q=</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>he</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Bekitzur</string>
 	<key>CFBundleDocumentTypes</key>

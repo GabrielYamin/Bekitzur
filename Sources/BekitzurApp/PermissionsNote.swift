@@ -31,12 +31,12 @@ struct MissingPermission: Identifiable, Equatable {
 
     var message: String {
         switch (permission, access) {
-        case (.microphone, .notAsked): "Bekitzur hasn't been allowed to use the microphone yet."
-        case (.microphone, _): "Bekitzur isn't allowed to use the microphone, so it can't record."
-        case (.systemAudio, .notAsked): "Bekitzur hasn't been allowed to record computer audio yet, which calls need for the other side."
-        case (.systemAudio, _): "Bekitzur isn't allowed to record computer audio, so calls are recorded without the other side."
-        case (.notifications, .notAsked): "Bekitzur hasn't been allowed to show notifications yet, like when Notes are ready."
-        case (.notifications, _): "Notifications are off, so you won't be told when Notes are ready."
+        case (.microphone, .notAsked): String(localized: "Bekitzur hasn't been allowed to use the microphone yet.")
+        case (.microphone, _): String(localized: "Bekitzur isn't allowed to use the microphone, so it can't record.")
+        case (.systemAudio, .notAsked): String(localized: "Bekitzur hasn't been allowed to record computer audio yet, which calls need for the other side.")
+        case (.systemAudio, _): String(localized: "Bekitzur isn't allowed to record computer audio, so calls are recorded without the other side.")
+        case (.notifications, .notAsked): String(localized: "Bekitzur hasn't been allowed to show notifications yet, like when Notes are ready.")
+        case (.notifications, _): String(localized: "Notifications are off, so you won't be told when Notes are ready.")
         }
     }
 }

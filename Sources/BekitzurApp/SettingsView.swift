@@ -162,6 +162,30 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Language") {
+                Picker("App language", selection: $model.appLanguage) {
+                    Text("Same as the Mac").tag(AppLanguage.mac)
+                    Text(verbatim: "English").tag(AppLanguage.english)
+                    Text(verbatim: "עברית").tag(AppLanguage.hebrew)
+                }
+                if model.appLanguage != model.launchLanguage {
+                    HStack {
+                        if model.canRestart {
+                            Text("Bekitzur switches once it restarts.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Bekitzur switches once it restarts, after it's done recording and processing.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Restart Bekitzur") { model.restartInChosenLanguage() }
+                            .disabled(!model.canRestart)
+                    }
+                }
+            }
+
             Section("Your voice") {
                 TextField("Your name", text: $model.userName)
                 voiceSample
@@ -173,7 +197,7 @@ struct SettingsView: View {
 
             Section("Models") {
                 ForEach(ModelFile.groups) { group in
-                    LabeledContent(group.name) {
+                    LabeledContent(ModelNames.title(group.name)) {
                         let size = group.bytes.formatted(.byteCount(style: .file))
                         let missing = group.files.contains(where: model.missingModels.contains)
                         Text(missing ? "Not downloaded, \(size)" : "Downloaded, \(size)").foregroundStyle(.secondary)

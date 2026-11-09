@@ -171,6 +171,19 @@ final class AppModel {
         }
     }
 
+    /// The language chosen for the app in Settings, which it shows once it restarts.
+    var appLanguage: AppLanguage {
+        didSet {
+            if let codes = appLanguage.codes {
+                UserDefaults.standard.set(codes, forKey: AppLanguage.preference)
+            } else {
+                UserDefaults.standard.removeObject(forKey: AppLanguage.preference)
+            }
+        }
+    }
+    /// The language chosen when the app launched, which it shows until it restarts.
+    @ObservationIgnored let launchLanguage: AppLanguage
+
     @ObservationIgnored private var trashWatch: TrashWatch?
     /// The app is being moved to the Trash, with as much of its data as the user chose.
     @ObservationIgnored private var removing = false
@@ -199,13 +212,16 @@ final class AppModel {
     @ObservationIgnored private lazy var mainWindow = WindowController(title: "Bekitzur", autosaveName: "Main", size: NSSize(width: 1040, height: 720)) {
         MainWindow(model: self)
     }
-    @ObservationIgnored private lazy var settingsWindow = WindowController(title: "Bekitzur Settings", autosaveName: "Settings", size: NSSize(width: 560, height: 640)) {
+    @ObservationIgnored private lazy var settingsWindow = WindowController(title: String(localized: "Bekitzur Settings"), autosaveName: "Settings", size: NSSize(width: 560, height: 640)) {
         SettingsView(model: self)
     }
 
     private init() {
         lastLanguage = UserDefaults.standard.string(forKey: "language").flatMap(ConversationLanguage.init(rawValue:)) ?? .hebrew
         userName = UserDefaults.standard.string(forKey: "userName") ?? NSFullUserName()
+        let language = AppLanguage.chosen(in: Bundle.main.bundleIdentifier.flatMap { UserDefaults.standard.persistentDomain(forName: $0) })
+        appLanguage = language
+        launchLanguage = language
         suggestsCalls = UserDefaults.standard.object(forKey: "suggestCalls") as? Bool ?? true
         recordsCallsAutomatically = UserDefaults.standard.bool(forKey: "recordCallsAutomatically")
         hasNewSettings = UserDefaults.standard.integer(forKey: "seenSettingsRevision") < NewSetting.revision
@@ -302,12 +318,12 @@ final class AppModel {
 
     func checkForUpdates(manually: Bool) async {
         guard let updater, updateStep == nil else { return }
-        if manually { updateStep = "Checking for updates…" }
+        if manually { updateStep = String(localized: "Checking for updates…") }
         defer { if manually { updateStep = nil } }
         do {
             guard let manifest = try await updater.check() else {
                 availableUpdate = nil
-                if manually { inform("Bekitzur is up to date", "This is the newest version, \(versionDescription).") }
+                if manually { inform(String(localized: "Bekitzur is up to date"), String(localized: "This is the newest version, \(versionDescription).")) }
                 return
             }
             if availableUpdate != manifest { AppLog.write("Update \(manifest.version) (build \(manifest.build)) is available") }
@@ -320,7 +336,7 @@ final class AppModel {
             }
         } catch {
             AppLog.write("Update check failed: \(error)")
-            if manually { inform("Couldn't check for updates", String(describing: error)) }
+            if manually { inform(String(localized: "Couldn't check for updates"), String(describing: error)) }
         }
     }
 
@@ -328,10 +344,10 @@ final class AppModel {
     func installUpdate(_ manifest: UpdateManifest) {
         guard let updater, updateStep == nil else { return }
         let notes = manifest.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = (notes.isEmpty ? "" : "\(notes.prefix(800))\n\n") + "Bekitzur restarts to finish. Your Conversations and settings stay."
-        guard ask("Install Bekitzur \(manifest.version)?", message, confirm: "Install", cancel: "Later"), allowInterruption() else { return }
+        let message = (notes.isEmpty ? "" : "\(notes.prefix(800))\n\n") + String(localized: "Bekitzur restarts to finish. Your Conversations and settings stay.")
+        guard ask(String(localized: "Install Bekitzur \(manifest.version)?"), message, confirm: String(localized: "Install"), cancel: String(localized: "Later")), allowInterruption() else { return }
         let wasBusy = isRecording || processingID != nil
-        updateStep = "Downloading Bekitzur \(manifest.version)…"
+        updateStep = String(localized: "Downloading Bekitzur \(manifest.version)…")
         updateProgress = 0
         AppLog.write("Downloading update \(manifest.version)")
         Task {
@@ -343,7 +359,7 @@ final class AppModel {
                     }
                 }
                 updateProgress = nil
-                updateStep = "Installing Bekitzur \(manifest.version)…"
+                updateStep = String(localized: "Installing Bekitzur \(manifest.version)…")
                 // A recording may have started during the download.
                 if !wasBusy, isRecording || processingID != nil, !allowInterruption() {
                     updateStep = nil
@@ -356,7 +372,7 @@ final class AppModel {
                 updateStep = nil
                 updateProgress = nil
                 AppLog.write("Update \(manifest.version) failed: \(error)")
-                inform("Couldn't install Bekitzur \(manifest.version)", String(describing: error))
+                inform(String(localized: "Couldn't install Bekitzur \(manifest.version)"), String(describing: error))
             }
         }
     }
@@ -365,19 +381,31 @@ final class AppModel {
     private func allowInterruption() -> Bool {
         if isRecording {
             return ask(
-                "Bekitzur is recording",
-                "Installing the update stops the recording and restarts Bekitzur. The recording is kept and processed after the restart.",
-                confirm: "Stop Recording and Install", cancel: "Cancel"
+                String(localized: "Bekitzur is recording"),
+                String(localized: "Installing the update stops the recording and restarts Bekitzur. The recording is kept and processed after the restart."),
+                confirm: String(localized: "Stop Recording and Install"), cancel: String(localized: "Cancel")
             )
         }
         if processingID != nil {
             return ask(
-                "Bekitzur is processing a Conversation",
-                "Installing the update restarts Bekitzur, and the Conversation is processed again from the start after the restart.",
-                confirm: "Install Now", cancel: "Cancel"
+                String(localized: "Bekitzur is processing a Conversation"),
+                String(localized: "Installing the update restarts Bekitzur, and the Conversation is processed again from the start after the restart."),
+                confirm: String(localized: "Install Now"), cancel: String(localized: "Cancel")
             )
         }
         return true
+    }
+
+    /// Whether Bekitzur can restart now: not while it records or processes.
+    var canRestart: Bool {
+        !conversations.contains { $0.status == .recording || $0.status == .processing }
+    }
+
+    /// Restarts to show the language chosen in Settings.
+    func restartInChosenLanguage() {
+        guard canRestart else { return }
+        AppLog.write("Restarting to show the app in \(appLanguage.rawValue)")
+        relaunch()
     }
 
     /// Opens the new app once this one has quit; quitting finishes a recording's files first.
@@ -394,8 +422,8 @@ final class AppModel {
         notifiedUpdate = manifest.build
         Task {
             let content = UNMutableNotificationContent()
-            content.title = "Bekitzur \(manifest.version) is available"
-            content.body = "Open Bekitzur to install it."
+            content.title = String(localized: "Bekitzur \(manifest.version) is available")
+            content.body = String(localized: "Open Bekitzur to install it.")
             try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: Self.updateNotification, content: content, trigger: nil))
         }
     }
@@ -522,10 +550,10 @@ final class AppModel {
         if missingModels.allSatisfy({ !$0.required || BekitzurPaths.modelStore.installed($0) != nil }) {
             let models = ModelFile.groups(of: missingModels)
             return models.count == 1
-                ? "A new \(models[0].name.lowercased()) is ready to download (\(size))."
-                : "New models are ready to download (\(size))."
+                ? String(localized: "A new version of \(ModelNames.inSentence(models[0].name)) is ready to download (\(size)).")
+                : String(localized: "New models are ready to download (\(size)).")
         }
-        return "Bekitzur needs its speech and language models to transcribe and write Notes: \(size) to download."
+        return String(localized: "Bekitzur needs its speech and language models to transcribe and write Notes: \(size) to download.")
     }
 
     /// Downloads the missing models, then the speaker models, and processes the Conversations that waited for them.
@@ -541,13 +569,13 @@ final class AppModel {
         // The speaker models take another 250 MB or so.
         let needed = total + 500_000_000
         if let free = store.freeSpace(), free < needed {
-            let failure = "Bekitzur needs \(needed.formatted(.byteCount(style: .file))) free for its models, and this Mac has \(free.formatted(.byteCount(style: .file)))."
-            modelDownload = ModelDownload(step: "", total: total, failure: failure)
-            AppLog.write("Models not downloaded: \(failure)")
+            let need = needed.formatted(.byteCount(style: .file)), have = free.formatted(.byteCount(style: .file))
+            modelDownload = ModelDownload(step: "", total: total, failure: String(localized: "Bekitzur needs \(need) free for its models, and this Mac has \(have)."))
+            AppLog.write("Models not downloaded: they need \(need) free, and this Mac has \(have)")
             return
         }
         AppLog.write("Downloading the models: \(ModelFile.groups(of: files).map(\.name).joined(separator: ", ")), \(total.formatted(.byteCount(style: .file))) to go")
-        modelDownload = ModelDownload(step: "Starting the download", total: total)
+        modelDownload = ModelDownload(step: String(localized: "Starting the download"), total: total)
         modelTask = Task { await runModelDownload(files, into: store) }
     }
 
@@ -564,7 +592,7 @@ final class AppModel {
                 let started = Date()
                 let had = file.bytes - store.remainingBytes([file])
                 let before = finished
-                modelDownload?.step = "Downloading the \(file.name.lowercased())"
+                modelDownload?.step = String(localized: "Downloading \(ModelNames.inSentence(file.name))")
                 try await downloader.download(file, into: store) { progress in
                     Task { @MainActor in AppModel.shared.modelDownloadProgressed(progress, file: file, had: had, before: before) }
                 }
@@ -572,7 +600,7 @@ final class AppModel {
                 store.removeReplaced(by: file)
                 AppLog.write(String(format: "Downloaded the %@ in %.0f s", file.name.lowercased(), Date().timeIntervalSince(started)))
             }
-            modelDownload?.step = "Downloading the speaker models"
+            modelDownload?.step = String(localized: "Downloading the speaker models")
             try await SpeakerModels.download()
             modelDownload = nil
             AppLog.write("Models ready")
@@ -582,7 +610,7 @@ final class AppModel {
         } catch {
             var reason = (error as? ModelDownloadError)?.description ?? error.localizedDescription
             if !reason.hasSuffix(".") { reason += "." }
-            modelDownload?.failure = "The download stopped: \(reason) Trying again continues from where it stopped."
+            modelDownload?.failure = String(localized: "The download stopped: \(reason) Trying again continues from where it stopped.")
             AppLog.write("Model download failed: \(error)")
         }
         modelTask = nil
@@ -594,7 +622,7 @@ final class AppModel {
         guard modelTask != nil, modelDownload?.failure == nil else { return }
         switch progress {
         case .received(let bytes): modelDownload?.received = before + max(0, bytes - had)
-        case .checking: modelDownload?.step = "Checking the \(file.name.lowercased())"
+        case .checking: modelDownload?.step = String(localized: "Checking \(ModelNames.inSentence(file.name))")
         }
     }
 
@@ -637,18 +665,18 @@ final class AppModel {
         guard recordingID == nil else { return }
         guard await MicrophoneRecorder.requestAccess() else {
             AppLog.write("Recording not started: microphone permission \(MicrophoneRecorder.permission)")
-            alert = "Bekitzur needs the microphone. Allow it in System Settings → Privacy & Security → Microphone, then try again."
+            alert = String(localized: "Bekitzur needs the microphone. Allow it in System Settings → Privacy & Security → Microphone, then try again.")
             await refreshPermissions()
             return
         }
         if let free = (try? BekitzurPaths.conversations.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage,
            free < Self.lowDiskSpace {
             let space = free.formatted(.byteCount(style: .file))
-            let why = "A recording takes under 100 MB an hour, but if the disk fills up, the rest of it is lost."
+            let why = String(localized: "A recording takes under 100 MB an hour, but if the disk fills up, the rest of it is lost.")
             AppLog.write("Starting a recording with \(space) free")
             if automatically {
-                notify("low disk space", title: "Only \(space) free on this Mac", body: why)
-            } else if !ask("Only \(space) free on this Mac", why, confirm: "Record Anyway", cancel: "Cancel") {
+                notify("low disk space", title: String(localized: "Only \(space) free on this Mac"), body: why)
+            } else if !ask(String(localized: "Only \(space) free on this Mac"), why, confirm: String(localized: "Record Anyway"), cancel: String(localized: "Cancel")) {
                 return
             }
         }
@@ -697,7 +725,7 @@ final class AppModel {
             checkCall()
         } catch {
             AppLog.write("Recording not started: \(error)")
-            alert = "Couldn't start recording: \(error)"
+            alert = String(localized: "Couldn't start recording: \(String(describing: error))")
         }
     }
 
@@ -838,7 +866,7 @@ final class AppModel {
             guard isRecording else { return }
             recordingCall = app
             AppLog.write("Started recording the call in \(app) on its own")
-            notify(Self.recordingCallNotification, title: "Recording your call", body: "\(app) started using the microphone. Bekitzur stops recording when the call ends.")
+            notify(Self.recordingCallNotification, title: String(localized: "Recording your call"), body: String(localized: "\(app) started using the microphone. Bekitzur stops recording when the call ends."))
         }
     }
 
@@ -847,26 +875,26 @@ final class AppModel {
         AppLog.write("Stopped recording on its own, since the call in \(app) ended")
         withdrawNotification(Self.recordingCallNotification)
         stopRecording()
-        notify(id, title: "The call ended", body: "Bekitzur stopped recording the call in \(app) and is writing the Notes.")
+        notify(id, title: String(localized: "The call ended"), body: String(localized: "Bekitzur stopped recording the call in \(app) and is writing the Notes."))
     }
 
     private func offerRecording(_ app: String?) {
         callToRecord = app
         guard let app else { return withdrawNotification(Self.callNotification) }
         AppLog.write("Offered to record the call in \(app)")
-        notify(Self.callNotification, title: "Record this call?", body: "\(app) started using the microphone.")
+        notify(Self.callNotification, title: String(localized: "Record this call?"), body: String(localized: "\(app) started using the microphone."))
     }
 
     private func offerStopping(_ app: String?) {
         endedCall = app
         guard let app else { return withdrawNotification(Self.callEndedNotification) }
         AppLog.write("Offered to stop recording, since the call in \(app) ended")
-        notify(Self.callEndedNotification, title: "Did the call end?", body: "\(app) stopped using the microphone. Stop recording and write Notes?")
+        notify(Self.callEndedNotification, title: String(localized: "Did the call end?"), body: String(localized: "\(app) stopped using the microphone. Stop recording and write Notes?"))
     }
 
     /// Shows how Bekitzur's notifications look, and logs how macOS shows them, which the app can't see otherwise.
     func sendTestNotification() {
-        notify("test", title: "Bekitzur's notifications work", body: "Offers to record a call will look like this.")
+        notify("test", title: String(localized: "Bekitzur's notifications work"), body: String(localized: "Offers to record a call will look like this."))
     }
 
     /// A notification with the actions of its category, registered at launch. What macOS does with it is logged, since
@@ -950,7 +978,7 @@ final class AppModel {
             try FileManager.default.trashItem(at: Bundle.main.bundleURL, resultingItemURL: nil)
         } catch {
             removing = false
-            alert = "Couldn't move Bekitzur to the Trash: \(error.localizedDescription)"
+            alert = String(localized: "Couldn't move Bekitzur to the Trash: \(error.localizedDescription)")
             return
         }
         AppLog.write("Moved to the Trash from Settings")
@@ -1119,7 +1147,7 @@ final class AppModel {
         do {
             try library.save(result, for: id)
         } catch {
-            alert = "Couldn't save what people said at once: \(error.localizedDescription)"
+            alert = String(localized: "Couldn't save what people said at once: \(error.localizedDescription)")
             return
         }
         results[id] = result
@@ -1335,7 +1363,7 @@ final class AppModel {
                 progress: progress
             )
             let minutes = Int(((salvage.segments.last?.end ?? 0) / 60).rounded(.up))
-            return (result, "The audio couldn't be read, so these Notes come from the live Transcript of the first \(minutes) minutes, without Speakers.", nil, nil)
+            return (result, String(localized: "The audio couldn't be read, so these Notes come from the live Transcript of the first \(minutes) minutes, without Speakers."), nil, nil)
         }
         let unreadable = Set(audio.unreadableTracks.map { $0.deletingPathExtension().lastPathComponent })
         if !unreadable.isEmpty {
@@ -1376,14 +1404,14 @@ final class AppModel {
         let silent = Set(audio.silentTracks.map { $0.deletingPathExtension().lastPathComponent })
         var warning: String?
         if unreadable.contains(ConversationRecorder.Track.systemAudio.name) {
-            warning = "The call's sound couldn't be read, so these Notes only have what your microphone heard."
+            warning = String(localized: "The call's sound couldn't be read, so these Notes only have what your microphone heard.")
         } else if unreadable.contains(ConversationRecorder.Track.microphone.name) {
-            warning = "Your microphone's recording couldn't be read, so these Notes only have the call's sound."
+            warning = String(localized: "Your microphone's recording couldn't be read, so these Notes only have the call's sound.")
         } else if silent.contains(ConversationRecorder.Track.systemAudio.name), SystemAudioRecorder.access != .granted {
             // With the permission, silent system audio means nothing played, as in a room.
-            warning = "No computer audio was recorded, so these Notes only have what your microphone heard. If this was a call, allow Bekitzur in System Settings → Privacy & Security → Screen & System Audio Recording."
+            warning = String(localized: "No computer audio was recorded, so these Notes only have what your microphone heard. If this was a call, allow Bekitzur in System Settings → Privacy & Security → Screen & System Audio Recording.")
         } else if silent.contains(ConversationRecorder.Track.microphone.name) {
-            warning = "Your microphone recorded only silence. Check the input device in System Settings → Sound."
+            warning = String(localized: "Your microphone recorded only silence. Check the input device in System Settings → Sound.")
         }
         return (result, warning, prepared.measuredDelay, prepared.measuredDelays)
     }
@@ -1488,15 +1516,15 @@ final class AppModel {
     /// Asks for recordings to import, with how many people spoke in them, or Conversations exported from Bekitzur.
     func chooseRecordingsToImport() async {
         let panel = NSOpenPanel()
-        panel.title = "Import"
-        panel.message = "Choose recordings, or Conversations exported from Bekitzur."
-        panel.prompt = "Import"
+        panel.title = String(localized: "Import")
+        panel.message = String(localized: "Choose recordings, or Conversations exported from Bekitzur.")
+        panel.prompt = String(localized: "Import")
         panel.allowedContentTypes = [.audio, Self.conversationType, .zip, .folder]
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
         let people = NSPopUpButton()
         people.addItems(withTitles: Self.peopleChoices.map(Self.peopleTitle))
-        let accessory = NSStackView(views: [NSTextField(labelWithString: "People who spoke:"), people])
+        let accessory = NSStackView(views: [NSTextField(labelWithString: String(localized: "People who spoke:")), people])
         accessory.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
         panel.accessoryView = accessory
         panel.isAccessoryViewDisclosed = true
@@ -1509,7 +1537,7 @@ final class AppModel {
     static let peopleChoices: [Int?] = [nil] + Array(2...8)
 
     static func peopleTitle(_ people: Int?) -> String {
-        people.map { "\($0) people" } ?? "Let Bekitzur decide"
+        people.map { String(localized: "\($0) people") } ?? String(localized: "Let Bekitzur decide")
     }
 
     /// Copies recordings into new Conversations and processes them, and adds Conversations exported from Bekitzur as
@@ -1545,7 +1573,7 @@ final class AppModel {
                 enqueue(info.id)
             } catch {
                 AppLog.write("Import of \(url.lastPathComponent) failed: \(error)")
-                alert = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
+                alert = String(localized: "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)")
             }
         }
     }
@@ -1576,7 +1604,7 @@ final class AppModel {
             indexConversations()
         } catch {
             AppLog.write("Import of \(url.lastPathComponent) failed: \(error)")
-            alert = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
+            alert = String(localized: "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)")
         }
     }
 
@@ -1584,9 +1612,9 @@ final class AppModel {
     func export(_ id: String) async {
         guard let info = conversations.first(where: { $0.id == id }), info.status != .recording, info.status != .processing else { return }
         let panel = NSSavePanel()
-        panel.title = "Export Conversation"
-        panel.message = "Someone with Bekitzur can open this file to add the Conversation, with its recording, Transcript, Speakers, and Notes."
-        panel.prompt = "Export"
+        panel.title = String(localized: "Export Conversation")
+        panel.message = String(localized: "Someone with Bekitzur can open this file to add the Conversation, with its recording, Transcript, Speakers, and Notes.")
+        panel.prompt = String(localized: "Export")
         let day = DateFormatter()
         day.dateFormat = "yyyy-MM-dd"
         panel.nameFieldStringValue = "\(Self.fileName(info.displayTitle)) \(day.string(from: info.startedAt)).\(ConversationLibrary.fileExtension)"
@@ -1599,7 +1627,7 @@ final class AppModel {
             AppLog.write("\(id): exported")
         } catch {
             AppLog.write("\(id): export failed: \(error)")
-            alert = "Couldn't export the Conversation: \(error.localizedDescription)"
+            alert = String(localized: "Couldn't export the Conversation: \(error.localizedDescription)")
         }
     }
 
@@ -1614,12 +1642,12 @@ final class AppModel {
             try Data(event.ics().utf8).write(to: file, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
             guard NSWorkspace.shared.open(file) else {
-                alert = "No app on this Mac opens calendar files."
+                alert = String(localized: "No app on this Mac opens calendar files.")
                 return
             }
             AppLog.write("\(id): an Action Item went to the calendar app")
         } catch {
-            alert = "Couldn't make the calendar event: \(error.localizedDescription)"
+            alert = String(localized: "Couldn't make the calendar event: \(error.localizedDescription)")
         }
     }
 
@@ -1635,7 +1663,7 @@ final class AppModel {
             await refreshPermissions()
             guard allowed else { return }
             let content = UNMutableNotificationContent()
-            content.title = "Notes ready"
+            content.title = String(localized: "Notes ready")
             content.body = title
             try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
         }
@@ -1671,7 +1699,7 @@ final class AppModel {
             try VoiceprintStore(url: BekitzurPaths.voiceprints).add(speaker.embedding, to: name)
             reloadPeople()
         } catch {
-            alert = "Couldn't save the name: \(error)"
+            alert = String(localized: "Couldn't save the name: \(String(describing: error))")
         }
     }
 
@@ -1693,7 +1721,7 @@ final class AppModel {
             try library.save(result, for: id)
             results[id] = result
         } catch {
-            alert = "Couldn't save the Notes: \(error.localizedDescription)"
+            alert = String(localized: "Couldn't save the Notes: \(error.localizedDescription)")
             return
         }
         if renamed {
@@ -1712,7 +1740,7 @@ final class AppModel {
             try library.save(result, for: id)
             results[id] = result
         } catch {
-            alert = "Couldn't save the Action Item: \(error.localizedDescription)"
+            alert = String(localized: "Couldn't save the Action Item: \(error.localizedDescription)")
         }
     }
 
@@ -1754,7 +1782,7 @@ final class AppModel {
             try library.save(result, for: id)
             results[id] = result
         } catch {
-            alert = "Couldn't save the title: \(error.localizedDescription)"
+            alert = String(localized: "Couldn't save the title: \(error.localizedDescription)")
         }
     }
 
@@ -1783,7 +1811,7 @@ final class AppModel {
         do {
             try library.delete(id)
         } catch {
-            alert = "Couldn't delete the Conversation: \(error)"
+            alert = String(localized: "Couldn't delete the Conversation: \(String(describing: error))")
         }
         results[id] = nil
         searchEntries[id] = nil
@@ -1878,7 +1906,7 @@ final class AppModel {
             }
             if learnedAny { vocabulary = vocabularyStore.load() }
         } catch {
-            alert = "Couldn't save the Vocabulary: \(error.localizedDescription)"
+            alert = String(localized: "Couldn't save the Vocabulary: \(error.localizedDescription)")
         }
     }
 
@@ -1914,7 +1942,7 @@ final class AppModel {
             try vocabularyStore.save(current)
             vocabulary = current
         } catch {
-            alert = "Couldn't save the Vocabulary: \(error.localizedDescription)"
+            alert = String(localized: "Couldn't save the Vocabulary: \(error.localizedDescription)")
         }
     }
 
@@ -1934,7 +1962,7 @@ final class AppModel {
         do {
             try library.save(current, for: id)
         } catch {
-            alert = "Couldn't save the marks: \(error.localizedDescription)"
+            alert = String(localized: "Couldn't save the marks: \(error.localizedDescription)")
         }
     }
 
@@ -1948,7 +1976,7 @@ final class AppModel {
         let name = userName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, !isRecording else { return }
         guard await MicrophoneRecorder.requestAccess() else {
-            voiceSample = .failed("Bekitzur needs the microphone. Allow it in System Settings → Privacy & Security → Microphone.")
+            voiceSample = .failed(String(localized: "Bekitzur needs the microphone. Allow it in System Settings → Privacy & Security → Microphone."))
             return
         }
         let url = FileManager.default.temporaryDirectory.appending(path: "bekitzur-voice-sample.m4a")
@@ -1958,7 +1986,7 @@ final class AppModel {
         do {
             try microphone.start(writingTo: url, device: microphoneForRecording())
         } catch {
-            voiceSample = .failed("Couldn't record: \(error)")
+            voiceSample = .failed(String(localized: "Couldn't record: \(String(describing: error))"))
             return
         }
         voiceSample = .recording(until: Date().addingTimeInterval(Self.voiceSampleSeconds))
@@ -1995,7 +2023,7 @@ final class AppModel {
         do {
             try VoiceprintStore(url: BekitzurPaths.voiceprints).rename(name, to: newName)
         } catch {
-            alert = "Couldn't rename \(name): \(error.localizedDescription)"
+            alert = String(localized: "Couldn't rename \(name): \(error.localizedDescription)")
             return
         }
         if userName == name { userName = newName }

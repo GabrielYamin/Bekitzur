@@ -23,7 +23,7 @@ struct RequirementsNote: View {
         }
     }
 
-    private func note(_ text: String, @ViewBuilder button: () -> some View) -> some View {
+    private func note(_ text: LocalizedStringKey, @ViewBuilder button: () -> some View) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "memorychip").foregroundStyle(.orange)
             Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)

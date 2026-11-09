@@ -64,9 +64,9 @@ struct ConversationListHeader: View {
     private var peopleLabel: String {
         let people = model.filter.people
         return switch people.count {
-        case 0: "People"
-        case 1: "With \(people[0])"
-        default: "With \(people[0]) + \(people.count - 1)"
+        case 0: String(localized: "People")
+        case 1: String(localized: "With \(people[0])")
+        default: String(localized: "With \(people[0]) + \(people.count - 1)")
         }
     }
 

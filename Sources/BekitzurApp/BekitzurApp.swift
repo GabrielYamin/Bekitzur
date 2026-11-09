@@ -69,9 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().setNotificationCategories([
-            UNNotificationCategory(identifier: AppModel.callNotification, actions: [UNNotificationAction(identifier: Self.record, title: "Record")], intentIdentifiers: []),
-            UNNotificationCategory(identifier: AppModel.callEndedNotification, actions: [UNNotificationAction(identifier: Self.stop, title: "Stop and write Notes")], intentIdentifiers: []),
-            UNNotificationCategory(identifier: AppModel.recordingCallNotification, actions: [UNNotificationAction(identifier: Self.stop, title: "Stop and write Notes")], intentIdentifiers: []),
+            UNNotificationCategory(identifier: AppModel.callNotification, actions: [UNNotificationAction(identifier: Self.record, title: String(localized: "Record"))], intentIdentifiers: []),
+            UNNotificationCategory(identifier: AppModel.callEndedNotification, actions: [UNNotificationAction(identifier: Self.stop, title: String(localized: "Stop and write Notes"))], intentIdentifiers: []),
+            UNNotificationCategory(identifier: AppModel.recordingCallNotification, actions: [UNNotificationAction(identifier: Self.stop, title: String(localized: "Stop and write Notes"))], intentIdentifiers: []),
         ])
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
         let memory = Int((Double(ProcessInfo.processInfo.physicalMemory) / Double(1 << 30)).rounded())
