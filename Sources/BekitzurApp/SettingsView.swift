@@ -168,7 +168,7 @@ struct SettingsView: View {
                     Text(verbatim: "English").tag(AppLanguage.english)
                     Text(verbatim: "עברית").tag(AppLanguage.hebrew)
                 }
-                if model.appLanguage != model.launchLanguage {
+                if model.switchesOnRestart {
                     HStack {
                         if model.canRestart {
                             Text("Bekitzur switches once it restarts.")

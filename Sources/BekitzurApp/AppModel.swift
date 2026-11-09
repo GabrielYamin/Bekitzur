@@ -179,10 +179,26 @@ final class AppModel {
             } else {
                 UserDefaults.standard.removeObject(forKey: AppLanguage.preference)
             }
+            Self.setDirection(of: appLanguage)
         }
     }
+
+    /// Sets the layout's direction for the next launch. At launch too: System Settings' language for the app sets only
+    /// the language.
+    private static func setDirection(of language: AppLanguage) {
+        if let rightToLeft = language.rightToLeft {
+            UserDefaults.standard.set(rightToLeft, forKey: AppLanguage.directionPreference)
+        } else {
+            UserDefaults.standard.removeObject(forKey: AppLanguage.directionPreference)
+        }
+    }
+
     /// The language chosen when the app launched, which it shows until it restarts.
     @ObservationIgnored let launchLanguage: AppLanguage
+    /// The layout's direction when the app launched; nil when it followed the Mac.
+    @ObservationIgnored let launchedRightToLeft: Bool?
+
+    var switchesOnRestart: Bool { appLanguage.needsRestart(launchedIn: launchLanguage, rightToLeft: launchedRightToLeft) }
 
     @ObservationIgnored private var trashWatch: TrashWatch?
     /// The app is being moved to the Trash, with as much of its data as the user chose.
@@ -219,9 +235,12 @@ final class AppModel {
     private init() {
         lastLanguage = UserDefaults.standard.string(forKey: "language").flatMap(ConversationLanguage.init(rawValue:)) ?? .hebrew
         userName = UserDefaults.standard.string(forKey: "userName") ?? NSFullUserName()
-        let language = AppLanguage.chosen(in: Bundle.main.bundleIdentifier.flatMap { UserDefaults.standard.persistentDomain(forName: $0) })
+        let preferences = Bundle.main.bundleIdentifier.flatMap { UserDefaults.standard.persistentDomain(forName: $0) }
+        let language = AppLanguage.chosen(in: preferences)
         appLanguage = language
         launchLanguage = language
+        launchedRightToLeft = preferences?[AppLanguage.directionPreference] as? Bool
+        Self.setDirection(of: language)
         suggestsCalls = UserDefaults.standard.object(forKey: "suggestCalls") as? Bool ?? true
         recordsCallsAutomatically = UserDefaults.standard.bool(forKey: "recordCallsAutomatically")
         hasNewSettings = UserDefaults.standard.integer(forKey: "seenSettingsRevision") < NewSetting.revision
