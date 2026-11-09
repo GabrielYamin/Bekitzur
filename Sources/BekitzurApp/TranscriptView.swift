@@ -97,11 +97,7 @@ struct TranscriptRow: Identifiable {
             let speaker = piece.word == nil ? piece.speaker + "\u{0}" : piece.speaker
             return (piece.start, piece.end, speaker)
         }
-        let sentenceEnds: Set<Character> = [".", "?", "!", "…"]
-        var endingSentences = Set<Int>()
-        for (index, piece) in pieces.enumerated() {
-            if let last = piece.text.last, sentenceEnds.contains(last) { endingSentences.insert(index) }
-        }
+        let endingSentences = Set(pieces.indices.filter { TranscriptRows.endsSentence(pieces[$0].text) })
         let layout = TranscriptRows.layout(timed, together: together, endingSentences: endingSentences)
         var rows: [TranscriptRow] = []
         var lineCount = 0

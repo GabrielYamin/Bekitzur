@@ -5,13 +5,15 @@ public enum TranscriptRows {
     /// The words, by index, in rows of lines, each line one Speaker's words in the order they're said.
     ///
     /// A Speaker's words make a line until they pause for more than a second or someone else talks in their pause, so a
-    /// reply in a pause reads as an exchange. Lines that overlap by 0.4 seconds, or a short line by half its length, go
-    /// in one row, a line per Speaker in the order they start, as do lines of two Speakers with words in a stretch
-    /// `together` says they talked at once: speech recognition times the words of people who talk at once one after the
-    /// other. A line is cut where it runs into or out of such a stretch, so what one person says alone around it reads as
-    /// a line of its own, but for a word or two that start or finish the sentence said at once. A row of one line right
-    /// after another of the same Speaker joins it, so speech without overlaps reads as it always has.
-    /// - Parameter endingSentences: The words, by index, that end a sentence.
+    /// reply in a pause reads as an exchange. People who talk at once for a second or more share a row, a line each in
+    /// the order they start: lines whose words overlap by a second, or lines of two Speakers with words in a stretch
+    /// `together` says they talked at once for a second, since speech recognition times the words of people on one input
+    /// one after the other. Less than that is a reply, or one person starting as another stops: it reads as a row of its
+    /// own, after the row it was said over. A line is cut where it runs into or out of such a stretch, so what one
+    /// person says alone around it reads as a line of its own, but for a word or two that start or finish the sentence
+    /// said at once. A row of one line right after another of the same Speaker joins it, so speech without overlaps
+    /// reads as it always has.
+    /// - Parameter endingSentences: The words, by index, that end a sentence (`endsSentence(_:)`).
     public static func layout(
         _ words: [(start: Double, end: Double, speaker: String)],
         together: [(start: Double, end: Double, speakers: Set<String>)] = [],
@@ -39,16 +41,19 @@ public enum TranscriptRows {
         lines += open.values.map(\.line)
 
         // Stretches less than a second apart are one, so a short pause between them doesn't cut a sentence.
-        var stretches: [(start: Double, end: Double, speakers: Set<String>)] = []
+        var stretches: [Stretch] = []
         for stretch in together.sorted(by: { $0.start < $1.start }) {
+            let heard = stretch.end - stretch.start
             if let last = stretches.last, stretch.start - last.end < 1 {
-                stretches[stretches.count - 1] = (last.start, max(last.end, stretch.end), last.speakers.union(stretch.speakers))
+                stretches[stretches.count - 1] = Stretch(start: last.start, end: max(last.end, stretch.end), speakers: last.speakers.union(stretch.speakers),
+                                                         heard: last.heard + heard)
             } else {
-                stretches.append(stretch)
+                stretches.append(Stretch(start: stretch.start, end: stretch.end, speakers: stretch.speakers, heard: heard))
             }
         }
+        stretches.removeAll { $0.heard < 1 }
         // A word's time can be a little off, more so when people talk at once.
-        func inside(_ index: Int, _ stretch: (start: Double, end: Double, speakers: Set<String>)) -> Bool {
+        func inside(_ index: Int, _ stretch: Stretch) -> Bool {
             words[index].start >= stretch.start - 0.2 && words[index].start <= stretch.end + 0.2
         }
         for stretch in stretches {
@@ -72,25 +77,32 @@ public enum TranscriptRows {
         lines.sort { (words[$0[0]].start, $0[0]) < (words[$1[0]].start, $1[0]) }
 
         let spans = lines.map { line in (start: words[line[0]].start, end: line.map(end).max() ?? words[line[0]].start) }
-        func reaches(_ line: Int, into stretch: (start: Double, end: Double, speakers: Set<String>)) -> Bool {
+        func reaches(_ line: Int, into stretch: Stretch) -> Bool {
             lines[line].contains { inside($0, stretch) }
         }
         func overlap(_ a: Int, _ b: Int) -> Bool {
-            let shared = min(spans[a].end, spans[b].end) - max(spans[a].start, spans[b].start)
-            let shorter = min(spans[a].end - spans[a].start, spans[b].end - spans[b].start)
-            if shared > 0, shared >= min(0.4, shorter / 2) { return true }
+            if min(spans[a].end, spans[b].end) - max(spans[a].start, spans[b].start) >= 1 { return true }
             let first = words[lines[a][0]].speaker, second = words[lines[b][0]].speaker
             guard first != second else { return false }
             return stretches.contains { stretch in
                 stretch.speakers.contains(first) && stretch.speakers.contains(second) && reaches(a, into: stretch) && reaches(b, into: stretch)
             }
         }
+        // A line goes with the latest row it was said at once with, so a reply said meanwhile reads after that row. A
+        // row ending this long before a line starts can't be said at once with it, nor with any line after it.
+        let longest: Double = stretches.map { $0.end - $0.start }.max() ?? -1.4
         var rows: [[Int]] = []
+        var rowEnds: [Double] = []
+        var recent: [Int] = []
         for line in lines.indices {
-            if let row = rows.last, row.contains(where: { overlap($0, line) }) {
-                rows[rows.count - 1].append(line)
+            recent.removeAll { rowEnds[$0] < spans[line].start - longest - 0.4 }
+            if let row = recent.last(where: { row in rows[row].contains { overlap($0, line) } }) {
+                rows[row].append(line)
+                rowEnds[row] = max(rowEnds[row], spans[line].end)
             } else {
+                recent.append(rows.count)
                 rows.append([line])
+                rowEnds.append(spans[line].end)
             }
         }
 
@@ -111,5 +123,22 @@ public enum TranscriptRows {
             }
         }
         return result
+    }
+
+    private static let sentenceEnds: Set<Character> = [".", "?", "!", "…"]
+
+    /// Whether a word ends a sentence, by its punctuation.
+    public static func endsSentence(_ text: String) -> Bool {
+        guard let last = text.last else { return false }
+        return sentenceEnds.contains(last)
+    }
+
+    /// Where the timeline heard people at once, stretches less than a second apart being one, and how long it heard
+    /// them at once in all.
+    private struct Stretch {
+        let start: Double
+        let end: Double
+        let speakers: Set<String>
+        let heard: Double
     }
 }
