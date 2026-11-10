@@ -34,12 +34,14 @@ public enum NotesMarkdown {
         return when
     }
 
-    /// "Thu, Oct 22" when the due date was resolved, otherwise the spoken phrase in quotes.
+    /// "Thu, Oct 22", or "Thu, Oct 22 at 16:00" with a time of day, when the due date was resolved, otherwise the
+    /// spoken phrase in quotes.
     public static func dueText(_ item: ActionItem, locale: Locale = .current) -> String? {
-        if let dueDate = item.dueDate, let date = dayFormatter.date(from: dueDate) {
-            return date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().locale(locale))
+        guard let dueDate = item.dueDate, let day = dayFormatter.date(from: dueDate) else { return item.duePhrase.map { "\"\($0)\"" } }
+        guard let time = item.dueTimeOfDay, let moment = Calendar.current.date(bySettingHour: time.hour, minute: time.minute, second: 0, of: day) else {
+            return day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().locale(locale))
         }
-        return item.duePhrase.map { "\"\($0)\"" }
+        return moment.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute().locale(locale))
     }
 
     /// A Speaker's name in what Bekitzur writes in `language`, where one without a name is "Speaker 2" or "דובר 2".

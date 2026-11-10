@@ -1,3 +1,4 @@
+import BekitzurDomain
 import Foundation
 
 /// Turns a spoken due phrase ("עד יום חמישי", "by next Monday", "מחר בבוקר") into a date, counted from the
@@ -8,6 +9,21 @@ public enum DueDateResolver {
     private static let englishMonths = ["jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12]
     private static let hebrewMonths = ["ינואר": 1, "פברואר": 2, "מרץ": 3, "אפריל": 4, "מאי": 5, "יוני": 6, "יולי": 7, "אוגוסט": 8, "ספטמבר": 9, "אוקטובר": 10, "נובמבר": 11, "דצמבר": 12]
     private static let hebrewPrefixes = ["ביום", "עד", "יום", "וב", "ב", "ל", "ה", "ו"]
+
+    /// The day and time of day a due phrase says, as Action Items save them: "2026-11-05" and "16:00". A time without a
+    /// day, like "at 4pm", is on the Conversation's day.
+    public static func due(_ phrase: String, from conversationDate: Date, calendar: Calendar = .current) -> (date: String, time: String?)? {
+        let time = DueTime(in: phrase)
+        guard let day = resolve(phrase, from: conversationDate, calendar: calendar) ?? (time == nil ? nil : calendar.startOfDay(for: conversationDate)) else {
+            return nil
+        }
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return (formatter.string(from: day), time?.saved)
+    }
 
     public static func resolve(_ phrase: String, from conversationDate: Date, calendar: Calendar = .current) -> Date? {
         let text = phrase.lowercased()

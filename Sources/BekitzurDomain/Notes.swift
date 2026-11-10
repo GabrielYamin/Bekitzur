@@ -39,16 +39,28 @@ public struct ActionItem: Codable, Sendable, Equatable {
     public var duePhrase: String?
     /// The due date resolved from the phrase against the Conversation's date, as YYYY-MM-DD.
     public var dueDate: String?
+    /// The time of day it's due, resolved from the phrase like the date, as HH:mm.
+    public var dueTime: String?
     public var sourceTurns: [String]
     public var quote: String
     /// The user checked it off.
     public var done: Bool?
 
-    public init(text: String, owner: String? = nil, duePhrase: String? = nil, dueDate: String? = nil, sourceTurns: [String] = [], quote: String = "", done: Bool? = nil) {
+    public init(
+        text: String,
+        owner: String? = nil,
+        duePhrase: String? = nil,
+        dueDate: String? = nil,
+        dueTime: String? = nil,
+        sourceTurns: [String] = [],
+        quote: String = "",
+        done: Bool? = nil
+    ) {
         self.text = text
         self.owner = owner
         self.duePhrase = duePhrase
         self.dueDate = dueDate
+        self.dueTime = dueTime
         self.sourceTurns = sourceTurns
         self.quote = quote
         self.done = done
@@ -62,6 +74,7 @@ public struct ActionItem: Codable, Sendable, Equatable {
         owner = Self.given(try container.decodeIfPresent(String.self, forKey: .owner))
         duePhrase = Self.given(try container.decodeIfPresent(String.self, forKey: .duePhrase))
         dueDate = try container.decodeIfPresent(String.self, forKey: .dueDate)
+        dueTime = try container.decodeIfPresent(String.self, forKey: .dueTime)
         sourceTurns = try container.decode([String].self, forKey: .sourceTurns)
         quote = try container.decode(String.self, forKey: .quote)
         done = try container.decodeIfPresent(Bool.self, forKey: .done)
@@ -70,6 +83,26 @@ public struct ActionItem: Codable, Sendable, Equatable {
     private static func given(_ text: String?) -> String? {
         let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty || trimmed.lowercased() == "null" ? nil : text
+    }
+}
+
+extension ActionItem {
+    /// The time of day it's due; for one from Notes written before times were kept, the time its due phrase says.
+    public var dueTimeOfDay: DueTime? {
+        dueTime.flatMap(DueTime.init(saved:)) ?? duePhrase.flatMap(DueTime.init(in:))
+    }
+
+    /// Moves it to another day at the same time of day. The day is the user's now, not what was said.
+    public mutating func setDue(day: String) {
+        dueTime = dueTimeOfDay?.saved
+        dueDate = day
+        duePhrase = nil
+    }
+
+    /// Sets its time of day, or takes it off. The time is the user's now, not what was said.
+    public mutating func setDue(time: DueTime?) {
+        dueTime = time?.saved
+        duePhrase = nil
     }
 }
 

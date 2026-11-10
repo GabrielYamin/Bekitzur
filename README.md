@@ -1,6 +1,6 @@
 # Bekitzur
 
-Bekitzur (Hebrew for "in short") is a Mac menu bar app that records Conversations, calls and in-person meetings alike, transcribes them in Hebrew or English, recognizes who spoke, and writes English Notes: a summary, Decisions, Action Items with Owners and due dates, and Open Questions, each pointing to the lines it came from. Everything runs on the Mac.
+Bekitzur (Hebrew for "in short") is a Mac menu bar app that records Conversations, calls and in-person meetings alike, transcribes them in Hebrew or English, recognizes who spoke, and writes Notes in English or Hebrew: a summary, Decisions, Action Items with Owners and due dates, and Open Questions, each pointing to the lines it came from. Everything runs on the Mac.
 
 Bekitzur is open source, under the [MIT License](LICENSE). Its releases are on this repository's [Releases](https://github.com/GabrielYamin/Bekitzur/releases) page, and the app updates itself from there.
 

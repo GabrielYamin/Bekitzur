@@ -42,4 +42,21 @@ struct DueDateResolverTests {
     func resolvesSpokenPhrases(phrase: String, expected: String) {
         #expect(Self.day(phrase) == expected)
     }
+
+    /// The time of day comes with the day, and a time alone is on the Conversation's day.
+    @Test(arguments: [
+        ("tomorrow at 4PM", "2026-10-19 16:00"),
+        ("מחר בארבע אחרי הצהריים", "2026-10-19 16:00"),
+        ("by Thursday at 10:30", "2026-10-22 10:30"),
+        ("עד יום חמישי בעשר וחצי", "2026-10-22 10:30"),
+        ("at 2", "2026-10-18 14:00"),
+        ("בשתיים", "2026-10-18 14:00"),
+        ("by Friday", "2026-10-23"),
+        ("ביום שני", "2026-10-19"),
+        ("after the release", "none"),
+    ])
+    func dayAndTimeOfDay(phrase: String, expected: String) {
+        let due = DueDateResolver.due(phrase, from: Self.sunday, calendar: Self.calendar)
+        #expect(due.map { [$0.date, $0.time].compactMap(\.self).joined(separator: " ") } ?? "none" == expected)
+    }
 }

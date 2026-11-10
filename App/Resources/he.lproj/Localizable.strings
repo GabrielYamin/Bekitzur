@@ -37,6 +37,7 @@
 "Add a Decision" = "הוספת החלטה";
 "Add a due date" = "הוספת תאריך יעד";
 "Add a term, like your product's name" = "הוספת מונח, למשל שם המוצר שלכם";
+"Add a time" = "הוספת שעה";
 "Add an Action Item" = "הוספת משימה";
 "Add an Open Question" = "הוספת שאלה פתוחה";
 "Add to Calendar" = "הוספה ליומן";
@@ -219,6 +220,7 @@
 "No one spoke in the voice sample. Try again a little closer to the microphone." = "אף אחד לא דיבר בדגימת הקול. כדאי לנסות שוב קרוב יותר למיקרופון.";
 "No one yet. Name Speakers in a Conversation and they're added here." = "עוד אין אף אחד. כשנותנים שמות לדוברים בשיחה, הם מתווספים לכאן.";
 "No one yet. Name Speakers in a Conversation to find its Conversations by them." = "עוד אין אף אחד. אפשר לתת שמות לדוברים בשיחה כדי למצוא שיחות לפיהם.";
+"No time" = "ללא שעה";
 "Not downloaded, %@" = "לא הורד, %@";
 "Not found" = "לא נמצא";
 "Not now" = "לא עכשיו";
@@ -350,6 +352,7 @@
 "This Transcript has no word timings. Transcribe it again to follow along word by word." = "לתמלול הזה אין תזמון של מילים. תמלול מחדש יאפשר לעקוב אחריו מילה אחר מילה.";
 "This is the newest version, %@." = "זו הגרסה החדשה ביותר, %@.";
 "This isn't in the Conversation." = "זה לא מופיע בשיחה.";
+"Time" = "שעה";
 "Title" = "כותרת";
 "Transcribe again" = "תמלול מחדש";
 "Transcribe again as %@" = "תמלול מחדש ב%@";

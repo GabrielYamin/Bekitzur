@@ -50,13 +50,10 @@ public struct NotesWriter {
         }
         draft.language = notesLanguage
         var notes = reviewed(draft, turns: turns)
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.dateFormat = "yyyy-MM-dd"
         for i in notes.actionItems.indices {
-            notes.actionItems[i].dueDate = notes.actionItems[i].duePhrase
-                .flatMap { DueDateResolver.resolve($0, from: date, calendar: calendar) }
-                .map(formatter.string(from:))
+            let due = notes.actionItems[i].duePhrase.flatMap { DueDateResolver.due($0, from: date, calendar: calendar) }
+            notes.actionItems[i].dueDate = due?.date
+            notes.actionItems[i].dueTime = due?.time
         }
         return (notes, draft, completion)
     }
