@@ -3,11 +3,11 @@ import SwiftUI
 /// Settings a release added. Until the user opens Settings after it, the Settings buttons in the main window and the menu
 /// bar show a dot, and these are marked New in Settings while it's open.
 enum NewSetting: Hashable {
-    case recordCallsAutomatically, microphone
+    case recordCallsAutomatically, microphone, appLanguage, notesLanguage
 
     /// One more each time a release adds settings, with `added` listing them.
-    static let revision = 2
-    static let added: Set<NewSetting> = [.microphone]
+    static let revision = 3
+    static let added: Set<NewSetting> = [.appLanguage, .notesLanguage]
 }
 
 /// On a Settings button while Settings has something the user hasn't seen.
