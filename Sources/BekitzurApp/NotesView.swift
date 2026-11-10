@@ -3,8 +3,8 @@ import SwiftUI
 
 struct NotesView: View {
     let result: ProcessedConversation
-    /// Plays the Recording from a Source.
-    let play: (Double) -> Void
+    /// Plays a Source where it's shown.
+    let player: SourcePlayer
     /// Saves the user's changes to the Notes.
     let save: (Notes) -> Void
     /// Opens an Action Item with a due day in the calendar app.
@@ -77,7 +77,7 @@ struct NotesView: View {
                 if !notes.decisions.isEmpty {
                     NotesSection(title: "Decisions", systemImage: "checkmark.seal", direction: direction) {
                         ForEach(Array(notes.decisions.enumerated()), id: \.offset) { _, decision in
-                            NoteItem(text: decision.text, quote: decision.quote, sources: decision.sourceTurns, turns: turns, play: play)
+                            NoteItem(text: decision.text, quote: decision.quote, sources: decision.sourceTurns, turns: turns, player: player)
                         }
                     }
                 }
@@ -92,7 +92,7 @@ struct NotesView: View {
                                 quote: item.quote,
                                 sources: item.sourceTurns,
                                 turns: turns,
-                                play: play,
+                                player: player,
                                 done: Binding(get: { item.done == true }, set: { setDone(index, $0) })
                             ) {
                                 HStack(spacing: 6) {
@@ -117,7 +117,7 @@ struct NotesView: View {
                 if !notes.openQuestions.isEmpty {
                     NotesSection(title: "Open Questions", systemImage: "questionmark.bubble", direction: direction) {
                         ForEach(Array(notes.openQuestions.enumerated()), id: \.offset) { _, question in
-                            NoteItem(text: question.text, quote: nil, sources: question.sourceTurns, turns: turns, play: play)
+                            NoteItem(text: question.text, quote: nil, sources: question.sourceTurns, turns: turns, player: player)
                         }
                     }
                 }
@@ -415,17 +415,25 @@ private struct NoteItem<Details: View>: View {
     let quote: String?
     let sources: [String]
     let turns: [String: Turn]
-    let play: (Double) -> Void
+    let player: SourcePlayer
     /// An Action Item's check box; nil for a Decision or an Open Question.
     var done: Binding<Bool>?
     @ViewBuilder let details: Details
 
-    init(text: String, quote: String?, sources: [String], turns: [String: Turn], play: @escaping (Double) -> Void, done: Binding<Bool>? = nil, @ViewBuilder details: () -> Details) {
+    init(
+        text: String,
+        quote: String?,
+        sources: [String],
+        turns: [String: Turn],
+        player: SourcePlayer,
+        done: Binding<Bool>? = nil,
+        @ViewBuilder details: () -> Details
+    ) {
         self.text = text
         self.quote = quote
         self.sources = sources
         self.turns = turns
-        self.play = play
+        self.player = player
         self.done = done
         self.details = details()
     }
@@ -462,8 +470,8 @@ private struct NoteItem<Details: View>: View {
                 HStack(spacing: 6) {
                     ForEach(sources, id: \.self) { id in
                         if let turn = turns[id] {
-                            Button {
-                                play(turn.start ?? 0)
+                            SourceButton(speaker: turn.speaker, text: turn.text, player: player) {
+                                SourceClip(quote: quote, speaker: turn.speaker, start: turn.start, end: turn.end, in: player.transcript())
                             } label: {
                                 Label("\(ShownNames.speaker(turn.speaker)) \(timestamp(turn.start))", systemImage: "play.fill")
                                     .font(.caption)
@@ -472,8 +480,7 @@ private struct NoteItem<Details: View>: View {
                                     .padding(.vertical, 2)
                                     .background(.quaternary.opacity(0.6), in: Capsule())
                             }
-                            .buttonStyle(.plain)
-                            .help("Play from here: \(turn.text)")
+                            .help("Listen: \(turn.text)")
                         }
                     }
                 }
@@ -484,8 +491,8 @@ private struct NoteItem<Details: View>: View {
 }
 
 extension NoteItem where Details == EmptyView {
-    init(text: String, quote: String?, sources: [String], turns: [String: Turn], play: @escaping (Double) -> Void) {
-        self.init(text: text, quote: quote, sources: sources, turns: turns, play: play) { EmptyView() }
+    init(text: String, quote: String?, sources: [String], turns: [String: Turn], player: SourcePlayer) {
+        self.init(text: text, quote: quote, sources: sources, turns: turns, player: player) { EmptyView() }
     }
 }
 

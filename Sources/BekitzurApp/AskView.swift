@@ -6,8 +6,10 @@ import SwiftUI
 struct AskView: View {
     let model: AppModel
     let info: ConversationInfo
-    /// Plays the Recording from a quoted line.
-    let play: (Double) -> Void
+    /// The Notes' turns, which tell where a quoted turn ends.
+    let turns: [Turn]
+    /// Plays a quoted line where it's shown.
+    let player: SourcePlayer
     @ViewState private var question = ""
 
     var body: some View {
@@ -26,7 +28,7 @@ struct AskView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 20) {
                             ForEach(exchanges) { exchange in
-                                ExchangeView(exchange: exchange, play: play).id(exchange.id)
+                                ExchangeView(exchange: exchange, turns: turns, player: player).id(exchange.id)
                             }
                         }
                         .padding(16)
@@ -62,7 +64,8 @@ struct AskView: View {
 
 private struct ExchangeView: View {
     let exchange: AppModel.Exchange
-    let play: (Double) -> Void
+    let turns: [Turn]
+    let player: SourcePlayer
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -73,8 +76,10 @@ private struct ExchangeView: View {
                 if let text = answer.text {
                     DirectionalText(text).textSelection(.enabled)
                     ForEach(Array(answer.evidence.enumerated()), id: \.offset) { _, evidence in
-                        Button {
-                            if let start = evidence.start { play(start) }
+                        let speaker = evidence.speaker ?? ""
+                        SourceButton(speaker: speaker, text: evidence.quote, player: player) {
+                            let end = turns.first { $0.id == evidence.turn && $0.start == evidence.start }?.end
+                            return SourceClip(quote: evidence.quote, speaker: speaker, start: evidence.start, end: end, in: player.transcript())
                         } label: {
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Image(systemName: "play.circle").foregroundStyle(.secondary)
@@ -84,8 +89,7 @@ private struct ExchangeView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .help("Play from here")
+                        .help("Listen")
                     }
                 } else {
                     Label("This isn't in the Conversation.", systemImage: "questionmark.circle").foregroundStyle(.secondary)

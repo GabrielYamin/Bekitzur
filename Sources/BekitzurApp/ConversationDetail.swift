@@ -192,13 +192,14 @@ struct ConversationDetail: View {
                     .labelsHidden()
                     .frame(maxWidth: 520)
                     .padding(.vertical, 10)
+                    let player = SourcePlayer(playback: playback, transcript: { result.transcript.applying(model.flags[info.id] ?? TranscriptFlags()) }) { time in
+                        tab = .transcript
+                        playback.seek(to: time)
+                        playback.play()
+                    }
                     switch tab {
                     case .notes:
-                        NotesView(result: result) { time in
-                            tab = .transcript
-                            playback.seek(to: time)
-                            playback.play()
-                        } save: { notes in
+                        NotesView(result: result, player: player) { notes in
                             model.saveNotes(notes, for: info.id)
                         } addToCalendar: { item in
                             model.addToCalendar(item, in: info.id)
@@ -212,11 +213,7 @@ struct ConversationDetail: View {
                     case .speakers:
                         SpeakersView(model: model, info: info, result: result, playback: playback)
                     case .ask:
-                        AskView(model: model, info: info) { time in
-                            tab = .transcript
-                            playback.seek(to: time)
-                            playback.play()
-                        }
+                        AskView(model: model, info: info, turns: result.turns, player: player)
                     }
                 }
             } else {

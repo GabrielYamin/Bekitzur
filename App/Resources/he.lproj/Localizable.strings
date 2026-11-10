@@ -187,6 +187,7 @@
 "Learning your voice…" = "לומד את הקול שלך…";
 "Let Bekitzur decide" = "בקיצור יחליט";
 "Listen" = "האזנה";
+"Listen: %@" = "האזנה: %@";
 "Listening" = "מאזין";
 "Live transcription stopped. The recording goes on, and its Transcript will be made from the recording when you stop." = "התמלול החי נעצר. ההקלטה ממשיכה, והתמלול שלה ייעשה מההקלטה כשתעצרו.";
 "Looking in the Transcript…" = "מחפש בתמלול…";
@@ -239,12 +240,13 @@
 "Open Bekitzur to install it." = "אפשר לפתוח את בקיצור כדי להתקין אותו.";
 "Open Questions" = "שאלות פתוחות";
 "Open Settings" = "פתיחת ההגדרות";
+"Pause" = "השהיה";
 "People" = "אנשים";
 "People who spoke" = "אנשים שדיברו";
 "People who spoke:" = "אנשים שדיברו:";
 "Pick a day" = "בחירת יום";
+"Play" = "ניגון";
 "Play from here" = "ניגון מכאן";
-"Play from here: %@" = "ניגון מכאן: %@";
 "Play or pause (space bar)" = "ניגון או השהיה (מקש הרווח)";
 "Previous match (⇧⌘G)" = "התוצאה הקודמת (⇧⌘G)";
 "Processing" = "מעבד";
@@ -302,6 +304,7 @@
 "Show" = "הצגה";
 "Show everyone's Conversations" = "הצגת השיחות של כולם";
 "Show in Finder" = "הצגה ב-Finder";
+"Show in Transcript" = "הצגה בתמלול";
 "Show only Conversations with the people you pick" = "הצגת שיחות רק עם האנשים שנבחרו";
 "Show the live Transcript" = "הצגת התמלול החי";
 "Some of Bekitzur's data couldn't be moved to the Trash" = "חלק מהנתונים של בקיצור לא הועברו לפח";
