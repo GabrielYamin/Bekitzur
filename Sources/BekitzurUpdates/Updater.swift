@@ -40,7 +40,7 @@ public struct UpdateManifest: Codable, Sendable, Equatable {
     }
 }
 
-public enum UpdateError: Error, CustomStringConvertible {
+public enum UpdateError: Error, CustomStringConvertible, LocalizedError {
     case unreachable(Int)
     case unsigned
     case checksum
@@ -58,6 +58,18 @@ public enum UpdateError: Error, CustomStringConvertible {
         case .notBekitzur(let status): "The app in the download isn't signed as Bekitzur (\(status)), so it wasn't installed."
         case .unzip(let status): "The download couldn't be unpacked (ditto exited with \(status))."
         case .notWritable(let folder): "Bekitzur can't replace itself in \(folder.path). Install the new version with install.sh instead."
+        }
+    }
+
+    public var errorDescription: String? {
+        switch self {
+        case .unreachable(let status): String(localized: "The releases page answered with HTTP \(status).")
+        case .unsigned: String(localized: "The release isn't signed with Bekitzur's release key, so it wasn't installed.")
+        case .checksum: String(localized: "The download doesn't match the release, so it wasn't installed.")
+        case .noApp: String(localized: "The download has no Bekitzur.app in it.")
+        case .notBekitzur(let status): String(localized: "The app in the download isn't signed as Bekitzur (\(String(status))), so it wasn't installed.")
+        case .unzip(let status): String(localized: "The download couldn't be unpacked (ditto exited with \(status)).")
+        case .notWritable(let folder): String(localized: "Bekitzur can't replace itself in \(folder.path). Install the new version with install.sh instead.")
         }
     }
 }

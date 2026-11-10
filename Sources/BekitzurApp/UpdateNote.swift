@@ -31,7 +31,7 @@ struct UpdateNote: View {
     }
 
     private func status(version: String) -> String {
-        guard let step = model.updateStep else { return "Bekitzur \(version) is available." }
+        guard let step = model.updateStep else { return String(localized: "Bekitzur \(version) is available.") }
         guard let progress = model.updateProgress else { return step }
         return "\(step) \(Int((progress * 100).rounded()))%"
     }

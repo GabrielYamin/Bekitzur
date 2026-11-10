@@ -62,7 +62,7 @@ struct MenuBarContent: View {
                         }
                         .pickerStyle(.inline)
                     } label: {
-                        Label(model.recordingMicrophone?.name ?? "Microphone", systemImage: "mic")
+                        Label(model.recordingMicrophone?.name ?? String(localized: "Microphone"), systemImage: "mic")
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
@@ -75,7 +75,7 @@ struct MenuBarContent: View {
             if let processing = model.processing {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("\(processing.step ?? "Processing")…").foregroundStyle(.secondary)
+                    Text("\(ShownNames.step(processing.step))…").foregroundStyle(.secondary)
                 }
             }
 
@@ -109,7 +109,7 @@ struct MenuBarContent: View {
             }
             .buttonStyle(PanelRowStyle())
             if model.canUpdate {
-                Button(model.updateStep ?? "Check for Updates…") { Task { await model.checkForUpdates(manually: true) } }
+                Button(model.updateStep ?? String(localized: "Check for Updates…")) { Task { await model.checkForUpdates(manually: true) } }
                     .buttonStyle(PanelRowStyle())
                     .disabled(model.updateStep != nil)
             }
@@ -146,10 +146,10 @@ extension ConversationInfo {
     var displayTitle: String {
         if let title { return title }
         return switch status {
-        case .recording: "Recording…"
-        case .processing: "Processing…"
-        case .failed: "Couldn't write Notes"
-        default: "Conversation"
+        case .recording: String(localized: "Recording…")
+        case .processing: String(localized: "Processing…")
+        case .failed: String(localized: "Couldn't write Notes")
+        default: String(localized: "Conversation")
         }
     }
 
@@ -180,11 +180,11 @@ struct StatusDot: View {
 
     private var help: String {
         switch status {
-        case .recording: "Recording"
-        case .processing: "Processing"
-        case .unreviewed: "Not reviewed yet"
-        case .reviewed: "Reviewed"
-        case .failed: "Failed"
+        case .recording: String(localized: "Recording")
+        case .processing: String(localized: "Processing")
+        case .unreviewed: String(localized: "Not reviewed yet")
+        case .reviewed: String(localized: "Reviewed")
+        case .failed: String(localized: "Failed")
         }
     }
 }

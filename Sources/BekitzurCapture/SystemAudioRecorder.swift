@@ -1,11 +1,13 @@
 import AVFoundation
 import CoreAudio
 
-public struct CaptureError: Error, CustomStringConvertible {
+public struct CaptureError: Error, CustomStringConvertible, LocalizedError {
     public let step: String
     public let status: OSStatus
 
     public var description: String { "Couldn't \(step) (Core Audio error \(status))" }
+    /// Not translated: `step` is English, written where Core Audio was called.
+    public var errorDescription: String? { description }
 }
 
 private func check(_ status: OSStatus, _ step: String) throws {

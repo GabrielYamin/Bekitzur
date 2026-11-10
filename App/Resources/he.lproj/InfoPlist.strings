@@ -1,0 +1,8 @@
+/* Bekitzur's Info.plist in Hebrew. */
+
+"Bekitzur Conversation" = "שיחת בקיצור";
+"CFBundleDisplayName" = "בקיצור";
+"CFBundleName" = "בקיצור";
+"NSAudioCaptureUsageDescription" = "בקיצור מקליט את הצד השני של השיחות שלך במהלך השיחות שבחרת להקליט. השמע נשאר ב-Mac הזה.";
+"NSMicrophoneUsageDescription" = "בקיצור מקליט את המיקרופון שלך במהלך השיחות שבחרת להקליט. השמע נשאר ב-Mac הזה.";
+"Recording" = "הקלטה";

@@ -74,7 +74,7 @@ public struct CallTracks: Sendable {
     }
 }
 
-public enum ProcessingError: Error, CustomStringConvertible {
+public enum ProcessingError: Error, CustomStringConvertible, LocalizedError {
     case noAudio
     case noSpeech
     case transcriptionStopped
@@ -84,6 +84,14 @@ public enum ProcessingError: Error, CustomStringConvertible {
         case .noAudio: "The Recording has no audio."
         case .transcriptionStopped: "The speech model stopped while transcribing this Recording. Try transcribing it again."
         case .noSpeech: "No one spoke in the voice sample. Try again a little closer to the microphone."
+        }
+    }
+
+    public var errorDescription: String? {
+        switch self {
+        case .noAudio: String(localized: "The Recording has no audio.")
+        case .transcriptionStopped: String(localized: "The speech model stopped while transcribing this Recording. Try transcribing it again.")
+        case .noSpeech: String(localized: "No one spoke in the voice sample. Try again a little closer to the microphone.")
         }
     }
 }

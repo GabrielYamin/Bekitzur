@@ -79,7 +79,7 @@ private struct ExchangeView: View {
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Image(systemName: "play.circle").foregroundStyle(.secondary)
                                 Text(timestamp(evidence.start)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                                Text(evidence.speaker ?? "").font(.caption.bold()).foregroundStyle(.secondary)
+                                Text(evidence.speaker.map(ShownNames.speaker) ?? "").font(.caption.bold()).foregroundStyle(.secondary)
                                 DirectionalText("“\(evidence.quote)”").font(.callout).foregroundStyle(.secondary)
                             }
                             .contentShape(Rectangle())

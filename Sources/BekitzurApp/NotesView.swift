@@ -77,7 +77,7 @@ struct NotesView: View {
 
                 if !notes.actionItems.isEmpty {
                     let done = notes.actionItems.filter { $0.done == true }.count
-                    NotesSection(title: "Action Items", systemImage: "checklist", detail: done > 0 ? "\(done) of \(notes.actionItems.count) done" : nil) {
+                    NotesSection(title: "Action Items", systemImage: "checklist", detail: done > 0 ? String(localized: "\(done) of \(notes.actionItems.count) done") : nil) {
                         ForEach(Array(notes.actionItems.enumerated()), id: \.offset) { index, item in
                             NoteItem(
                                 text: item.text,
@@ -88,11 +88,11 @@ struct NotesView: View {
                                 done: Binding(get: { item.done == true }, set: { setDone(index, $0) })
                             ) {
                                 HStack(spacing: 6) {
-                                    Chip(item.owner ?? "No Owner", systemImage: "person", prominent: item.owner != nil)
+                                    Chip(item.owner.map(ShownNames.speaker) ?? String(localized: "No Owner"), systemImage: "person", prominent: item.owner != nil)
                                     if let due = NotesMarkdown.dueText(item) {
-                                        let said = item.duePhrase.map { "Said: \"\($0)\"" }
+                                        let said = item.duePhrase.map { String(localized: "Said: \"\($0)\"") }
                                         if item.dueDate != nil {
-                                            DueChip(text: due, help: ["Add to Calendar", said].compactMap(\.self).joined(separator: ". ")) {
+                                            DueChip(text: due, help: [String(localized: "Add to Calendar"), said].compactMap(\.self).joined(separator: ". ")) {
                                                 addToCalendar(item)
                                             }
                                         } else {
@@ -226,13 +226,13 @@ private struct NotesEditor: View {
 }
 
 private struct EditedSection<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
-    let add: String
+    let add: LocalizedStringKey
     let onAdd: () -> Void
     @ViewBuilder let content: Content
 
-    init(title: String, systemImage: String, add: String, onAdd: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+    init(title: LocalizedStringKey, systemImage: String, add: LocalizedStringKey, onAdd: @escaping () -> Void, @ViewBuilder content: () -> Content) {
         self.title = title
         self.systemImage = systemImage
         self.add = add
@@ -254,7 +254,7 @@ private struct EditedSection<Content: View>: View {
 
 private struct EditedItem<Details: View>: View {
     @Binding var text: String
-    let placeholder: String
+    let placeholder: LocalizedStringKey
     let remove: () -> Void
     @ViewBuilder let details: Details
 
@@ -278,7 +278,7 @@ private struct EditedItem<Details: View>: View {
 }
 
 extension EditedItem where Details == EmptyView {
-    init(text: Binding<String>, placeholder: String, remove: @escaping () -> Void) {
+    init(text: Binding<String>, placeholder: LocalizedStringKey, remove: @escaping () -> Void) {
         self.init(text: text, placeholder: placeholder, remove: remove) { EmptyView() }
     }
 }
@@ -291,7 +291,7 @@ private struct ActionItemDetails: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "person").foregroundStyle(.secondary)
-            TextField("No Owner", text: Binding(get: { item.owner ?? "" }, set: { item.owner = $0 }))
+            TextField("No Owner", text: Binding(get: { item.owner.map(ShownNames.speaker) ?? "" }, set: { item.owner = $0 }))
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 200)
             Image(systemName: "calendar").foregroundStyle(.secondary).padding(.leading, 6)
@@ -335,13 +335,13 @@ private struct ActionItemDetails: View {
 }
 
 private struct NotesSection<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     /// Beside the title, like how many Action Items are done.
     var detail: String?
     @ViewBuilder let content: Content
 
-    init(title: String, systemImage: String, detail: String? = nil, @ViewBuilder content: () -> Content) {
+    init(title: LocalizedStringKey, systemImage: String, detail: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
         self.systemImage = systemImage
         self.detail = detail
@@ -414,7 +414,7 @@ private struct NoteItem<Details: View>: View {
                             Button {
                                 play(turn.start ?? 0)
                             } label: {
-                                Label("\(turn.speaker) \(timestamp(turn.start))", systemImage: "play.fill")
+                                Label("\(ShownNames.speaker(turn.speaker)) \(timestamp(turn.start))", systemImage: "play.fill")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .padding(.horizontal, 6)

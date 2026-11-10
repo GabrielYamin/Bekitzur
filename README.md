@@ -14,6 +14,7 @@ Bekitzur is open source, under the [MIT License](LICENSE). Its releases are on t
 - Writes the Notes with Gemma 4 26B-A4B through llama.cpp. Quotes are checked against the Transcript, and due dates are worked out in code.
 - For review: listen back along the Transcript, fix words and Speakers, update or edit the Notes, copy the Notes or the Transcript as Markdown, rename Conversations, check Action Items off and add the ones with a due day to your calendar, and ask questions that are answered only from the Transcript. Once every Action Item is done, it offers, now and then, to delete the Conversation.
 - Finds Conversations by the people in them and by what was said in them, in their titles, Notes, and Transcripts.
+- Speaks English or Hebrew: Settings → Language picks the app's language, or follows the Mac's.
 - Downloads its own models with their progress, imports recordings made elsewhere, exports a Conversation as one file that someone else with Bekitzur opens to add it, and updates itself from signed releases after asking.
 
 [docs/plan.md](docs/plan.md) has the design and a log of what was built and how it measured. [CONTEXT.md](CONTEXT.md) defines the terms, like Conversation, Speaker, and Voiceprint.

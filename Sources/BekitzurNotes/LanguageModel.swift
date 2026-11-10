@@ -1,7 +1,7 @@
 import Foundation
 import llama
 
-public enum LanguageModelError: Error, CustomStringConvertible {
+public enum LanguageModelError: Error, CustomStringConvertible, LocalizedError {
     case modelNotLoaded(URL)
     case contextNotCreated
     case invalidGrammar
@@ -15,6 +15,16 @@ public enum LanguageModelError: Error, CustomStringConvertible {
         case .invalidGrammar: "The output grammar doesn't parse"
         case .promptTooLong(let tokens, let limit): "The prompt is \(tokens) tokens, over the \(limit)-token limit"
         case .decodeFailed(let code): "The language model failed (llama.cpp error \(code))"
+        }
+    }
+
+    public var errorDescription: String? {
+        switch self {
+        case .modelNotLoaded(let url): String(localized: "Can't load the language model at \(url.path)")
+        case .contextNotCreated: String(localized: "Can't create a language model context")
+        case .invalidGrammar: String(localized: "The output grammar doesn't parse")
+        case .promptTooLong(let tokens, let limit): String(localized: "The prompt is \(tokens) tokens, over the \(limit)-token limit")
+        case .decodeFailed(let code): String(localized: "The language model failed (llama.cpp error \(code))")
         }
     }
 }
