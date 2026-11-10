@@ -89,6 +89,8 @@ public struct Notes: Codable, Sendable, Equatable {
     public var decisions: [Decision]
     public var actionItems: [ActionItem]
     public var openQuestions: [OpenQuestion]
+    /// The language they're written in; nil for Notes from before they could be in Hebrew, which are in English.
+    public var language: ConversationLanguage?
 
     /// Notes not written yet.
     public init() {

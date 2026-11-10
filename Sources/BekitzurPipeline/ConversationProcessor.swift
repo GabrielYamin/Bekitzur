@@ -209,10 +209,12 @@ public enum ConversationProcessor {
     ///   - flags: The user's marks on that Transcript; their fixes go into the Notes.
     ///   - vocabulary: The user's own terms and taught spellings, on top of the built-in terms.
     ///   - separation: What separating people who talk at once needs, when its model is downloaded.
+    ///   - notesLanguage: What the Notes are written in, whatever language the Conversation is in.
     public static func process(
         _ samples: [Float],
         date: Date,
         language: ConversationLanguage,
+        notesLanguage: ConversationLanguage = .english,
         voiceprints: [Voiceprint],
         people: Int? = nil,
         call: CallTracks? = nil,
@@ -271,7 +273,9 @@ public enum ConversationProcessor {
         )
         let labels = Dictionary(speakers.map { ($0.voice, $0.label) }, uniquingKeysWith: { first, _ in first })
         separated.together = OverlapSeparation.together(turns, labels: labels, length: Double(samples.count) / 16_000)
-        return try rewriteNotes(separated, flags: flags, vocabulary: vocabulary, date: date, language: language, progress: progress)
+        return try rewriteNotes(
+            separated, flags: flags, vocabulary: vocabulary, date: date, language: language, notesLanguage: notesLanguage, progress: progress
+        )
     }
 
     /// Checks the Transcript's English terms against the Vocabulary, then writes the Notes from it with the user's
@@ -282,6 +286,7 @@ public enum ConversationProcessor {
         vocabulary: Vocabulary,
         date: Date,
         language: ConversationLanguage,
+        notesLanguage: ConversationLanguage = .english,
         progress: @Sendable (ProcessingStep) -> Void = { _ in }
     ) throws -> ProcessedConversation {
         var result = result
@@ -292,7 +297,7 @@ public enum ConversationProcessor {
         }
         progress(.writingNotes)
         let turns = NotesWriter.turns(from: result.transcript.applying(flags))
-        result.notes = try NotesWriter(model: model).write(turns: turns, date: date, language: language).notes
+        result.notes = try NotesWriter(model: model).write(turns: turns, date: date, language: language, notesLanguage: notesLanguage).notes
         result.turns = turns
         result.notesFixes = flags.fixes
         result.separationChangedNotes = nil

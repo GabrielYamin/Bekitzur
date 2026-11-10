@@ -21,6 +21,9 @@ struct ProcessCommand: AsyncParsableCommand {
     @Option(help: "Conversation language: he or en.")
     var language: ConversationLanguage = .hebrew
 
+    @Option(help: "Notes language: he or en.")
+    var notesLanguage: ConversationLanguage = .english
+
     @Option(help: "Voiceprints file.")
     var voiceprints: String = BekitzurPaths.voiceprints.path
 
@@ -47,6 +50,7 @@ struct ProcessCommand: AsyncParsableCommand {
             samples,
             date: day,
             language: language,
+            notesLanguage: notesLanguage,
             voiceprints: try VoiceprintStore(url: URL(filePath: voiceprints)).load(),
             call: call,
             vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load(),

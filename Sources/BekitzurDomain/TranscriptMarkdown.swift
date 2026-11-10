@@ -28,23 +28,24 @@ public enum TranscriptMarkdown {
         }
     }
 
-    public static func render(_ rows: [Row], title: String, startedAt: Date, endedAt: Date?) -> String {
-        var lines = ["# \(title)", "", NotesMarkdown.when(startedAt, endedAt)]
+    /// - Parameter language: The language of the Conversation's Notes, which give it its title, so its own words match.
+    public static func render(_ rows: [Row], title: String, startedAt: Date, endedAt: Date?, language: ConversationLanguage = .english) -> String {
+        var lines = ["# \(title)", "", NotesMarkdown.when(startedAt, endedAt, in: language)]
         for row in rows where !row.lines.isEmpty {
             lines.append("")
             if row.lines.count == 1 {
-                lines.append(text(row.lines[0]))
+                lines.append(text(row.lines[0], in: language))
             } else {
-                let at: Double? = row.atOnce ?? row.lines.map(\.start).min()
-                lines.append("\(row.lines.count) people at once, \(timestamp(at)):")
-                lines += row.lines.map { "- " + text($0) }
+                let at = timestamp(row.atOnce ?? row.lines.map(\.start).min())
+                lines.append(language == .hebrew ? "\(row.lines.count) אנשים בבת אחת, \(at):" : "\(row.lines.count) people at once, \(at):")
+                lines += row.lines.map { "- " + text($0, in: language) }
             }
         }
         return lines.joined(separator: "\n") + "\n"
     }
 
-    private static func text(_ line: Line) -> String {
-        "[\(timestamp(line.start))] **\(line.speaker)**: \(line.text)"
+    private static func text(_ line: Line, in language: ConversationLanguage) -> String {
+        "[\(timestamp(line.start))] **\(NotesMarkdown.speaker(line.speaker, in: language))**: \(line.text)"
     }
 }
 
