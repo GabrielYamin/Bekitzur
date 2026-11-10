@@ -28,4 +28,28 @@ struct TranscriptMarkdownTests {
             "",
         ])
     }
+
+    /// Copied from a Conversation whose Notes are in Hebrew, its own words are Hebrew too.
+    @Test func withHebrewNotesItsOwnWordsAreHebrew() {
+        let rows: [TranscriptMarkdown.Row] = [
+            .init(lines: [.init(speaker: "Speaker 2", start: 5, text: "מתחילים?")]),
+            .init(lines: [.init(speaker: "Dana", start: 38, text: "כן,"), .init(speaker: "Speaker 2", start: 41, text: "רגע")], atOnce: 40),
+        ]
+
+        let text = TranscriptMarkdown.render(
+            rows, title: "תכנון", startedAt: Date(timeIntervalSince1970: 0), endedAt: Date(timeIntervalSince1970: 1_200), language: .hebrew
+        )
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+
+        #expect(lines[2].hasSuffix(" · 20 דק׳"))
+        #expect(Array(lines[3...]) == [
+            "",
+            "[0:05] **דובר 2**: מתחילים?",
+            "",
+            "2 אנשים בבת אחת, 0:40:",
+            "- [0:38] **Dana**: כן,",
+            "- [0:41] **דובר 2**: רגע",
+            "",
+        ])
+    }
 }

@@ -18,6 +18,9 @@ struct NotesView: View {
 
     private var notes: Notes { result.notes }
     private var turns: [String: Turn] { Dictionary(result.turns.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }) }
+    /// What the Notes say goes in the direction of their language, inside the app's own: the section titles and
+    /// buttons stay in the app's.
+    private var direction: LayoutDirection { notes.language == .hebrew ? .rightToLeft : .leftToRight }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,7 +54,7 @@ struct NotesView: View {
             .frame(maxWidth: .infinity)
             if editing {
                 ScrollView {
-                    NotesEditor(draft: $draft)
+                    NotesEditor(draft: $draft, direction: direction)
                         .padding(24)
                         .frame(maxWidth: 780, alignment: .leading)
                         .frame(maxWidth: .infinity)
@@ -65,10 +68,14 @@ struct NotesView: View {
     private var notesView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                Text(notes.summary).font(.body).lineSpacing(3)
+                Text(notes.summary)
+                    .font(.body)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .environment(\.layoutDirection, direction)
 
                 if !notes.decisions.isEmpty {
-                    NotesSection(title: "Decisions", systemImage: "checkmark.seal") {
+                    NotesSection(title: "Decisions", systemImage: "checkmark.seal", direction: direction) {
                         ForEach(Array(notes.decisions.enumerated()), id: \.offset) { _, decision in
                             NoteItem(text: decision.text, quote: decision.quote, sources: decision.sourceTurns, turns: turns, play: play)
                         }
@@ -77,7 +84,8 @@ struct NotesView: View {
 
                 if !notes.actionItems.isEmpty {
                     let done = notes.actionItems.filter { $0.done == true }.count
-                    NotesSection(title: "Action Items", systemImage: "checklist", detail: done > 0 ? String(localized: "\(done) of \(notes.actionItems.count) done") : nil) {
+                    let detail = done > 0 ? String(localized: "\(done) of \(notes.actionItems.count) done") : nil
+                    NotesSection(title: "Action Items", systemImage: "checklist", detail: detail, direction: direction) {
                         ForEach(Array(notes.actionItems.enumerated()), id: \.offset) { index, item in
                             NoteItem(
                                 text: item.text,
@@ -107,7 +115,7 @@ struct NotesView: View {
                 }
 
                 if !notes.openQuestions.isEmpty {
-                    NotesSection(title: "Open Questions", systemImage: "questionmark.bubble") {
+                    NotesSection(title: "Open Questions", systemImage: "questionmark.bubble", direction: direction) {
                         ForEach(Array(notes.openQuestions.enumerated()), id: \.offset) { _, question in
                             NoteItem(text: question.text, quote: nil, sources: question.sourceTurns, turns: turns, play: play)
                         }
@@ -176,6 +184,8 @@ private struct Editable<Item>: Identifiable {
 
 private struct NotesEditor: View {
     @Binding var draft: NotesDraft
+    /// The Notes' language's, for what they say.
+    let direction: LayoutDirection
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -184,13 +194,15 @@ private struct NotesEditor: View {
                 TextField("Title", text: $draft.title, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .font(.title3)
+                    .environment(\.layoutDirection, direction)
                 Text("Summary").font(.headline).padding(.top, 8)
                 TextField("Summary", text: $draft.summary, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(4...)
+                    .environment(\.layoutDirection, direction)
             }
 
-            EditedSection(title: "Decisions", systemImage: "checkmark.seal", add: "Add a Decision") {
+            EditedSection(title: "Decisions", systemImage: "checkmark.seal", add: "Add a Decision", direction: direction) {
                 draft.decisions.append(Editable(item: Decision(text: "")))
             } content: {
                 ForEach($draft.decisions) { $decision in
@@ -200,7 +212,7 @@ private struct NotesEditor: View {
                 }
             }
 
-            EditedSection(title: "Action Items", systemImage: "checklist", add: "Add an Action Item") {
+            EditedSection(title: "Action Items", systemImage: "checklist", add: "Add an Action Item", direction: direction) {
                 draft.actionItems.append(Editable(item: ActionItem(text: "")))
             } content: {
                 ForEach($draft.actionItems) { $item in
@@ -212,7 +224,7 @@ private struct NotesEditor: View {
                 }
             }
 
-            EditedSection(title: "Open Questions", systemImage: "questionmark.bubble", add: "Add an Open Question") {
+            EditedSection(title: "Open Questions", systemImage: "questionmark.bubble", add: "Add an Open Question", direction: direction) {
                 draft.openQuestions.append(Editable(item: OpenQuestion(text: "")))
             } content: {
                 ForEach($draft.openQuestions) { $question in
@@ -229,13 +241,23 @@ private struct EditedSection<Content: View>: View {
     let title: LocalizedStringKey
     let systemImage: String
     let add: LocalizedStringKey
+    /// The items', which can be the other way from the title's.
+    let direction: LayoutDirection
     let onAdd: () -> Void
     @ViewBuilder let content: Content
 
-    init(title: LocalizedStringKey, systemImage: String, add: LocalizedStringKey, onAdd: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+    init(
+        title: LocalizedStringKey,
+        systemImage: String,
+        add: LocalizedStringKey,
+        direction: LayoutDirection,
+        onAdd: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) {
         self.title = title
         self.systemImage = systemImage
         self.add = add
+        self.direction = direction
         self.onAdd = onAdd
         self.content = content()
     }
@@ -243,7 +265,7 @@ private struct EditedSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(title, systemImage: systemImage).font(.title3.bold())
-            content
+            content.environment(\.layoutDirection, direction)
             Button(action: onAdd) {
                 Label(add, systemImage: "plus")
             }
@@ -339,12 +361,15 @@ private struct NotesSection<Content: View>: View {
     let systemImage: String
     /// Beside the title, like how many Action Items are done.
     var detail: String?
+    /// The items', which can be the other way from the title's.
+    let direction: LayoutDirection
     @ViewBuilder let content: Content
 
-    init(title: LocalizedStringKey, systemImage: String, detail: String? = nil, @ViewBuilder content: () -> Content) {
+    init(title: LocalizedStringKey, systemImage: String, detail: String? = nil, direction: LayoutDirection, @ViewBuilder content: () -> Content) {
         self.title = title
         self.systemImage = systemImage
         self.detail = detail
+        self.direction = direction
         self.content = content()
     }
 
@@ -354,7 +379,7 @@ private struct NotesSection<Content: View>: View {
                 Label(title, systemImage: systemImage).font(.title3.bold())
                 if let detail { Text(detail).font(.callout).foregroundStyle(.secondary).monospacedDigit() }
             }
-            content
+            content.environment(\.layoutDirection, direction)
         }
     }
 }

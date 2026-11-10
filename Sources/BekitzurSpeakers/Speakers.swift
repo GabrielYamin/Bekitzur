@@ -34,7 +34,7 @@ public enum Speakers {
         return ordered.enumerated().map { index, voice in
             let voiceTurns = byVoice[voice]!
             return Speaker(
-                label: "Speaker \(index + 1)",
+                label: SpeakerLabel.label(index + 1),
                 voice: voice,
                 speechSeconds: voiceTurns.map(\.duration).reduce(0, +),
                 centroid: weightedMean(voiceTurns)

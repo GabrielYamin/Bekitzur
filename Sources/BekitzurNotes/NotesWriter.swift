@@ -25,10 +25,19 @@ public struct NotesWriter {
         self.model = model
     }
 
+    /// - Parameters:
+    ///   - language: The conversation's.
+    ///   - notesLanguage: The Notes', whatever the conversation's is.
     /// - Returns: The Notes, and the draft they were checked from.
-    public func write(turns: [Turn], date: Date, language: ConversationLanguage, calendar: Calendar = .current) throws -> (notes: Notes, draft: Notes, completion: Completion) {
+    public func write(
+        turns: [Turn],
+        date: Date,
+        language: ConversationLanguage,
+        notesLanguage: ConversationLanguage = .english,
+        calendar: Calendar = .current
+    ) throws -> (notes: Notes, draft: Notes, completion: Completion) {
         let completion = try model.startChat(
-            system: Self.instructions,
+            system: Self.instructions(writingIn: notesLanguage),
             user: Self.render(turns, date: date, language: language),
             grammar: Self.grammar,
             maxTokens: 6_000,
@@ -36,9 +45,10 @@ public struct NotesWriter {
         )
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard let draft = try? decoder.decode(Notes.self, from: Data(completion.text.utf8)).withoutTurnIDsInText else {
+        guard var draft = try? decoder.decode(Notes.self, from: Data(completion.text.utf8)).withoutTurnIDsInText else {
             throw NotesWriterError.unreadableOutput(completion.text)
         }
+        draft.language = notesLanguage
         var notes = reviewed(draft, turns: turns)
         let formatter = DateFormatter()
         formatter.calendar = calendar
@@ -65,7 +75,7 @@ public struct NotesWriter {
         var notes = draft
         let items = Self.reviewItems(draft)
         if !items.isEmpty,
-           let reply = try? model.continueChat(user: Self.reviewRequest(items), grammar: Self.reviewGrammar(items), maxTokens: 2_000),
+           let reply = try? model.continueChat(user: Self.reviewRequest(items, in: draft.language ?? .english), grammar: Self.reviewGrammar(items), maxTokens: 2_000),
            let checked = try? JSONDecoder().decode([CheckedItem].self, from: Data(reply.text.utf8)),
            checked.count == items.count {
             notes = Self.apply(checked, of: items, to: notes)
@@ -113,19 +123,20 @@ public struct NotesWriter {
             + notes.actionItems.enumerated().map { ReviewItem(kind: .actionItem, index: $0.offset, text: $0.element.text, sources: $0.element.sourceTurns) }
     }
 
-    static func reviewRequest(_ items: [ReviewItem]) -> String {
+    static func reviewRequest(_ items: [ReviewItem], in language: ConversationLanguage = .english) -> String {
         func list(_ kind: ReviewItem.Kind, _ title: String) -> String? {
             let lines = items.enumerated().filter { $0.element.kind == kind }
                 .map { "\($0.offset + 1). \($0.element.text) (\($0.element.sources.joined(separator: ", ")))" }
             return lines.isEmpty ? nil : "\(title):\n" + lines.joined(separator: "\n")
         }
         let lists = [list(.decision, "Decisions"), list(.actionItem, "Action items")].compactMap { $0 }
+        let references = language == .hebrew ? #""זה", "את זה", "הדבר הזה""# : #""it", "this", "that""#
         return """
         Check each decision and action item of these Notes against the transcript.
 
         \(lists.joined(separator: "\n\n"))
 
-        - Rewrite an item only if it says "it", "this", "that", or the like instead of naming the thing. Then read the turns before its source and name what was decided or what will be done. Copy every other item exactly, and never change a name, a number, or a technical term. Every item is in English.
+        - Rewrite an item only if it says \(references), or the like instead of naming the thing. Then read the turns before its source and name what was decided or what will be done. Copy every other item exactly, and never change a name, a number, or a technical term. Every item is in \(language.name).
         - A decision the participants didn't make, like a fact, an opinion, or how things work today: null.
 
         Reply with every item in order: its number and its text without the turn IDs, or null.
@@ -254,11 +265,26 @@ public struct NotesWriter {
         """
     }
 
-    static let instructions = """
+    /// The rest is the same in either language.
+    static func instructions(writingIn language: ConversationLanguage) -> String {
+        [role, language == .hebrew ? inHebrew : inEnglish, extraction].joined(separator: "\n\n")
+    }
+
+    private static let role = """
     You are the note-taker for a recorded work conversation. You get a transcript with numbered speaker turns like [T012]. Speakers are either named people or unnamed voices such as "Speaker 2".
+    """
 
+    private static let inEnglish = """
     Write the Notes in English, even when the conversation is in Hebrew: every field is English except "quote", which stays verbatim in the transcript's original language. Never copy a quote into another field; say in English what it means.
+    """
 
+    /// Told only to write in Hebrew, the model left out commitments it lists in English Notes, so it's told what doesn't
+    /// change. Names, terms, and labels stay as the transcript writes them, since renaming a Speaker looks for their label.
+    private static let inHebrew = """
+    Write the Notes in Hebrew, even when the conversation is in English: every field is Hebrew except "quote", which stays verbatim in the transcript's original language. Hebrew changes only the words: extract every decision, action item, and open question you would for English Notes, with each commitment as an action item of its own. Write people's names, product names, and technical terms as the transcript writes them, English ones in English letters, and an unnamed speaker's label exactly as it is, like "Speaker 2". Keep every word in one alphabet, and join a Hebrew prefix to an English word with a hyphen, like "ב-CI". Never copy a quote into another field; say in Hebrew what it means.
+    """
+
+    private static let extraction = """
     Each decision, action item, and open question must make sense to a colleague who missed the conversation and reads only that item. People refer back with words like "it", "this", "that one", or "the thing from before"; read the turns before it to find what they mean, and name it. "We'll do it tomorrow" says nothing; "Run the database migration tomorrow" does.
 
     Extract:

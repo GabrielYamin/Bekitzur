@@ -83,6 +83,7 @@
 "Bekitzur stopped recording the call in %@ and is writing the Notes." = "בקיצור הפסיק להקליט את השיחה ב-%@ וכותב את הסיכום.";
 "Bekitzur switches once it restarts, after it's done recording and processing." = "בקיצור יעבור לשפה הזו כשיופעל מחדש, אחרי שיסיים להקליט ולעבד.";
 "Bekitzur switches once it restarts." = "בקיצור יעבור לשפה הזו כשיופעל מחדש.";
+"Bekitzur writes Notes in this language, whatever language the Conversation is in. Notes it wrote before stay as they are; to write a Conversation's Notes in this language, choose Write Notes again in the Conversation's menu." = "בקיצור כותב סיכומים בשפה הזו, לא משנה באיזו שפה השיחה. סיכומים שהוא כתב קודם נשארים כמו שהם; כדי לכתוב את הסיכום של שיחה בשפה הזו, אפשר לבחור ״כתיבת הסיכום מחדש״ בתפריט של השיחה.";
 "Bekitzur's notifications work" = "העדכונים של בקיצור עובדים";
 "Can't convert %@: %@" = "לא ניתן להמיר את %@: %@";
 "Can't create a language model context" = "לא ניתן ליצור context למודל השפה";
@@ -226,6 +227,7 @@
 "Not said: part of what you typed for the words before it" = "לא נאמר: חלק ממה שהוקלד במקום המילים שלפניו";
 "Not showing? Check System Settings → Notifications → Bekitzur, and that Focus is off." = "לא מופיע? כדאי לבדוק את הגדרות המערכת ← עדכונים ← בקיצור, ושמצב ריכוז כבוי.";
 "Notes" = "סיכום";
+"Notes language" = "שפת הסיכום";
 "Notes ready" = "הסיכום מוכן";
 "Notifications are off, so you won't be told when Notes are ready." = "העדכונים כבויים, ולכן לא תקבלו הודעה כשהסיכום מוכן.";
 "OK" = "אישור";

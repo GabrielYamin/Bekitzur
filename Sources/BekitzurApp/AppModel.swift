@@ -193,6 +193,12 @@ final class AppModel {
         }
     }
 
+    /// The language Notes are written in from now on, whatever language the Conversation is in; Notes already written
+    /// keep theirs until they're written again.
+    var notesLanguage: ConversationLanguage {
+        didSet { UserDefaults.standard.set(notesLanguage.rawValue, forKey: "notesLanguage") }
+    }
+
     /// The language chosen when the app launched, which it shows until it restarts.
     @ObservationIgnored let launchLanguage: AppLanguage
     /// The layout's direction when the app launched; nil when it followed the Mac.
@@ -241,6 +247,7 @@ final class AppModel {
         launchLanguage = language
         launchedRightToLeft = preferences?[AppLanguage.directionPreference] as? Bool
         Self.setDirection(of: language)
+        notesLanguage = UserDefaults.standard.string(forKey: "notesLanguage").flatMap(ConversationLanguage.init(rawValue:)) ?? .english
         suggestsCalls = UserDefaults.standard.object(forKey: "suggestCalls") as? Bool ?? true
         recordsCallsAutomatically = UserDefaults.standard.bool(forKey: "recordCallsAutomatically")
         hasNewSettings = UserDefaults.standard.integer(forKey: "seenSettingsRevision") < NewSetting.revision
@@ -1235,7 +1242,8 @@ final class AppModel {
         let transcript = kept ?? live
         let flags = self.flags[id] ?? library.flags(for: id)
         let how = notesOnly != nil ? "Notes only" : kept != nil ? "same Transcript" : live != nil ? "live Transcript" : "new Transcript"
-        AppLog.write("\(id): processing (\(info.language?.name ?? "language to detect")\(info.people.map { ", \($0) people" } ?? ""), \(how), \(flags.fixes.count) fixes)")
+        let notesLanguage = self.notesLanguage
+        AppLog.write("\(id): processing (\(info.language?.name ?? "language to detect")\(info.people.map { ", \($0) people" } ?? ""), \(how), \(flags.fixes.count) fixes, Notes in \(notesLanguage.name))")
         Task {
             do {
                 var result: ProcessedConversation
@@ -1243,7 +1251,9 @@ final class AppModel {
                 let measuredDelay: Double?
                 let measuredDelays: [TrackDelay]?
                 if let notesOnly {
-                    result = try await Self.rewrite(notesOnly, flags: flags, date: info.startedAt, language: notesOnly.transcript.language) { step in
+                    result = try await Self.rewrite(
+                        notesOnly, flags: flags, date: info.startedAt, language: notesOnly.transcript.language, notesLanguage: notesLanguage
+                    ) { step in
                         Task { @MainActor in
                             AppModel.shared.update(id) { if $0.status == .processing { $0.step = step.rawValue } }
                         }
@@ -1256,6 +1266,7 @@ final class AppModel {
                         folder: folder,
                         date: info.startedAt,
                         language: info.language,
+                        notesLanguage: notesLanguage,
                         assumed: lastLanguage,
                         people: info.people,
                         microphoneDelay: info.microphoneDelay,
@@ -1320,6 +1331,7 @@ final class AppModel {
         flags: TranscriptFlags,
         date: Date,
         language: ConversationLanguage,
+        notesLanguage: ConversationLanguage,
         progress: @escaping @Sendable (ProcessingStep) -> Void
     ) async throws -> ProcessedConversation {
         try ConversationProcessor.rewriteNotes(
@@ -1328,6 +1340,7 @@ final class AppModel {
             vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load(),
             date: date,
             language: language,
+            notesLanguage: notesLanguage,
             progress: progress
         )
     }
@@ -1348,6 +1361,7 @@ final class AppModel {
         folder: URL,
         date: Date,
         language: ConversationLanguage?,
+        notesLanguage: ConversationLanguage,
         assumed: ConversationLanguage,
         people: Int?,
         microphoneDelay: Double?,
@@ -1379,6 +1393,7 @@ final class AppModel {
                 vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load(),
                 date: date,
                 language: salvage.language,
+                notesLanguage: notesLanguage,
                 progress: progress
             )
             let minutes = Int(((salvage.segments.last?.end ?? 0) / 60).rounded(.up))
@@ -1412,6 +1427,7 @@ final class AppModel {
             samples,
             date: date,
             language: transcript.language,
+            notesLanguage: notesLanguage,
             voiceprints: voiceprints,
             people: people,
             call: call,
@@ -1819,8 +1835,11 @@ final class AppModel {
             let lines = row.lines.map { TranscriptMarkdown.Line(speaker: $0.speaker, start: $0.start, text: $0.text) }
             return TranscriptMarkdown.Row(lines: lines, atOnce: row.atOnce)
         }
+        let markdown = TranscriptMarkdown.render(
+            rows, title: info.displayTitle, startedAt: info.startedAt, endedAt: info.endedAt, language: result.notes.language ?? .english
+        )
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(TranscriptMarkdown.render(rows, title: info.displayTitle, startedAt: info.startedAt, endedAt: info.endedAt), forType: .string)
+        NSPasteboard.general.setString(markdown, forType: .string)
     }
 
     func delete(_ id: String) {

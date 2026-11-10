@@ -163,10 +163,15 @@ struct SettingsView: View {
             }
 
             Section("Language") {
-                Picker("App language", selection: $model.appLanguage) {
+                Picker(selection: $model.appLanguage) {
                     Text("Same as the Mac").tag(AppLanguage.mac)
                     Text(verbatim: "English").tag(AppLanguage.english)
                     Text(verbatim: "עברית").tag(AppLanguage.hebrew)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("App language")
+                        if model.newSettingsShown.contains(.appLanguage) { NewBadge() }
+                    }
                 }
                 if model.switchesOnRestart {
                     HStack {
@@ -184,6 +189,18 @@ struct SettingsView: View {
                             .disabled(!model.canRestart)
                     }
                 }
+                Picker(selection: $model.notesLanguage) {
+                    Text(verbatim: "English").tag(ConversationLanguage.english)
+                    Text(verbatim: "עברית").tag(ConversationLanguage.hebrew)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Notes language")
+                        if model.newSettingsShown.contains(.notesLanguage) { NewBadge() }
+                    }
+                }
+                Text("Bekitzur writes Notes in this language, whatever language the Conversation is in. Notes it wrote before stay as they are; to write a Conversation's Notes in this language, choose Write Notes again in the Conversation's menu.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Your voice") {

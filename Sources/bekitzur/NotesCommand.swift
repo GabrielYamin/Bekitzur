@@ -17,6 +17,9 @@ struct NotesCommand: AsyncParsableCommand {
     @Option(help: "Conversation date, YYYY-MM-DD. Defaults to the file's # date: header.")
     var date: String?
 
+    @Option(help: "Notes language: he or en.")
+    var notesLanguage: ConversationLanguage = .english
+
     @Option(help: "Language model file.")
     var model: String = BekitzurPaths.languageModel.path
 
@@ -36,7 +39,7 @@ struct NotesCommand: AsyncParsableCommand {
         }
         let model = try LanguageModel(modelURL: URL(filePath: model), largestContext: maxContext)
         let started = Date()
-        let (notes, draftNotes, completion) = try NotesWriter(model: model).write(turns: turns, date: day, language: header.language)
+        let (notes, draftNotes, completion) = try NotesWriter(model: model).write(turns: turns, date: day, language: header.language, notesLanguage: notesLanguage)
         try output(notes, completion: completion, json: json)
         if let draft { try writeJSON(draftNotes, to: draft) }
         log(String(format: "Draft and check: %.1f s, in a %d-token context", Date().timeIntervalSince(started), model.contextSize))

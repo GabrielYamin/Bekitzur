@@ -31,7 +31,7 @@ enum ShownNames {
     /// A Speaker's name, or the label of one without a name, which is saved in English: "Speaker 2".
     static func speaker(_ name: String) -> String {
         if name == "Speaker" { return String(localized: "Speaker") }
-        guard name.hasPrefix("Speaker "), let number = Int(name.dropFirst("Speaker ".count)) else { return name }
+        guard let number = SpeakerLabel.number(in: name) else { return name }
         return String(localized: "Speaker \(number)")
     }
 }
