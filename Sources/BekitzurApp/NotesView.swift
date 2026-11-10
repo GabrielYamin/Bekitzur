@@ -305,8 +305,8 @@ extension EditedItem where Details == EmptyView {
     }
 }
 
-/// An Action Item's Owner and due date. A due date that was said but not resolved to a day ("after the release") shows
-/// as it was said until a day is picked.
+/// An Action Item's Owner and due date, with its time of day if it has one. A due date that was said but not resolved to
+/// a day ("after the release") shows as it was said until a day is picked.
 private struct ActionItemDetails: View {
     @Binding var item: ActionItem
 
@@ -318,9 +318,24 @@ private struct ActionItemDetails: View {
                 .frame(maxWidth: 200)
             Image(systemName: "calendar").foregroundStyle(.secondary).padding(.leading, 6)
             if let day = item.dueDate.flatMap(Self.day.date(from:)) {
-                DatePicker("Due", selection: Binding(get: { day }, set: { item.dueDate = Self.day.string(from: $0); item.duePhrase = nil }), displayedComponents: .date)
+                DatePicker("Due", selection: Binding(get: { day }, set: { item.setDue(day: Self.day.string(from: $0)) }), displayedComponents: .date)
                     .labelsHidden()
                     .fixedSize()
+                if let time = item.dueTimeOfDay {
+                    DatePicker("Time", selection: Binding(get: { Self.moment(time) }, set: { item.setDue(time: Self.time(of: $0)) }), displayedComponents: .hourAndMinute)
+                        .labelsHidden()
+                        .fixedSize()
+                    Button {
+                        item.setDue(time: nil)
+                    } label: {
+                        Image(systemName: "clock.badge.xmark").foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("No time")
+                } else {
+                    Button("Add a time") { item.setDue(time: DueTime(hour: 9, minute: 0)) }
+                        .buttonStyle(.borderless)
+                }
                 removeDue
             } else if let phrase = item.duePhrase {
                 Text("“\(phrase)”").foregroundStyle(.secondary)
@@ -338,12 +353,23 @@ private struct ActionItemDetails: View {
     private var removeDue: some View {
         Button {
             item.dueDate = nil
+            item.dueTime = nil
             item.duePhrase = nil
         } label: {
             Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
         }
         .buttonStyle(.borderless)
         .help("No due date")
+    }
+
+    /// A time of day as the time picker shows it, on any day.
+    private static func moment(_ time: DueTime) -> Date {
+        Calendar.current.date(bySettingHour: time.hour, minute: time.minute, second: 0, of: Date()) ?? Date()
+    }
+
+    private static func time(of moment: Date) -> DueTime {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: moment)
+        return DueTime(hour: parts.hour ?? 9, minute: parts.minute ?? 0)
     }
 
     /// Days as Action Items keep them, YYYY-MM-DD.

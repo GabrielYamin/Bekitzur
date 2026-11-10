@@ -2,7 +2,7 @@ import Foundation
 
 /// An Action Item as an event in the iCalendar format (RFC 5545), which every calendar app reads, so it goes to whichever
 /// app opens calendar files: Apple's calendar API reaches only the accounts in Calendar. The event is on the due day, at
-/// the time the due phrase says or 9:00, for half an hour, and shows as free, since it's a reminder rather than a meeting.
+/// the Action Item's time of day or 9:00, for half an hour, and shows as free, since it's a reminder rather than a meeting.
 public struct CalendarEvent: Equatable, Sendable {
     /// The same for the same Action Item of a Conversation, so a calendar app updates the event added before.
     public var id: String
@@ -19,7 +19,7 @@ public struct CalendarEvent: Equatable, Sendable {
         day.locale = Locale(identifier: "en_US_POSIX")
         day.dateFormat = "yyyy-MM-dd"
         guard let dueDate = item.dueDate.flatMap(day.date(from:)) else { return nil }
-        let time = item.duePhrase.flatMap(DueTime.init(in:)) ?? DueTime(hour: 9, minute: 0)
+        let time = item.dueTimeOfDay ?? DueTime(hour: 9, minute: 0)
         guard let start = calendar.date(bySettingHour: time.hour, minute: time.minute, second: 0, of: dueDate) else { return nil }
         let said = DateFormatter()
         said.calendar = calendar
@@ -106,6 +106,19 @@ public struct DueTime: Equatable, Sendable {
     public init(hour: Int, minute: Int) {
         self.hour = hour
         self.minute = minute
+    }
+
+    /// As Action Items save it: "16:00".
+    public var saved: String {
+        String(format: "%02d:%02d", hour, minute)
+    }
+
+    public init?(saved: String) {
+        let parts = saved.split(separator: ":")
+        guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]), (0...23).contains(hour), (0...59).contains(minute) else {
+            return nil
+        }
+        self.init(hour: hour, minute: minute)
     }
 
     private static let hebrewHours = ["אחת": 1, "שתיים": 2, "שתים": 2, "שלוש": 3, "ארבע": 4, "חמש": 5, "שש": 6, "שבע": 7, "שמונה": 8, "תשע": 9, "עשר": 10]

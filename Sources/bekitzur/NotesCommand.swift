@@ -85,7 +85,8 @@ func output(_ notes: Notes, completion: Completion?, json: String?) throws {
     if !notes.actionItems.isEmpty {
         print("Action Items:")
         for item in notes.actionItems {
-            let due = item.dueDate.map { " (due \($0))" } ?? item.duePhrase.map { " (\"\($0)\")" } ?? ""
+            let day = item.dueDate.map { date in item.dueTime.map { "\(date) \($0)" } ?? date }
+            let due = day.map { " (due \($0))" } ?? item.duePhrase.map { " (\"\($0)\")" } ?? ""
             print("- \(item.owner ?? "Unassigned"): \(item.text)\(due) [\(item.sourceTurns.joined(separator: ", "))]")
         }
     }

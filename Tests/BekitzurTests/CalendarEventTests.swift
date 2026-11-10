@@ -66,6 +66,13 @@ struct CalendarEventTests {
         #expect(said.id != event(due: "2026-11-05", phrase: nil, text: "Review the report")?.id)
     }
 
+    @Test func atTheTimeKeptWithTheActionItem() throws {
+        let item = ActionItem(text: "Send the report", duePhrase: "מחר", dueDate: "2026-11-05", dueTime: "16:30", sourceTurns: ["T004"], quote: "אשלח מחר")
+        let event = try #require(CalendarEvent(item, conversationID: "2026-11-04-100000", conversationTitle: "Weekly sync", conversationDate: Self.conversationDate, calendar: Self.calendar))
+
+        #expect(Self.calendar.dateComponents([.hour, .minute], from: event.start) == DateComponents(hour: 16, minute: 30))
+    }
+
     @Test func theCalendarFileHasTheEventInUTC() throws {
         let file = try #require(event(due: "2026-11-05", phrase: nil, text: "Fix the build, then tell; QA")).ics(stamp: Self.conversationDate)
 
