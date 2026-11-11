@@ -36,8 +36,13 @@ struct ChatCommand: AsyncParsableCommand {
             var exchange = ChatExchange(message: message)
             exchange.answer = reply.answer
             exchange.edits = reply.edits
+            exchange.reply = reply.raw
+            if let changed = reply.notes {
+                exchange.notesBefore = current
+                exchange.notesAfter = changed
+                current = changed
+            }
             earlier.append(exchange)
-            if let changed = reply.notes { current = changed }
             print("> \(message)")
             if raw { print("   reply: \(await assistant.lastReply)") }
             if let text = reply.answer.text {

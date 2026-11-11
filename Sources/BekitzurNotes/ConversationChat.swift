@@ -19,9 +19,11 @@ public final class ConversationChat {
     /// The last answer the user saw was that the Conversation doesn't say, which the model's own reply in the chat may
     /// not show.
     private var lastNotFound = false
-    /// The Notes as the model last saw them, with its own changes, so it's shown them again only when something else
-    /// changed them.
+    /// The Notes as the model last saw them, with its own changes, and what its last reply changed: the next message
+    /// shows the Notes again when it changed them or something else did, since the model doesn't work out the names its
+    /// changes left. Told nothing after adding an item, it took "change its owner" for the first one.
     private var notesSeen: Notes?
+    private var lastEdits: [AppliedEdit] = []
     /// The model's last reply, before its quotes were checked, with its second look when it had one.
     public private(set) var lastReply = ""
 
@@ -43,16 +45,13 @@ public final class ConversationChat {
     ///     chat that starts over is given the last of them.
     ///   - today: When the message is sent, which a due phrase said only in the chat counts from.
     public func send(_ message: String, notes: Notes, after earlier: [ChatExchange] = [], today: Date = Date()) throws -> ChatReply {
-        // Told only which language to answer in, the model wrote a summary asked for in Hebrew in Hebrew, and its answer
-        // in the English of the Notes.
-        let request = """
-        Message: \(message.trimmingCharacters(in: .whitespacesAndNewlines))
-        Answer in \(Self.language(of: message).name), and write anything you put in the Notes in \((notes.language ?? .english).name).
-        """
+        let request = Self.request(message, notesIn: notes.language ?? .english)
         var completion: Completion?
         if chatting {
             var update = lastNotFound ? Self.notFoundNote + "\n\n" : ""
-            if notes != notesSeen { update += "The Notes now:\n" + Self.listing(notes) + "\n\n" }
+            if notes != notesSeen || !lastEdits.isEmpty {
+                update += "The Notes now:\n" + Self.listing(notes) + "\n\n" + Self.lastChange(lastEdits, in: notes)
+            }
             do {
                 completion = try model.continueChat(user: update + request, grammar: Self.grammar, maxTokens: Self.replyTokens)
             } catch LanguageModelError.promptTooLong {
@@ -64,17 +63,29 @@ public final class ConversationChat {
             chatting = true
         }
         notesSeen = notes
-        lastReply = completion?.text ?? ""
+        var used = completion?.text ?? ""
+        lastReply = used
         let due = { [turns, date] (phrase: String) in Self.due(phrase, saidIn: turns, on: date, today: today) }
-        var reply = Self.reply(from: lastReply, turns: turns, notes: notes, due: due)
+        var reply = Self.reply(from: used, turns: turns, notes: notes, due: due)
         if reply.answer.text == nil, reply.edits.isEmpty,
            let second = try? model.continueChat(user: Self.lookAgain, grammar: Self.answerGrammar, maxTokens: Self.replyTokens) {
-            lastReply += "\n\nLooked again:\n" + second.text
-            reply = Self.reply(from: second.text, turns: turns, notes: notes, due: due)
+            used = second.text
+            lastReply += "\n\nLooked again:\n" + used
+            reply = Self.reply(from: used, turns: turns, notes: notes, due: due)
         }
         if let changed = reply.notes { notesSeen = changed }
+        lastEdits = reply.edits
         lastNotFound = reply.answer.text == nil && reply.edits.isEmpty
-        return reply
+        return ChatReply(answer: reply.answer, notes: reply.notes, edits: reply.edits, raw: used)
+    }
+
+    /// A message as the chat sends it. Told only which language to answer in, the model wrote a summary asked for in
+    /// Hebrew in Hebrew, and its answer in the English of the Notes.
+    static func request(_ message: String, notesIn language: ConversationLanguage) -> String {
+        """
+        Message: \(message.trimmingCharacters(in: .whitespacesAndNewlines))
+        Answer in \(Self.language(of: message).name), and write anything you put in the Notes in \(language.name).
+        """
     }
 
     /// Asked when nothing answered the message as it was put. Told in one message to answer what the question means, the
@@ -90,19 +101,56 @@ public final class ConversationChat {
     """
 
     private func start(_ request: String, notes: Notes, after earlier: [ChatExchange]) throws -> Completion {
-        let transcript = NotesWriter.render(turns, date: date, language: language) + "\n\nThe Notes Bekitzur wrote from it:\n" + Self.listing(notes)
-        let history = Self.history(earlier, in: notes)
+        let transcript = NotesWriter.render(turns, date: date, language: language)
         let system = Self.instructions(for: language, notesIn: notes.language ?? .english)
         do {
             return try model.startChat(
-                system: system, user: transcript + history + "\n\n" + request, grammar: Self.grammar, maxTokens: Self.replyTokens, followUp: Self.room
+                system: system, turns: Self.opening(transcript, notes: notes, after: earlier, request: request), grammar: Self.grammar,
+                maxTokens: Self.replyTokens, followUp: Self.room
             )
-        } catch LanguageModelError.promptTooLong where !history.isEmpty {
+        } catch LanguageModelError.promptTooLong where !earlier.isEmpty {
             // A Conversation too long for its earlier messages still gets an answer.
             return try model.startChat(
-                system: system, user: transcript + "\n\n" + request, grammar: Self.grammar, maxTokens: Self.replyTokens, followUp: Self.room
+                system: system, turns: Self.opening(transcript, notes: notes, after: [], request: request), grammar: Self.grammar,
+                maxTokens: Self.replyTokens, followUp: Self.room
             )
         }
+    }
+
+    /// The turns a chat starts with: the transcript, the Notes, and the earlier messages, then the new one. The last
+    /// message that was replied to comes back as it went, its reply as the model's own, so that a message pointing at
+    /// what it changed reads as in a chat that never stopped: given only as one of the earlier messages, "remove it"
+    /// after "change its owner" read as a question about the meeting.
+    static func opening(_ transcript: String, notes: Notes, after earlier: [ChatExchange], request: String) -> [String] {
+        let replied = earlier.filter { $0.answer != nil && $0.failure == nil }
+        guard let last = replied.last, let reply = last.reply else {
+            return [transcript + "\n\nThe Notes Bekitzur wrote from it:\n" + listing(notes) + history(replied, in: notes) + "\n\n" + request]
+        }
+        let seen = last.notesBefore ?? notes
+        let first = transcript + "\n\nThe Notes Bekitzur wrote from it:\n" + listing(seen) + history(Array(replied.dropLast()), in: seen)
+            + "\n\n" + Self.request(last.message, notesIn: seen.language ?? .english)
+        var next = ""
+        if last.answer?.text == nil, last.edits.isEmpty { next += notFoundNote + "\n\n" }
+        if notes != (last.notesAfter ?? seen) || !last.edits.isEmpty {
+            next += "The Notes now:\n" + listing(notes) + "\n\n" + (last.undone ? "" : lastChange(last.edits, in: notes))
+        }
+        return [first, reply, next + request]
+    }
+
+    /// What the last reply changed, by the names the Notes give it now. With only the Notes before it, "remove it"
+    /// after a change took their last item.
+    static func lastChange(_ edits: [AppliedEdit], in notes: Notes) -> String {
+        var changed: [String] = []
+        for edit in edits {
+            let part: String? = switch edit.kind {
+            case .title: "the title"
+            case .summary: "the summary"
+            case .added, .changed: notes.name(of: edit)
+            case .removed: nil
+            }
+            if let part, !changed.contains(part) { changed.append(part) }
+        }
+        return changed.isEmpty ? "" : "Your last reply changed \(changed.joined(separator: ", ")).\n\n"
     }
 
     /// Hebrew when at least as many of the message's words have a Hebrew letter as are written in another alphabet,
@@ -151,9 +199,8 @@ public final class ConversationChat {
     }
 
     /// The last messages that were replied to, each with the answer the user was shown, the turns it quoted, and the
-    /// items it added or changed as `notes` name them now, which "remove it" after the chat started over needed. The
-    /// answer says what a reply changed: listed apart as well, a change to the summary kept the model from changing it
-    /// again after the chat started over.
+    /// items it added or changed as `notes` name them now. The answer says what a reply changed: listed apart as well, a
+    /// change to the summary kept the model from changing it again after the chat started over.
     static func history(_ earlier: [ChatExchange], in notes: Notes, keeping count: Int = 10) -> String {
         let replied = earlier.filter { $0.answer != nil && $0.failure == nil }
         guard !replied.isEmpty else { return "" }

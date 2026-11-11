@@ -109,11 +109,15 @@ public final class LanguageModel {
         llama_model_free(model)
     }
 
-    /// A system and user message in Gemma 4's chat format, with thinking switched off by the empty thought channel.
-    static func gemma4Prompt(system: String, user: String) -> String {
-        let system = system.trimmingCharacters(in: .whitespacesAndNewlines)
-        let user = user.trimmingCharacters(in: .whitespacesAndNewlines)
-        return "<|turn>system\n\(system)<turn|>\n<|turn>user\n\(user)<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"
+    /// A system message, then user and model messages taking turns and ending with a user message, in Gemma 4's chat
+    /// format, with thinking switched off by the empty thought channel: what the context holds after a chat's turns.
+    static func gemma4Prompt(system: String, turns: [String]) -> String {
+        var prompt = "<|turn>system\n\(system.trimmingCharacters(in: .whitespacesAndNewlines))<turn|>\n"
+        for (index, turn) in turns.enumerated() {
+            let text = turn.trimmingCharacters(in: .whitespacesAndNewlines)
+            prompt += index.isMultiple(of: 2) ? "<|turn>user\n\(text)<turn|>\n" : "<|turn>model\n<|channel>thought\n<channel|>\(text)<turn|>\n"
+        }
+        return prompt + "<|turn>model\n<|channel>thought\n<channel|>"
     }
 
     /// Generates a reply, constrained to the GBNF grammar when one is given.
@@ -125,7 +129,13 @@ public final class LanguageModel {
     /// - Parameter followUp: Tokens to leave room for in the messages and replies that `continueChat` adds; the context
     ///   grows to fit them with the first message, since it can't grow during a chat.
     public func startChat(system: String, user: String, grammar: String?, maxTokens: Int, followUp: Int = 0) throws -> Completion {
-        let prompt = tokenize(Self.gemma4Prompt(system: system, user: user), addingStart: true)
+        try startChat(system: system, turns: [user], grammar: grammar, maxTokens: maxTokens, followUp: followUp)
+    }
+
+    /// Starts a chat that went some way before: `turns` are user and model messages taking turns, ending with the user
+    /// message to reply to.
+    public func startChat(system: String, turns: [String], grammar: String?, maxTokens: Int, followUp: Int = 0) throws -> Completion {
+        let prompt = tokenize(Self.gemma4Prompt(system: system, turns: turns), addingStart: true)
         fit(prompt.count + maxTokens + followUp)
         llama_memory_clear(llama_get_memory(context), true)
         held = 0

@@ -1916,6 +1916,7 @@ final class AppModel {
             }
             if let last = exchanges[id]?.indices.last {
                 exchanges[id]?[last].answer = reply?.answer
+                exchanges[id]?[last].reply = reply?.raw
                 exchanges[id]?[last].failure = failure
                 if let reply, let changed = reply.notes {
                     if results[id]?.notes == notes {

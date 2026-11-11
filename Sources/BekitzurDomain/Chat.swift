@@ -20,6 +20,8 @@ public struct ChatExchange: Codable, Sendable, Equatable, Identifiable {
     public var notesBefore: Notes?
     public var notesAfter: Notes?
     public var undone: Bool
+    /// The model's reply as it wrote it, which a chat that starts over is given back as its own.
+    public var reply: String?
 
     public init(message: String) {
         id = UUID()
@@ -34,10 +36,13 @@ public struct ChatReply: Sendable, Equatable {
     public let answer: Answer
     public let notes: Notes?
     public let edits: [AppliedEdit]
+    /// The model's reply as it wrote it.
+    public let raw: String
 
-    public init(answer: Answer, notes: Notes? = nil, edits: [AppliedEdit] = []) {
+    public init(answer: Answer, notes: Notes? = nil, edits: [AppliedEdit] = [], raw: String = "") {
         self.answer = answer
         self.notes = notes
         self.edits = edits
+        self.raw = raw
     }
 }

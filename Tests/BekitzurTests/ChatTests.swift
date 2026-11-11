@@ -190,4 +190,87 @@ struct ChatTests {
         #expect(!history.contains("Question 1?") && !history.contains("Question 2?"))
         #expect(history.contains("Question 3?") && history.contains("Question 12?"))
     }
+
+    @Test func earlierTurnsAreInGemmasFormat() {
+        let prompt = LanguageModel.gemma4Prompt(system: "S", turns: ["U1", "M1", "U2"])
+
+        #expect(prompt == "<|turn>system\nS<turn|>\n<|turn>user\nU1<turn|>\n<|turn>model\n<|channel>thought\n<channel|>M1<turn|>\n<|turn>user\nU2<turn|>\n<|turn>model\n<|channel>thought\n<channel|>")
+    }
+
+    /// The last exchange comes back as it went, with the Notes the chat saw then, so "remove it" points where it did.
+    @Test func aChatThatStartsOverIsGivenItsLastReplyAsItsOwn() {
+        var question = ChatExchange(message: "Who works on the flow?")
+        question.answer = Answer(text: "Ron.", evidence: [Evidence(turn: "T001", quote: "a b")])
+        question.reply = "{}\nAnswer: Ron."
+        let added = addingAnItem()
+        let listing = ConversationChat.listing(notes)
+        let request = ConversationChat.request("Add an item for Maya", notesIn: .english)
+        let first = """
+            TRANSCRIPT
+
+            The Notes Bekitzur wrote from it:
+            \(listing)
+
+            Earlier messages about this conversation, with the answers I was given:
+            - Message: Who works on the flow?
+              Answer: Ron. (T001)
+
+            \(request)
+            """
+
+        let after = ConversationChat.listing(added.notesAfter!)
+
+        let opening = ConversationChat.opening("TRANSCRIPT", notes: added.notesAfter!, after: [question, added], request: "Message: Remove it")
+
+        #expect(opening == [first, added.reply!, "The Notes now:\n\(after)\n\nYour last reply changed A2.\n\nMessage: Remove it"])
+    }
+
+    @Test func whatTheLastReplyLeftDifferentComesWithTheNextMessage() {
+        var undone = addingAnItem()
+        undone.undone = true
+        var unanswered = ChatExchange(message: "Who decides?")
+        unanswered.answer = .notInConversation
+        unanswered.reply = "{}\nAnswer:"
+        let listing = ConversationChat.listing(notes)
+
+        let afterUndo = ConversationChat.opening("TRANSCRIPT", notes: notes, after: [undone], request: "Message: Add it back")
+        let afterNothing = ConversationChat.opening("TRANSCRIPT", notes: notes, after: [unanswered], request: "Message: And Ron?")
+
+        #expect(afterUndo.last == "The Notes now:\n\(listing)\n\nMessage: Add it back")
+        #expect(afterNothing.last == "\(ConversationChat.notFoundNote)\n\nMessage: And Ron?")
+    }
+
+    @Test func theNextMessageSaysWhatTheLastReplyChanged() {
+        let edits = [
+            AppliedEdit(kind: .changed, section: .actionItem, text: "Connect the new flow to Kafka"),
+            AppliedEdit(kind: .removed, section: .decision, text: "The new flow goes behind a flag"),
+            AppliedEdit(kind: .summary, section: nil, text: "Ron connects the flow."),
+        ]
+
+        #expect(ConversationChat.lastChange(edits, in: notes) == "Your last reply changed A1, the summary.\n\n")
+        #expect(ConversationChat.lastChange([edits[1]], in: notes) == "")
+    }
+
+    /// A chat saved before replies were kept is given its earlier messages as a list.
+    @Test func withoutTheLastReplyTheEarlierMessagesAreListed() {
+        var old = ChatExchange(message: "Who works on the flow?")
+        old.answer = Answer(text: "Ron.", evidence: [])
+
+        let opening = ConversationChat.opening("TRANSCRIPT", notes: notes, after: [old], request: "Message: And Maya?")
+
+        #expect(opening.count == 1)
+        #expect(opening.first?.hasSuffix("- Message: Who works on the flow?\n  Answer: Ron.\n\nMessage: And Maya?") == true)
+    }
+
+    private func addingAnItem() -> ChatExchange {
+        let (changed, applied) = notes.applying([.add(.actionItem, text: "Send the report", owner: "Maya", due: nil)]) { _ in nil }
+        var exchange = ChatExchange(message: "Add an item for Maya")
+        exchange.answer = Answer(text: "Added an action item for Maya to send the report.", evidence: [])
+        exchange.edits = applied
+        exchange.notesBefore = notes
+        exchange.notesAfter = changed
+        exchange.reply = #"{"asks": "change", "edits": [{"add": "action_item", "text": "Send the report", "owner": "Maya", "due": null}], "evidence": []}"#
+            + "\nAnswer: Added an action item for Maya to send the report."
+        return exchange
+    }
 }

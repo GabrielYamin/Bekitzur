@@ -93,9 +93,19 @@ struct NotesEditTests {
         exchange.edits = [AppliedEdit(kind: .added, section: .actionItem, text: "Check it")]
         exchange.notesBefore = notes
         exchange.notesAfter = applying([.add(.actionItem, text: "Check it", owner: "Dana", due: nil)]).notes
+        exchange.reply = #"{"asks": "change", "edits": [{"add": "action_item", "text": "Check it", "owner": "Dana", "due": null}], "evidence": []}"# + "\nAnswer: Added it."
 
         let saved = try JSONDecoder().decode([ChatExchange].self, from: JSONEncoder().encode([exchange]))
 
         #expect(saved == [exchange])
+    }
+
+    @Test func aChatSavedBeforeRepliesWereKeptStillReads() throws {
+        let saved = #"[{"id": "6F9619FF-8B86-D011-B42D-00C04FC964FF", "message": "Who decides?", "edits": [], "undone": false}]"#
+
+        let chat = try JSONDecoder().decode([ChatExchange].self, from: Data(saved.utf8))
+
+        #expect(chat.map(\.message) == ["Who decides?"])
+        #expect(chat.first?.reply == nil)
     }
 }
