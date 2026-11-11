@@ -46,6 +46,25 @@ struct ConversationTransferTests {
         #expect(try FileManager.default.attributesOfItem(atPath: folder.path)[.posixPermissions] as? Int == 0o700)
     }
 
+    /// The chat is the user's own: it's kept with the Conversation, and left out when it's exported.
+    @Test func theChatStaysWithItsUser() throws {
+        let here = temporary(), there = temporary(), file = temporary(ConversationLibrary.fileExtension)
+        defer { remove(here, there, file) }
+        let library = ConversationLibrary(root: here), other = ConversationLibrary(root: there)
+        let info = try conversation(in: library)
+        var exchange = ChatExchange(message: "Who's doing the review?")
+        exchange.answer = .notInConversation
+        try library.save([exchange], for: info.id)
+
+        try library.export(info.id, to: file)
+        let imported = try other.importConversations(from: file)
+
+        #expect(library.chat(for: info.id) == [exchange])
+        #expect(imported.map(\.id) == [info.id])
+        #expect(other.chat(for: info.id).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: other.folder(for: info.id).appending(path: ConversationLibrary.chatFile).path))
+    }
+
     @Test func aConversationAlreadyHereComesInUnderAnIDOfItsOwn() throws {
         let root = temporary(), file = temporary(ConversationLibrary.fileExtension)
         defer { remove(root, file) }

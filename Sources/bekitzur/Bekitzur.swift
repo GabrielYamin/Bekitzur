@@ -9,7 +9,7 @@ struct Bekitzur: AsyncParsableCommand {
         abstract: "Runs the Bekitzur engine on audio files.",
         subcommands: [
             ProcessCommand.self, Transcribe.self, Enroll.self, SpeakersCommand.self, AlignCommand.self, LanguageCommand.self, NotesCommand.self, VocabularyCommand.self,
-            AudioCheckCommand.self, EnglishTermsCommand.self, LiveHelperCommand.self, SpeechCommand.self, AskCommand.self, ModelsCommand.self,
+            AudioCheckCommand.self, EnglishTermsCommand.self, LiveHelperCommand.self, SpeechCommand.self, ChatCommand.self, ModelsCommand.self,
             SeparateCommand.self,
         ]
     )

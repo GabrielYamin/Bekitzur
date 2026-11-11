@@ -22,8 +22,16 @@ extension ConversationLibrary {
 
     /// Writes a Conversation's folder, zipped, to `file`.
     public func export(_ id: String, to file: URL) throws {
-        try? FileManager.default.removeItem(at: file)
-        try Self.run("ditto", ["-c", "-k", "--norsrc", "--noextattr", "--noacl", "--keepParent", folder(for: id).path, file.path])
+        let fileManager = FileManager.default
+        try? fileManager.removeItem(at: file)
+        let staging = fileManager.temporaryDirectory.appending(path: "bekitzur-export-\(UUID().uuidString)")
+        let copy = staging.appending(path: folder(for: id).lastPathComponent)
+        try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: staging) }
+        // A copy on the same volume shares the recording's blocks rather than taking room of its own.
+        try fileManager.copyItem(at: folder(for: id), to: copy)
+        try? fileManager.removeItem(at: copy.appending(path: Self.chatFile))
+        try Self.run("ditto", ["-c", "-k", "--norsrc", "--noextattr", "--noacl", "--keepParent", copy.path, file.path])
     }
 
     /// Adds the Conversations in an exported file, a zip of Conversation folders, or a folder that is one or holds some,

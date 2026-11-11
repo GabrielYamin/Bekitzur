@@ -104,18 +104,11 @@ final class AppModel {
     private(set) var liveTranscripts: [String: Transcript] = [:]
     /// Conversations whose live transcription stopped while they were recorded.
     private(set) var liveStopped: Set<String> = []
-    /// Questions asked about each Conversation in this session, with what its Transcript says.
-    private(set) var exchanges: [String: [Exchange]] = [:]
-    /// The Conversation whose question is being answered; one question at a time.
-    private(set) var askingID: String?
+    /// Each Conversation's chat, loaded as its Chat tab opens.
+    private(set) var exchanges: [String: [ChatExchange]] = [:]
+    /// The Conversation whose message the chat is replying to; one message at a time.
+    private(set) var replyingID: String?
     @ObservationIgnored private let assistant = ConversationAssistant()
-
-    struct Exchange: Identifiable {
-        let id = UUID()
-        let question: String
-        var answer: Answer?
-        var failure: String?
-    }
     private(set) var voiceSample: VoiceSample = .idle
     /// What macOS hasn't allowed Bekitzur yet.
     private(set) var missingPermissions: [MissingPermission] = []
@@ -1244,7 +1237,11 @@ final class AppModel {
         let how = notesOnly != nil ? "Notes only" : kept != nil ? "same Transcript" : live != nil ? "live Transcript" : "new Transcript"
         let notesLanguage = self.notesLanguage
         AppLog.write("\(id): processing (\(info.language?.name ?? "language to detect")\(info.people.map { ", \($0) people" } ?? ""), \(how), \(flags.fixes.count) fixes, Notes in \(notesLanguage.name))")
+        let assistant = self.assistant
         Task {
+            // The chat's copy of the language model goes first, once a reply it's writing is done: two copies don't fit
+            // a 32 GB Mac.
+            await assistant.unload(ifIdleFor: 0)
             do {
                 var result: ProcessedConversation
                 let warning: String?
@@ -1876,38 +1873,91 @@ final class AppModel {
         AppLog.write("Read the Conversations folder again: \(conversations.count) Conversations")
     }
 
-    // MARK: Asking
+    // MARK: Chat
 
-    /// Asks about a Conversation, answered from its Transcript with the user's fixes; nothing outside it.
-    func ask(_ question: String, about id: String) {
-        let question = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !question.isEmpty, askingID == nil, let result = results[id], let info = conversations.first(where: { $0.id == id }) else { return }
+    func loadChat(_ id: String) {
+        if exchanges[id] == nil { exchanges[id] = library.chat(for: id) }
+    }
+
+    /// Past about two hours of Transcript, the model stops finding what a message asks about.
+    func chatTooLong(_ id: String) -> Bool {
+        (results[id]?.transcript.segments.last?.end ?? 0) >= Chat.longestConversation
+    }
+
+    /// A Conversation is processing or waiting to, which needs the language model's memory, so the chat waits.
+    var isProcessing: Bool {
+        conversations.contains { $0.status == .processing }
+    }
+
+    /// Sends a message to a Conversation's chat, answered from its Transcript with the user's fixes and its Notes,
+    /// which the reply can change; nothing outside them. Not while a Conversation is processing, which needs the
+    /// language model's memory.
+    func send(_ message: String, about id: String) {
+        let message = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty, replyingID == nil, !isProcessing, !chatTooLong(id),
+              let result = results[id], let info = conversations.first(where: { $0.id == id }) else { return }
+        loadChat(id)
         let transcript = result.transcript.applying(flags[id] ?? library.flags(for: id))
-        let earlier = (exchanges[id] ?? []).compactMap { exchange in exchange.answer.map { (question: exchange.question, answer: $0) } }
-        exchanges[id, default: []].append(Exchange(question: question))
-        askingID = id
+        let earlier = exchanges[id] ?? []
+        let notes = result.notes
+        exchanges[id, default: []].append(ChatExchange(message: message))
+        replyingID = id
         let assistant = self.assistant
         Task {
             let started = Date()
-            var answer: Answer?
+            var reply: ChatReply?
             var failure: String?
             do {
-                answer = try await assistant.ask(
-                    question, about: id, transcript: transcript, date: info.startedAt, language: result.transcript.language, after: earlier
+                reply = try await assistant.send(
+                    message, about: id, transcript: transcript, notes: notes, date: info.startedAt, language: result.transcript.language, after: earlier
                 )
             } catch {
                 failure = error.localizedDescription
             }
             if let last = exchanges[id]?.indices.last {
-                exchanges[id]?[last].answer = answer
+                exchanges[id]?[last].answer = reply?.answer
                 exchanges[id]?[last].failure = failure
+                if let reply, let changed = reply.notes {
+                    if results[id]?.notes == notes {
+                        exchanges[id]?[last].edits = reply.edits
+                        exchanges[id]?[last].notesBefore = notes
+                        exchanges[id]?[last].notesAfter = changed
+                        saveNotes(changed, for: id)
+                    } else {
+                        exchanges[id]?[last].failure = String(localized: "The Notes changed while the chat was replying, so it didn't change them.")
+                    }
+                }
             }
-            askingID = nil
-            let outcome = failure.map { "failed: \($0)" } ?? (answer?.text == nil ? "not in the Conversation" : "\(answer?.evidence.count ?? 0) quotes")
-            AppLog.write(String(format: "%@: question answered in %.1f s (%@)", id, Date().timeIntervalSince(started), outcome))
-            // The model takes about 16 GB; it stays loaded for follow-up questions, not for good.
+            replyingID = nil
+            saveChat(id)
+            let outcome = failure.map { "failed: \($0)" }
+                ?? "\(reply?.edits.count ?? 0) changes, \(reply?.answer.text == nil ? "no answer" : "\(reply?.answer.evidence.count ?? 0) quotes")"
+            AppLog.write(String(format: "%@: chat replied in %.1f s (%@)", id, Date().timeIntervalSince(started), outcome))
+            // The model takes about 16 GB; it stays loaded for follow-up messages, not for good.
             try? await Task.sleep(for: .seconds(300))
             await assistant.unload(ifIdleFor: 290)
+        }
+    }
+
+    /// The last change the chat made to the Notes, while they're still as it left them.
+    func canUndo(_ exchange: ChatExchange, in id: String) -> Bool {
+        guard !exchange.undone, let after = exchange.notesAfter, results[id]?.notes == after else { return false }
+        return exchanges[id]?.last(where: { !$0.edits.isEmpty && !$0.undone })?.id == exchange.id
+    }
+
+    func undo(_ exchange: ChatExchange, in id: String) {
+        guard canUndo(exchange, in: id), let before = exchange.notesBefore,
+              let index = exchanges[id]?.firstIndex(where: { $0.id == exchange.id }) else { return }
+        saveNotes(before, for: id)
+        exchanges[id]?[index].undone = true
+        saveChat(id)
+    }
+
+    private func saveChat(_ id: String) {
+        do {
+            try library.save(exchanges[id] ?? [], for: id)
+        } catch {
+            alert = String(localized: "Couldn't save the chat: \(error.localizedDescription)")
         }
     }
 

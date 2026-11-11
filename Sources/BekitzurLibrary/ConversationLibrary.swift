@@ -83,6 +83,18 @@ public struct ConversationLibrary: Sendable {
         try? FileManager.default.removeItem(at: folder(for: id).appending(path: "live.json"))
     }
 
+    /// The Conversation's chat, oldest message first.
+    public func chat(for id: String) -> [ChatExchange] {
+        (try? Self.decoder.decode([ChatExchange].self, from: Data(contentsOf: folder(for: id).appending(path: Self.chatFile)))) ?? []
+    }
+
+    public func save(_ chat: [ChatExchange], for id: String) throws {
+        try write(chat, to: folder(for: id).appending(path: Self.chatFile))
+    }
+
+    /// The user's own, so an exported Conversation leaves it out.
+    static let chatFile = "chat.json"
+
     /// The Recording's audio: the two recorded tracks, or an imported recording.
     public func audioTracks(for id: String) -> [URL] {
         ((try? FileManager.default.contentsOfDirectory(at: folder(for: id), includingPropertiesForKeys: nil)) ?? [])

@@ -12,7 +12,7 @@ Bekitzur is open source, under the [MIT License](LICENSE). Its releases are on t
 - Transcribes Hebrew with ivrit.ai's Whisper fine-tune and English with Whisper large-v3-turbo, through whisper.cpp. A call's two sides are transcribed each on its own, the microphone without the speakers' copy of the call, so two people talking at once are both written down. English terms spoken in Hebrew come out in English letters (the Vocabulary), and corrections teach it new spellings.
 - Separates Speakers with FluidAudio (pyannote community-1 and NVIDIA's Nemotron 3 Diarization), and names people it has heard before from their Voiceprints, which can be renamed in Settings, everywhere they appear. Where people in a room, or on the same side of a call, talk at once, it separates their voices with Alibaba's MossFormer2 once the Notes are written, transcribes each on its own, and shows their lines together in the Transcript.
 - Writes the Notes with Gemma 4 26B-A4B through llama.cpp. Quotes are checked against the Transcript, and due dates are worked out in code.
-- For review: listen back along the Transcript, hear the moment a Notes item or an answer comes from without leaving it, fix words and Speakers, update or edit the Notes, copy the Notes or the Transcript as Markdown, rename Conversations, check Action Items off and add the ones with a due day to your calendar, and ask questions that are answered only from the Transcript. Once every Action Item is done, it offers, now and then, to delete the Conversation.
+- For review: listen back along the Transcript, hear the moment a Notes item or an answer comes from without leaving it, fix words and Speakers, update or edit the Notes, copy the Notes or the Transcript as Markdown, rename Conversations, check Action Items off and add the ones with a due day to your calendar, and chat about a Conversation of up to 2 hours, which answers only from its Transcript and Notes and changes the Notes when asked, with Undo. Once every Action Item is done, it offers, now and then, to delete the Conversation.
 - Finds Conversations by the people in them and by what was said in them, in their titles, Notes, and Transcripts.
 - Speaks English or Hebrew: Settings → Language picks the app's language, or follows the Mac's, and, on its own, the language Notes are written in, whatever language the Conversation is in.
 - Downloads its own models with their progress, imports recordings made elsewhere, exports a Conversation as one file that someone else with Bekitzur opens to add it, and updates itself from signed releases after asking.
@@ -94,7 +94,7 @@ swift build -c release --product bekitzur
 .build/release/bekitzur transcribe --live --language auto recording.m4a
 ```
 
-Its commands are `process` (Transcript, Speakers, and Notes for one recording), `transcribe`, `language`, `speech`, `speakers`, `enroll`, `align`, `separate`, `notes`, `vocabulary`, `ask`, `models`, and two experiments, `audio-check` and `english-terms`. `bekitzur help <command>` explains each one.
+Its commands are `process` (Transcript, Speakers, and Notes for one recording), `transcribe`, `language`, `speech`, `speakers`, `enroll`, `align`, `separate`, `notes`, `vocabulary`, `chat`, `models`, and two experiments, `audio-check` and `english-terms`. `bekitzur help <command>` explains each one.
 
 ## How the code is organized
 
@@ -117,7 +117,7 @@ Its commands are `process` (Transcript, Speakers, and Notes for one recording), 
 | `Tests` | Unit tests |
 | `scripts` | Building, packaging, installing, testing, the icon, and update signing |
 | `eval` | Scoring scripts for word error rate, Speakers, and the Vocabulary |
-| `spikes` | Experiments: the comparison that chose Gemma for the Notes (`llm-bakeoff`), and questions to try Ask with (`ask-eval`) |
+| `spikes` | Experiments: the comparison that chose Gemma for the Notes (`llm-bakeoff`), and questions to try the chat with (`ask-eval`) |
 | `docs` | The plan, the architecture decisions, and research on the models |
 | `release/notes` | Each release's notes, as `<version>.md` |
 | `.github/workflows` | CI, which builds, tests, and packages each pull request, and the Release workflow |

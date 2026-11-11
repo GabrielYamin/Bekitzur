@@ -41,15 +41,15 @@
 "Add an Action Item" = "הוספת משימה";
 "Add an Open Question" = "הוספת שאלה פתוחה";
 "Add to Calendar" = "הוספה ליומן";
+"Added a Decision: %@" = "נוספה החלטה: %@";
+"Added an Action Item: %@" = "נוספה משימה: %@";
+"Added an Open Question: %@" = "נוספה שאלה פתוחה: %@";
 "All Action Items are done. Delete this Conversation?" = "כל המשימות בוצעו. למחוק את השיחה הזו?";
 "Allow…" = "מתן הרשאה…";
-"Answers come only from the Transcript, with the lines they're based on. When the Transcript doesn't say, you'll be told so." = "התשובות מגיעות רק מהתמלול, עם השורות שעליהן הן מבוססות. כשאין לכך תשובה בתמלול, זה ייאמר במפורש.";
 "App language" = "שפת היישום";
-"Ask" = "לשאול";
-"Ask (beta)" = "שאלות (בטא)";
-"Ask a question, like who's doing what" = "אפשר לשאול שאלה, למשל מי עושה מה";
-"Ask about this Conversation" = "שאלות על השיחה הזו";
+"Ask about what was said, or ask to change the Notes. Answers come only from the Transcript and the Notes, with the lines they're based on, and you'll be told when they don't say." = "אפשר לשאול על מה שנאמר, או לבקש לשנות את הסיכום. התשובות מגיעות רק מהתמלול ומהסיכום, עם השורות שעליהן הן מבוססות. כשאין בהם תשובה, זה ייאמר במפורש.";
 "Ask again in a week" = "לשאול שוב בעוד שבוע";
+"Ask something, or ask to change the Notes" = "אפשר לשאול, או לבקש לשנות את הסיכום";
 "Bekitzur" = "בקיצור";
 "Bekitzur %@ is available" = "בקיצור %@ זמין";
 "Bekitzur %@ is available." = "בקיצור %@ זמין.";
@@ -93,6 +93,14 @@
 "Can't read audio from %@" = "לא ניתן לקרוא שמע מ-%@";
 "Cancel" = "ביטול";
 "Change the Notes: the title, summary, and each item" = "עריכת הסיכום: הכותרת, התקציר וכל פריט";
+"Changed a Decision: %@" = "שונתה החלטה: %@";
+"Changed an Action Item: %@" = "שונתה משימה: %@";
+"Changed an Open Question: %@" = "שונתה שאלה פתוחה: %@";
+"Changed the summary" = "התקציר שונה";
+"Changed the title: %@" = "הכותרת שונתה: %@";
+"Chat (beta)" = "צ׳אט (בטא)";
+"Chat about this Conversation" = "צ׳אט על השיחה הזו";
+"Chat works with Conversations up to 2 hours" = "הצ׳אט עובד עם שיחות של עד שעתיים";
 "Check for Updates…" = "בדיקת עדכונים…";
 "Checking %@" = "בודק את %@";
 "Checking English terms" = "בודק מונחים באנגלית";
@@ -118,6 +126,7 @@
 "Couldn't save the Action Item: %@" = "לא ניתן היה לשמור את המשימה: %@";
 "Couldn't save the Notes: %@" = "לא ניתן היה לשמור את הסיכום: %@";
 "Couldn't save the Vocabulary: %@" = "לא ניתן היה לשמור את המונחים: %@";
+"Couldn't save the chat: %@" = "לא ניתן היה לשמור את הצ׳אט: %@";
 "Couldn't save the marks: %@" = "לא ניתן היה לשמור את הסימונים: %@";
 "Couldn't save the name: %@" = "לא ניתן היה לשמור את השם: %@";
 "Couldn't save the title: %@" = "לא ניתן היה לשמור את הכותרת: %@";
@@ -240,6 +249,7 @@
 "Open Bekitzur to install it." = "אפשר לפתוח את בקיצור כדי להתקין אותו.";
 "Open Questions" = "שאלות פתוחות";
 "Open Settings" = "פתיחת ההגדרות";
+"Past that, the model starts missing what's in the Transcript." = "מעבר לזה, המודל מתחיל לפספס דברים שבתמלול.";
 "Pause" = "השהיה";
 "People" = "אנשים";
 "People who spoke" = "אנשים שדיברו";
@@ -273,6 +283,9 @@
 "Recording…" = "מקליט…";
 "Refresh" = "רענון";
 "Remove" = "הסרה";
+"Removed a Decision: %@" = "הוסרה החלטה: %@";
+"Removed an Action Item: %@" = "הוסרה משימה: %@";
+"Removed an Open Question: %@" = "הוסרה שאלה פתוחה: %@";
 "Rename" = "שינוי שם";
 "Rename Conversation" = "שינוי שם השיחה";
 "Rename…" = "שינוי שם…";
@@ -289,6 +302,7 @@
 "Search Conversations" = "חיפוש בשיחות";
 "Search Conversations (⌥⌘F)" = "חיפוש בשיחות (⌥⌘F)";
 "Select a Conversation" = "בחירת שיחה";
+"Send" = "שליחה";
 "Send a test notification" = "שליחת עדכון לבדיקה";
 "Separate Speakers again" = "הפרדת דוברים מחדש";
 "Separated %lld places where people talked at once." = "הופרדו %lld מקומות שבהם אנשים דיברו בבת אחת.";
@@ -328,6 +342,7 @@
 "Take the mark off" = "הסרת הסימון";
 "Take the marks off" = "הסרת הסימונים";
 "Take the wrong-speaker mark off" = "הסרת הסימון של דובר שגוי";
+"The Notes changed while the chat was replying, so it didn't change them." = "הסיכום השתנה בזמן שהצ׳אט ענה, ולכן הוא לא שינה אותו.";
 "The Notes file is missing" = "קובץ הסיכום חסר";
 "The Recording has no audio." = "אין שמע בהקלטה.";
 "The Transcript follows about half a minute behind. Speakers and English terms are added when you stop." = "התמלול מגיע באיחור של כחצי דקה. הדוברים והמונחים באנגלית מתווספים כשעוצרים.";
@@ -335,6 +350,7 @@
 "The audio couldn't be read, so these Notes come from the live Transcript of the first %lld minutes, without Speakers." = "לא ניתן היה לקרוא את השמע, ולכן הסיכום הזה נכתב מהתמלול החי של %lld הדקות הראשונות, בלי דוברים.";
 "The call ended" = "השיחה הסתיימה";
 "The call's sound couldn't be read, so these Notes only have what your microphone heard." = "לא ניתן היה לקרוא את הצליל של השיחה, ולכן בסיכום הזה יש רק את מה שהמיקרופון שמע.";
+"The chat waits while Bekitzur processes a Conversation." = "הצ׳אט ממתין בזמן שבקיצור מעבד שיחה.";
 "The download couldn't be unpacked (ditto exited with %d)." = "לא ניתן היה לפתוח את ההורדה (ditto הסתיים עם %d).";
 "The download doesn't match the release, so it wasn't installed." = "ההורדה לא תואמת לגרסה, ולכן היא לא הותקנה.";
 "The download has no Bekitzur.app in it." = "אין Bekitzur.app בהורדה.";
@@ -368,6 +384,8 @@
 "Try Again" = "ניסיון חוזר";
 "Try again" = "ניסיון חוזר";
 "Type what was said…" = "הקלדת מה שנאמר…";
+"Undo" = "ביטול השינוי";
+"Undone" = "השינוי בוטל";
 "Update Notes" = "עדכון הסיכום";
 "Version" = "גרסה";
 "View" = "תצוגה";
