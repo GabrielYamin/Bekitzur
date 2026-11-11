@@ -24,6 +24,10 @@ public final class ConversationChat {
     /// changes left. Told nothing after adding an item, it took "change its owner" for the first one.
     private var notesSeen: Notes?
     private var lastEdits: [AppliedEdit] = []
+    /// The other Conversations are listed in the chat, for a message to name one.
+    private var listed = false
+    /// The other Conversation whose Notes the chat last brought in, which a follow-up can be about too.
+    private var broughtIn: ChatReference?
     /// The model's last reply, before its quotes were checked, with its second look when it had one.
     public private(set) var lastReply = ""
 
@@ -44,47 +48,82 @@ public final class ConversationChat {
     ///   - earlier: Messages already sent about this Conversation, with the changes and answers the user was shown; a
     ///     chat that starts over is given the last of them.
     ///   - today: When the message is sent, which a due phrase said only in the chat counts from.
-    public func send(_ message: String, notes: Notes, after earlier: [ChatExchange] = [], today: Date = Date()) throws -> ChatReply {
-        let request = Self.request(message, notesIn: notes.language ?? .english)
+    ///   - attached: Another Conversation the user picked to bring in with the message.
+    ///   - others: The other Conversations, which a message can name by who was there and when; the chat finds the one it
+    ///     means and brings in its Notes. Throws `ChatError.conversationNotFound` when none fits.
+    public func send(
+        _ message: String,
+        notes: Notes,
+        after earlier: [ChatExchange] = [],
+        today: Date = Date(),
+        bringing attached: ChatReference? = nil,
+        from others: OtherConversations? = nil
+    ) throws -> ChatReply {
+        var request = Self.request(message, notesIn: notes.language ?? .english)
+        if let attached { request = Self.brought(attached) + "\n\n" + request }
+        let candidates = attached == nil ? Array((others?.candidates ?? []).prefix(Self.choiceCount)) : []
+        let grammar = candidates.isEmpty ? Self.grammar : Self.lookupGrammar
         var completion: Completion?
         if chatting {
             var update = lastNotFound ? Self.notFoundNote + "\n\n" : ""
             if notes != notesSeen || !lastEdits.isEmpty {
                 update += "The Notes now:\n" + Self.listing(notes) + "\n\n" + Self.lastChange(lastEdits, in: notes)
             }
+            if !candidates.isEmpty, !listed { update += Self.choices(candidates, today: today, this: date, with: speakers) + "\n\n" }
             do {
-                completion = try model.continueChat(user: update + request, grammar: Self.grammar, maxTokens: Self.replyTokens)
+                completion = try model.continueChat(user: update + request, grammar: grammar, maxTokens: Self.replyTokens)
+                listed = listed || !candidates.isEmpty
             } catch LanguageModelError.promptTooLong {
                 // The chat filled the room left after the transcript: start over with it.
             }
         }
         if completion == nil {
-            completion = try start(request, notes: notes, after: earlier)
+            completion = try start(request, notes: notes, after: earlier, grammar: grammar, others: candidates, today: today)
             chatting = true
+            listed = !candidates.isEmpty
+            broughtIn = earlier.last { $0.answer != nil && $0.failure == nil }?.reference
         }
+        if let attached { broughtIn = attached }
         notesSeen = notes
+        lastEdits = []
+        lastNotFound = false
         var used = completion?.text ?? ""
         lastReply = used
+        var reference = attached
+        if !candidates.isEmpty, Self.asksAboutAnother(used) {
+            guard let picked = Self.picked(used), (1...candidates.count).contains(picked),
+                  let theirs = others?.notes(candidates[picked - 1].id) else { throw ChatError.conversationNotFound }
+            reference = ChatReference(candidates[picked - 1], notes: theirs)
+            broughtIn = reference
+            // The message comes again right after the Notes, as when they're picked from the menu: told only to reply to
+            // it with them, the model answered from the transcript.
+            used = try model.continueChat(user: Self.brought(reference!) + "\n\n" + request, grammar: Self.grammar, maxTokens: Self.replyTokens).text
+            lastReply += "\n\n" + used
+        }
+        let theirs = broughtIn?.notes
         let due = { [turns, date] (phrase: String) in Self.due(phrase, saidIn: turns, on: date, today: today) }
-        var reply = Self.reply(from: used, turns: turns, notes: notes, due: due)
+        var reply = Self.reply(from: used, turns: turns, notes: notes, other: theirs, due: due)
+        let again = Self.lookAgain + (reference == nil ? "" : "\n\n" + Self.lookInTheirs)
         if reply.answer.text == nil, reply.edits.isEmpty,
-           let second = try? model.continueChat(user: Self.lookAgain, grammar: Self.answerGrammar, maxTokens: Self.replyTokens) {
+           let second = try? model.continueChat(user: again, grammar: Self.answerGrammar, maxTokens: Self.replyTokens) {
             used = second.text
             lastReply += "\n\nLooked again:\n" + used
-            reply = Self.reply(from: used, turns: turns, notes: notes, due: due)
+            reply = Self.reply(from: used, turns: turns, notes: notes, other: theirs, due: due)
         }
+        if reference == nil, let broughtIn, Self.cites(used, from: broughtIn.notes) { reference = broughtIn }
         if let changed = reply.notes { notesSeen = changed }
         lastEdits = reply.edits
         lastNotFound = reply.answer.text == nil && reply.edits.isEmpty
-        return ChatReply(answer: reply.answer, notes: reply.notes, edits: reply.edits, raw: used)
+        return ChatReply(answer: reply.answer, notes: reply.notes, edits: reply.edits, raw: used, reference: reference)
     }
 
     /// A message as the chat sends it. Told only which language to answer in, the model wrote a summary asked for in
-    /// Hebrew in Hebrew, and its answer in the English of the Notes.
+    /// Hebrew in Hebrew, and its answer in the English of the Notes; told to answer in Hebrew "and write anything you put
+    /// in the Notes in English", it answered in Hebrew and then again in English.
     static func request(_ message: String, notesIn language: ConversationLanguage) -> String {
         """
         Message: \(message.trimmingCharacters(in: .whitespacesAndNewlines))
-        Answer in \(Self.language(of: message).name), and write anything you put in the Notes in \(language.name).
+        Answer in \(Self.language(of: message).name) only; any text you put in the Notes is in \(language.name).
         """
     }
 
@@ -100,35 +139,51 @@ public final class ConversationChat {
     like "No feature is named; …". If it doesn't talk about it at all, give no evidence and an empty answer again.
     """
 
-    private func start(_ request: String, notes: Notes, after earlier: [ChatExchange]) throws -> Completion {
+    /// Added when the message brought in another conversation's Notes: asked to look again at the transcript only, the
+    /// model said again that the other Notes don't answer what the team decided, where an Action Item there did.
+    static let lookInTheirs = """
+    The other conversation's Notes count too: if any of their items is about what the message means, cite it and answer \
+    with what it says, starting with what it doesn't say.
+    """
+
+    private func start(
+        _ request: String, notes: Notes, after earlier: [ChatExchange], grammar: String, others: [ChatCandidate], today: Date
+    ) throws -> Completion {
         let transcript = NotesWriter.render(turns, date: date, language: language)
         let system = Self.instructions(for: language, notesIn: notes.language ?? .english)
+        let listed = others.isEmpty ? "" : Self.choices(others, today: today, this: date, with: speakers)
         do {
-            return try model.startChat(
-                system: system, turns: Self.opening(transcript, notes: notes, after: earlier, request: request), grammar: Self.grammar,
-                maxTokens: Self.replyTokens, followUp: Self.room
-            )
+            let opening = Self.opening(transcript, notes: notes, after: earlier, request: request, listing: listed)
+            return try model.startChat(system: system, turns: opening, grammar: grammar, maxTokens: Self.replyTokens, followUp: Self.room)
         } catch LanguageModelError.promptTooLong where !earlier.isEmpty {
             // A Conversation too long for its earlier messages still gets an answer.
-            return try model.startChat(
-                system: system, turns: Self.opening(transcript, notes: notes, after: [], request: request), grammar: Self.grammar,
-                maxTokens: Self.replyTokens, followUp: Self.room
-            )
+            let opening = Self.opening(transcript, notes: notes, after: [], request: request, listing: listed)
+            return try model.startChat(system: system, turns: opening, grammar: grammar, maxTokens: Self.replyTokens, followUp: Self.room)
         }
+    }
+
+    /// Who spoke in this conversation, by the names the transcript gives them.
+    private var speakers: [String] {
+        var names: [String] = []
+        for turn in turns where !names.contains(turn.speaker) { names.append(turn.speaker) }
+        return names
     }
 
     /// The turns a chat starts with: the transcript, the Notes, and the earlier messages, then the new one. The last
     /// message that was replied to comes back as it went, its reply as the model's own, so that a message pointing at
     /// what it changed reads as in a chat that never stopped: given only as one of the earlier messages, "remove it"
     /// after "change its owner" read as a question about the meeting.
-    static func opening(_ transcript: String, notes: Notes, after earlier: [ChatExchange], request: String) -> [String] {
+    /// - Parameter choices: The other Conversations a message can name, listed after the Notes.
+    static func opening(_ transcript: String, notes: Notes, after earlier: [ChatExchange], request: String, listing choices: String = "") -> [String] {
         let replied = earlier.filter { $0.answer != nil && $0.failure == nil }
+        let listed = choices.isEmpty ? "" : "\n\n" + choices
         guard let last = replied.last, let reply = last.reply else {
-            return [transcript + "\n\nThe Notes Bekitzur wrote from it:\n" + listing(notes) + history(replied, in: notes) + "\n\n" + request]
+            return [transcript + "\n\nThe Notes Bekitzur wrote from it:\n" + listing(notes) + listed + history(replied, in: notes) + "\n\n" + request]
         }
         let seen = last.notesBefore ?? notes
-        let first = transcript + "\n\nThe Notes Bekitzur wrote from it:\n" + listing(seen) + history(Array(replied.dropLast()), in: seen)
-            + "\n\n" + Self.request(last.message, notesIn: seen.language ?? .english)
+        var first = transcript + "\n\nThe Notes Bekitzur wrote from it:\n" + listing(seen) + listed + history(Array(replied.dropLast()), in: seen) + "\n\n"
+        if let reference = last.reference { first += brought(reference) + "\n\n" }
+        first += Self.request(last.message, notesIn: seen.language ?? .english)
         var next = ""
         if last.answer?.text == nil, last.edits.isEmpty { next += notFoundNote + "\n\n" }
         if notes != (last.notesAfter ?? seen) || !last.edits.isEmpty {
@@ -176,11 +231,11 @@ public final class ConversationChat {
         return DueDateResolver.due(phrase, from: fromConversation ? date : today, calendar: calendar)
     }
 
-    /// The Notes as the chat reads them, each item named by its place: D1, A1, Q1.
-    static func listing(_ notes: Notes) -> String {
+    /// The Notes as the chat reads them, each item named by its place: D1, A1, Q1, after `prefix`.
+    static func listing(_ notes: Notes, prefix: String = "") -> String {
         var lines = ["Title: \(notes.title)", "Summary: \(notes.summary)"]
         lines.append(notes.decisions.isEmpty ? "Decisions: none" : "Decisions:")
-        for (index, decision) in notes.decisions.enumerated() { lines.append("D\(index + 1). \(decision.text)") }
+        for (index, decision) in notes.decisions.enumerated() { lines.append("\(prefix)D\(index + 1). \(decision.text)") }
         lines.append(notes.actionItems.isEmpty ? "Action items: none" : "Action items:")
         for (index, item) in notes.actionItems.enumerated() {
             var details: [String] = []
@@ -191,11 +246,65 @@ public final class ConversationChat {
                 details.append("due: \"\(phrase)\"")
             }
             if item.done == true { details.append("done") }
-            lines.append("A\(index + 1). \(item.text)" + (details.isEmpty ? "" : " (\(details.joined(separator: "; ")))"))
+            lines.append("\(prefix)A\(index + 1). \(item.text)" + (details.isEmpty ? "" : " (\(details.joined(separator: "; ")))"))
         }
         lines.append(notes.openQuestions.isEmpty ? "Open questions: none" : "Open questions:")
-        for (index, question) in notes.openQuestions.enumerated() { lines.append("Q\(index + 1). \(question.text)") }
+        for (index, question) in notes.openQuestions.enumerated() { lines.append("\(prefix)Q\(index + 1). \(question.text)") }
         return lines.joined(separator: "\n")
+    }
+
+    /// Another Conversation's Notes as the chat reads them, their items named OD1, OA1, OQ1, which no edit can name.
+    static func brought(_ reference: ChatReference) -> String {
+        let people = reference.people.isEmpty ? "" : ", with " + reference.people.joined(separator: ", ")
+        return "The Notes of another conversation, \"\(reference.title)\" on \(day(reference.date))\(people):\n" + listing(reference.notes, prefix: "O")
+    }
+
+    /// The most other Conversations a message can be matched against, newest first.
+    static let choiceCount = 40
+
+    /// The other Conversations a message can be about, newest first, by date, title, and who was there, after this
+    /// one's, with today's date for "last week". Asked about another one before it had seen them, the model took a
+    /// message naming someone who was only in one of them for a question about this conversation; without this one's
+    /// date and people beside them, a message naming the people and day of another.
+    static func choices(_ candidates: [ChatCandidate], today: Date, this date: Date, with people: [String]) -> String {
+        let here = people.isEmpty ? "" : ", with " + people.joined(separator: ", ")
+        var lines = ["This conversation is from \(day(date))\(here).", "The user's other recorded conversations, newest first; today is \(day(today)):"]
+        for (index, candidate) in candidates.prefix(choiceCount).enumerated() {
+            let people = candidate.people.isEmpty ? "" : ", with " + candidate.people.joined(separator: ", ")
+            lines.append("C\(index + 1). \(day(candidate.date)): \"\(candidate.title)\"\(people)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    static func day(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEEE, d MMMM yyyy"
+        return formatter.string(from: date)
+    }
+
+    /// The other conversation a reply says the message is about, by its place in `choices`; nil for none.
+    static func picked(_ text: String) -> Int? {
+        struct Pick: Decodable { let conversation: String? }
+        guard let pick = try? JSONDecoder().decode(Pick.self, from: Data(text.utf8)), let name = pick.conversation else { return nil }
+        return Int(name.dropFirst())
+    }
+
+    /// The reply says the message is about another conversation.
+    static func asksAboutAnother(_ text: String) -> Bool {
+        struct Asked: Decodable { let asks: String }
+        return (try? JSONDecoder().decode(Asked.self, from: Data(text.utf8)))?.asks == "another conversation"
+    }
+
+    /// The reply cites the other Conversation's Notes: an item of `theirs` by name, quoted, or restated in the answer.
+    static func cites(_ text: String, from theirs: Notes) -> Bool {
+        guard let separator = text.range(of: "\nAnswer:"),
+              let reply = try? JSONDecoder().decode(ModelReply.self, from: Data(text[..<separator.lowerBound].utf8)) else { return false }
+        let cited = reply.evidence.contains { cited in
+            if let item = cited.item { return item.hasPrefix("O") && theirs.place(of: String(item.dropFirst())) != nil }
+            return cited.quote.map { quotesAnItem($0, of: theirs) } ?? false
+        }
+        return cited || restatesAnItem(String(text[separator.upperBound...]), of: theirs)
     }
 
     /// The last messages that were replied to, each with the answer the user was shown, the turns it quoted, and the
@@ -214,6 +323,7 @@ public final class ConversationChat {
             }
             var answer = exchange.answer?.text ?? (exchange.edits.isEmpty ? "The transcript doesn't say." : "Changed the Notes.")
             if !named.isEmpty { answer += " (\(named.joined(separator: ", ")))" }
+            if let reference = exchange.reference { answer += " From the Notes of \"\(reference.title)\" on \(day(reference.date))." }
             if exchange.undone { answer += " I undid that change." }
             return "- Message: \(exchange.message)\n  Answer: \(answer)"
         }
@@ -223,9 +333,11 @@ public final class ConversationChat {
     static let notFoundNote = "I was told the transcript doesn't answer my last message."
 
     /// The model's reply as the chat's: its edits made to `notes`, and its answer with only the evidence that checks
-    /// out, a quote of the turn it cites, shown in the turn's words, or a Notes item `notes` has. A reply that changes
-    /// nothing needs some evidence and an answer.
-    static func reply(from text: String, turns: [Turn], notes: Notes, due: (String) -> (date: String, time: String?)?) -> ChatReply {
+    /// out, a quote of the turn it cites, shown in the turn's words, or an item `notes` has, or `other`, the Notes of
+    /// another Conversation brought in. A reply that changes nothing needs some evidence and an answer.
+    static func reply(
+        from text: String, turns: [Turn], notes: Notes, other: Notes? = nil, due: (String) -> (date: String, time: String?)?
+    ) -> ChatReply {
         guard let separator = text.range(of: "\nAnswer:"),
               let reply = try? JSONDecoder().decode(ModelReply.self, from: Data(text[..<separator.lowerBound].utf8)) else {
             return ChatReply(answer: .notInConversation)
@@ -235,12 +347,16 @@ public final class ConversationChat {
         var citesNotes = false
         for cited in reply.evidence {
             if let item = cited.item {
-                citesNotes = citesNotes || notes.place(of: item) != nil
+                let known = item.hasPrefix("O") ? other?.place(of: String(item.dropFirst())) != nil : notes.place(of: item) != nil
+                citesNotes = citesNotes || known
                 continue
             }
-            guard let id = cited.turn, let quote = cited.quote, let turn = turnWithID[id],
-                  let said = words(quotedBy: quote, in: turn.text) else { continue }
-            checked.append(Evidence(turn: turn.id, quote: said, speaker: turn.speaker, start: turn.start))
+            guard let id = cited.turn, let quote = cited.quote else { continue }
+            if let turn = turnWithID[id], let said = words(quotedBy: quote, in: turn.text) {
+                checked.append(Evidence(turn: turn.id, quote: said, speaker: turn.speaker, start: turn.start))
+            } else if quotesAnItem(quote, of: notes) || quotesAnItem(quote, of: other) {
+                citesNotes = true
+            }
         }
         // The quotes show which turns an answer comes from, so turn numbers the model writes into it go.
         let answer = text[separator.upperBound...].replacing(/(?:\s+(?:in|at|from|see))?\s*[\[(]T\d+(?:\s*[,–-]\s*T?\d+)*[\])]/, with: "")
@@ -249,6 +365,7 @@ public final class ConversationChat {
         if !applied.isEmpty {
             return ChatReply(answer: Answer(text: answer.isEmpty ? nil : answer, evidence: checked), notes: changed, edits: applied)
         }
+        citesNotes = citesNotes || restatesAnItem(answer, of: notes) || restatesAnItem(answer, of: other)
         guard checked.count + (citesNotes ? 1 : 0) > 0, !answer.isEmpty else { return ChatReply(answer: .notInConversation) }
         return ChatReply(answer: Answer(text: answer, evidence: checked))
     }
@@ -289,6 +406,26 @@ public final class ConversationChat {
         return tokens[words[best.start].token...words[best.end].token].joined(separator: " ")
     }
 
+    /// The quote is a Notes item's text, with or without its name and details, as the model cites another
+    /// Conversation's items more often than by their names: "OA1. Send the report to the customer (owner: Dana)".
+    static func quotesAnItem(_ quote: String, of notes: Notes?) -> Bool {
+        guard let notes else { return false }
+        let said = normalized(quote)
+        let texts = notes.decisions.map(\.text) + notes.actionItems.map(\.text) + notes.openQuestions.map(\.text)
+        return texts.contains { text in
+            let item = normalized(text)
+            return (item.split(separator: " ").count >= 3 && said.contains(item)) || words(quotedBy: quote, in: text) != nil
+        }
+    }
+
+    /// The answer restates a Notes item of four words or more, as the model now and then answers from one without
+    /// citing it: "no decision was made; the notes only include an action item for Dana to set up CI for the gateway".
+    static func restatesAnItem(_ answer: String, of notes: Notes?) -> Bool {
+        guard let notes, !answer.isEmpty else { return false }
+        let texts = notes.decisions.map(\.text) + notes.actionItems.map(\.text) + notes.openQuestions.map(\.text)
+        return texts.contains { text in normalized(text).split(separator: " ").count >= 4 && words(quotedBy: text, in: answer) != nil }
+    }
+
     static func normalized(_ text: String) -> String {
         let kept = text.lowercased().unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }
         return String(kept).split(separator: " ").joined(separator: " ")
@@ -309,8 +446,9 @@ public final class ConversationChat {
         For each message, first say what it asks: "change" when it asks you to add to the Notes, change them, or remove \
         something from them, even put as a question ("Can you add…?"), and "question" for anything else, which changes \
         nothing. Then give your edits to the Notes, if it asks for any. Then give the evidence: the turns that \
-        answer it, each with an exact quote of at least a few words, copied character for character from that turn, or \
-        the Notes items it's about. Then give a short answer in the language of the message, saying who said what when \
+        answer it, each with an exact quote of at least a few words, copied character for character from that turn in \
+        its own language, never translated, or the Notes items it's about. Then give a short answer in the language of \
+        the message, saying who said what when \
         that matters. The user sees the quotes but no turn or item numbers, so the answer never mentions them: it calls \
         an item by what it says.
 
@@ -342,6 +480,14 @@ public final class ConversationChat {
 
         A message may follow earlier ones, sent before in this chat or listed after the Notes with the answers given. \
         Use them to tell what it refers to, like who "he" is; they aren't evidence, so quote only the transcript's turns.
+
+        A message can be about another of the user's recorded conversations, listed after the Notes, named by who was \
+        in it or when it was, like "my meeting with Dana last week": people who weren't in this conversation, or \
+        another day than this one's, are another conversation's. Unless its Notes are already here, say "another \
+        conversation" as what it asks, with the one it means, or null if none of them is, and nothing else; you'll be \
+        given its Notes. Another conversation's Notes name their items OD1, OA1, OQ1: answer from them what the message \
+        asks about that conversation, cite them by those names, like {"item": "OA1"}, never change them, and say which \
+        conversation the answer comes from.
         """
     }
 
@@ -356,7 +502,7 @@ public final class ConversationChat {
     evidence ::= "[" ws "]" | "[" ws cited ("," ws cited){0,4} ws "]"
     cited ::= quoted | noted
     quoted ::= "{" ws "\"turn\":" ws turn "," ws "\"quote\":" ws str ws "}"
-    noted ::= "{" ws "\"item\":" ws item ws "}"
+    noted ::= "{" ws "\"item\":" ws (item | theiritem) ws "}"
     edits ::= "[" ws "]" | "[" ws edit ("," ws edit){0,9} ws "]"
     edit ::= add | change | remove | title | summary
     add ::= "{" ws "\"add\":" ws section "," ws "\"text\":" ws str "," ws "\"owner\":" ws optstr "," ws "\"due\":" ws optstr ws "}"
@@ -366,6 +512,7 @@ public final class ConversationChat {
     summary ::= "{" ws "\"summary\":" ws str ws "}"
     section ::= "\"decision\"" | "\"action_item\"" | "\"open_question\""
     item ::= "\"" [DAQ] [1-9] [0-9]? "\""
+    theiritem ::= "\"O" [DAQ] [1-9] [0-9]? "\""
     turn ::= "\"T" [0-9] [0-9] [0-9] [0-9]? "\""
     optstr ::= str | "null"
     optbool ::= "true" | "false" | "null"
@@ -376,6 +523,12 @@ public final class ConversationChat {
 
     /// For a second look at a message nothing answered, which asks for an answer and so changes nothing.
     static let answerGrammar = grammar.replacing(#" | "\"change\"," ws "\"edits\":" ws edits"#, with: "")
+
+    /// With the other Conversations listed: a message about one of them names it, to be answered once its Notes are in.
+    static let lookupGrammar = grammar.replacing(
+        #"ws asks "," ws "\"evidence\":" ws evidence ws "}\nAnswer:" answer"#,
+        with: #"ws (asks "," ws "\"evidence\":" ws evidence ws "}\nAnswer:" answer | "\"another conversation\"," ws "\"conversation\":" ws ("\"C" [1-9] [0-9]? "\"" | "null") ws "}")"#
+    )
 
     private struct ModelReply: Decodable {
         struct Cited: Decodable {

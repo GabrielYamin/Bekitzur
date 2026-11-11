@@ -70,7 +70,15 @@ extension Notes {
                 removed[section, default: []].insert(index)
                 applied.append(AppliedEdit(kind: .removed, section: section, text: text(of: section, at: index)))
             case .change(let item, let text, let owner, let dueSaid, let done):
-                guard let (section, index) = place(of: item) else { continue }
+                guard let (section, index) = place(of: item) else {
+                    // An item past the end of the Notes the chat saw can only be a new one: asked to add an Action Item
+                    // after adding one and removing it, the model changed "A3" of Notes with one.
+                    if let section = sectionPastTheEnd(item), let newText = text.flatMap(Self.given) {
+                        added.append((section, newText, owner, dueSaid))
+                        applied.append(AppliedEdit(kind: .added, section: section, text: newText))
+                    }
+                    continue
+                }
                 let newText = text.flatMap(Self.given)
                 let before = notes
                 switch section {
@@ -109,15 +117,24 @@ extension Notes {
 
     /// An item's section and index from its name, like "A2"; nil for one these Notes don't have.
     public func place(of item: String) -> (NotesEdit.Section, Int)? {
+        guard let (section, number) = Self.named(item) else { return nil }
+        return number <= count(of: section) ? (section, number - 1) : nil
+    }
+
+    /// The section of an item named past the end of these Notes, like "A3" when they have one Action Item.
+    private func sectionPastTheEnd(_ item: String) -> NotesEdit.Section? {
+        guard let (section, number) = Self.named(item) else { return nil }
+        return number > count(of: section) ? section : nil
+    }
+
+    private static func named(_ item: String) -> (NotesEdit.Section, Int)? {
         guard let letter = item.first, let number = Int(item.dropFirst()), number >= 1 else { return nil }
-        let section: NotesEdit.Section
         switch letter {
-        case "D": section = .decision
-        case "A": section = .actionItem
-        case "Q": section = .openQuestion
+        case "D": return (.decision, number)
+        case "A": return (.actionItem, number)
+        case "Q": return (.openQuestion, number)
         default: return nil
         }
-        return number <= count(of: section) ? (section, number - 1) : nil
     }
 
     /// The name the item an edit added or changed has in these Notes, like "A2"; nil when they don't have it.

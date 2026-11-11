@@ -22,6 +22,8 @@ public struct ChatExchange: Codable, Sendable, Equatable, Identifiable {
     public var undone: Bool
     /// The model's reply as it wrote it, which a chat that starts over is given back as its own.
     public var reply: String?
+    /// Another Conversation whose Notes the reply used, picked from the menu or found from the message's words.
+    public var reference: ChatReference?
 
     public init(message: String) {
         id = UUID()
@@ -38,11 +40,70 @@ public struct ChatReply: Sendable, Equatable {
     public let edits: [AppliedEdit]
     /// The model's reply as it wrote it.
     public let raw: String
+    /// The other Conversation whose Notes it used.
+    public let reference: ChatReference?
 
-    public init(answer: Answer, notes: Notes? = nil, edits: [AppliedEdit] = [], raw: String = "") {
+    public init(answer: Answer, notes: Notes? = nil, edits: [AppliedEdit] = [], raw: String = "", reference: ChatReference? = nil) {
         self.answer = answer
         self.notes = notes
         self.edits = edits
         self.raw = raw
+        self.reference = reference
+    }
+}
+
+/// Another Conversation the chat can bring in, as a message can name it: by who was there and when.
+public struct ChatCandidate: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let title: String
+    public let date: Date
+    /// Its Speakers with a confirmed name.
+    public let people: [String]
+
+    public init(id: String, title: String, date: Date, people: [String]) {
+        self.id = id
+        self.title = title
+        self.date = date
+        self.people = people
+    }
+}
+
+/// Another Conversation's Notes as the chat used them, kept with the reply so a chat that starts over has them.
+public struct ChatReference: Codable, Sendable, Equatable {
+    public let id: String
+    public let title: String
+    public let date: Date
+    public let people: [String]
+    public let notes: Notes
+
+    public init(_ candidate: ChatCandidate, notes: Notes) {
+        id = candidate.id
+        title = candidate.title
+        date = candidate.date
+        people = candidate.people
+        self.notes = notes
+    }
+}
+
+/// The other Conversations a message can be about, and a way to read the Notes of the one it is.
+public struct OtherConversations: Sendable {
+    /// Newest first.
+    public let candidates: [ChatCandidate]
+    public let notes: @Sendable (String) -> Notes?
+
+    public init(candidates: [ChatCandidate], notes: @escaping @Sendable (String) -> Notes?) {
+        self.candidates = candidates
+        self.notes = notes
+    }
+}
+
+public enum ChatError: LocalizedError, Equatable {
+    /// The message was about another Conversation, and none of them fit.
+    case conversationNotFound
+
+    public var errorDescription: String? {
+        switch self {
+        case .conversationNotFound: String(localized: "None of your other Conversations fits that. You can pick it from the menu beside the message box.")
+        }
     }
 }

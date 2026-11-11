@@ -1889,10 +1889,26 @@ final class AppModel {
         conversations.contains { $0.status == .processing }
     }
 
+    /// The other Conversations a chat can bring in, newest first: those with Notes, with who was there.
+    func chatCandidates(for id: String) -> [ChatCandidate] {
+        var candidates: [ChatCandidate] = []
+        for info in conversations where info.id != id && (info.status == .unreviewed || info.status == .reviewed) {
+            let people = (searchEntries[info.id]?.people ?? []).sorted()
+            candidates.append(ChatCandidate(id: info.id, title: info.displayTitle, date: info.startedAt, people: people))
+        }
+        return candidates.sorted { $0.date > $1.date }
+    }
+
+    private func chatReference(to other: String) -> ChatReference? {
+        guard let info = conversations.first(where: { $0.id == other }), let result = results[other] ?? library.result(for: other) else { return nil }
+        let people = (searchEntries[other]?.people ?? []).sorted()
+        return ChatReference(ChatCandidate(id: other, title: info.displayTitle, date: info.startedAt, people: people), notes: result.notes)
+    }
+
     /// Sends a message to a Conversation's chat, answered from its Transcript with the user's fixes and its Notes,
-    /// which the reply can change; nothing outside them. Not while a Conversation is processing, which needs the
-    /// language model's memory.
-    func send(_ message: String, about id: String) {
+    /// which the reply can change, and from another Conversation's Notes, picked or named in the message; nothing
+    /// outside them. Not while a Conversation is processing, which needs the language model's memory.
+    func send(_ message: String, about id: String, bringing other: String? = nil) {
         let message = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty, replyingID == nil, !isProcessing, !chatTooLong(id),
               let result = results[id], let info = conversations.first(where: { $0.id == id }) else { return }
@@ -1900,6 +1916,11 @@ final class AppModel {
         let transcript = result.transcript.applying(flags[id] ?? library.flags(for: id))
         let earlier = exchanges[id] ?? []
         let notes = result.notes
+        let attached = other.flatMap(chatReference(to:))
+        let library = self.library
+        let others = OtherConversations(candidates: other == nil ? chatCandidates(for: id) : []) { candidate in
+            library.result(for: candidate)?.notes
+        }
         exchanges[id, default: []].append(ChatExchange(message: message))
         replyingID = id
         let assistant = self.assistant
@@ -1909,7 +1930,8 @@ final class AppModel {
             var failure: String?
             do {
                 reply = try await assistant.send(
-                    message, about: id, transcript: transcript, notes: notes, date: info.startedAt, language: result.transcript.language, after: earlier
+                    message, about: id, transcript: transcript, notes: notes, date: info.startedAt, language: result.transcript.language, after: earlier,
+                    bringing: attached, from: others
                 )
             } catch {
                 failure = error.localizedDescription
@@ -1917,6 +1939,7 @@ final class AppModel {
             if let last = exchanges[id]?.indices.last {
                 exchanges[id]?[last].answer = reply?.answer
                 exchanges[id]?[last].reply = reply?.raw
+                exchanges[id]?[last].reference = reply?.reference
                 exchanges[id]?[last].failure = failure
                 if let reply, let changed = reply.notes {
                     if results[id]?.notes == notes {
@@ -1931,8 +1954,9 @@ final class AppModel {
             }
             replyingID = nil
             saveChat(id)
-            let outcome = failure.map { "failed: \($0)" }
+            var outcome = failure.map { "failed: \($0)" }
                 ?? "\(reply?.edits.count ?? 0) changes, \(reply?.answer.text == nil ? "no answer" : "\(reply?.answer.evidence.count ?? 0) quotes")"
+            if let reference = reply?.reference { outcome += ", from \(reference.id)" }
             AppLog.write(String(format: "%@: chat replied in %.1f s (%@)", id, Date().timeIntervalSince(started), outcome))
             // The model takes about 16 GB; it stays loaded for follow-up messages, not for good.
             try? await Task.sleep(for: .seconds(300))

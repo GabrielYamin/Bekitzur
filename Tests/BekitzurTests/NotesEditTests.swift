@@ -69,7 +69,7 @@ struct NotesEditTests {
     @Test func editsThatChangeNothingDontCount() {
         let (changed, applied) = applying([
             .remove(item: "A7"),
-            .change(item: "Q2", text: "Anything?", owner: nil, due: nil, done: nil),
+            .change(item: "Q2", text: nil, owner: "Ron", due: nil, done: nil),
             .title("Release sync"),
             .change(item: "D1", text: "Release on Thursday", owner: nil, due: nil, done: nil),
             .change(item: "A2", text: nil, owner: nil, due: nil, done: false),
@@ -78,6 +78,18 @@ struct NotesEditTests {
 
         #expect(changed == notes)
         #expect(applied.isEmpty)
+    }
+
+    /// An item named past the end of the Notes the chat saw can only be a new one.
+    @Test func aChangeToAnItemPastTheEndAddsIt() {
+        let (changed, applied) = applying([
+            .change(item: "A7", text: "Send the mapping", owner: "Dana", due: nil, done: nil),
+            .change(item: "Q9", text: nil, owner: nil, due: nil, done: true),
+        ])
+
+        #expect(changed.actionItems.last == ActionItem(text: "Send the mapping", owner: "Dana"))
+        #expect(changed.actionItems.count == notes.actionItems.count + 1)
+        #expect(applied == [AppliedEdit(kind: .added, section: .actionItem, text: "Send the mapping")])
     }
 
     @Test func anItemRemovedTwiceIsRemovedOnce() {
@@ -94,6 +106,9 @@ struct NotesEditTests {
         exchange.notesBefore = notes
         exchange.notesAfter = applying([.add(.actionItem, text: "Check it", owner: "Dana", due: nil)]).notes
         exchange.reply = #"{"asks": "change", "edits": [{"add": "action_item", "text": "Check it", "owner": "Dana", "due": null}], "evidence": []}"# + "\nAnswer: Added it."
+        exchange.reference = ChatReference(
+            ChatCandidate(id: "2026-11-02-120000", title: "Kickoff", date: Date(timeIntervalSince1970: 1_793_620_800), people: ["Dana"]), notes: notes
+        )
 
         let saved = try JSONDecoder().decode([ChatExchange].self, from: JSONEncoder().encode([exchange]))
 
