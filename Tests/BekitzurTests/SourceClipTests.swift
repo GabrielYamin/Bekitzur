@@ -24,12 +24,12 @@ struct SourceClipTests {
     }
 
     @Test func itPlaysTheQuotedWordsFromALittleBefore() throws {
-        let clip = try #require(clip("אשלח אותו מחר"))
-        let quoted = clip.words.filter(\.quoted).map(\.text)
+        let found = try #require(clip("אשלח אותו מחר"))
+        let quoted = found.words.filter(\.quoted).map(\.text)
 
-        #expect(clip.range == 12.5...16.9)
-        #expect(clip.speaker == "Speaker 2")
-        #expect(clip.words.map(\.text) == ["אני", "אשלח", "אותו", "מחר"])
+        #expect(found.range == 12.5...16.9)
+        #expect(found.speaker == "Speaker 2")
+        #expect(found.words.map(\.text) == ["אני", "אשלח", "אותו", "מחר"])
         #expect(quoted == ["אשלח", "אותו", "מחר"])
     }
 
