@@ -6,7 +6,7 @@ import SwiftUI
 import UserNotifications
 
 /// The app, or with `--live-transcription <he|en|auto>` its helper process, which transcribes live chunks so a crash in
-/// whisper.cpp can't end a recording.
+/// whisper.cpp can't end a recording, or with `--mcp` its MCP server, which an AI app starts.
 @main
 enum Entry {
     static let liveTranscriptionArgument = "--live-transcription"
@@ -14,6 +14,11 @@ enum Entry {
     @MainActor
     static func main() {
         let arguments = CommandLine.arguments
+        if arguments.contains(MCPServer.argument) {
+            let status = AIApps.server().serve()
+            AppLog.flush()
+            exit(status)
+        }
         if let index = arguments.firstIndex(of: liveTranscriptionArgument) {
             // Never a second app, even for arguments from another version of it.
             let argument = arguments.dropFirst(index + 1).first ?? ""

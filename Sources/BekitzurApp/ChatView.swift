@@ -131,26 +131,45 @@ private struct ExchangeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            DirectionalText(exchange.message).font(.headline)
-            if let reference = exchange.reference { source(reference) }
-            if let failure = exchange.failure {
-                Label("Couldn't answer: \(failure)", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
-            }
-            if let answer = exchange.answer {
-                if let text = answer.text {
-                    DirectionalText(text).textSelection(.enabled)
-                } else if exchange.edits.isEmpty, exchange.failure == nil {
-                    Label("This isn't in the Conversation.", systemImage: "questionmark.circle").foregroundStyle(.secondary)
-                }
-                ForEach(Array(answer.evidence.enumerated()), id: \.offset) { _, evidence in
-                    quote(evidence)
-                }
-                if !exchange.edits.isEmpty { changes }
-            } else if exchange.failure == nil {
-                Label("Looking in the Transcript…", systemImage: "ellipsis").foregroundStyle(.secondary)
+            if let app = exchange.from {
+                changed(by: app)
+            } else {
+                reply
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The user's message and the chat's reply.
+    @ViewBuilder
+    private var reply: some View {
+        DirectionalText(exchange.message).font(.headline)
+        if let reference = exchange.reference { source(reference) }
+        if let failure = exchange.failure {
+            Label("Couldn't answer: \(failure)", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+        }
+        if let answer = exchange.answer {
+            if let text = answer.text {
+                DirectionalText(text).textSelection(.enabled)
+            } else if exchange.edits.isEmpty, exchange.failure == nil {
+                Label("This isn't in the Conversation.", systemImage: "questionmark.circle").foregroundStyle(.secondary)
+            }
+            ForEach(Array(answer.evidence.enumerated()), id: \.offset) { _, evidence in
+                quote(evidence)
+            }
+            if !exchange.edits.isEmpty { changes }
+        } else if exchange.failure == nil {
+            Label("Looking in the Transcript…", systemImage: "ellipsis").foregroundStyle(.secondary)
+        }
+    }
+
+    /// Changes an AI app made to the Notes through Bekitzur's MCP server, with the reason it gave.
+    @ViewBuilder
+    private func changed(by app: String) -> some View {
+        Label(app.isEmpty ? String(localized: "Changed by an AI app") : String(localized: "Changed by \(app)"), systemImage: "sparkles")
+            .font(.headline)
+        if !exchange.message.isEmpty { DirectionalText(exchange.message).foregroundStyle(.secondary) }
+        changes
     }
 
     private func quote(_ evidence: Evidence) -> some View {

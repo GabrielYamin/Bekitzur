@@ -116,6 +116,35 @@ private struct PeopleSection: View {
     }
 }
 
+/// Whether AI apps may use the Conversations through Bekitzur's MCP server, and how to connect one.
+private struct AIAppsSection: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        Section("AI apps") {
+            Toggle(isOn: $model.allowsAIApps) {
+                HStack(spacing: 6) {
+                    Text("Let AI apps use your Conversations")
+                    if model.newSettingsShown.contains(.aiApps) { NewBadge() }
+                }
+            }
+            Text("AI apps like Claude and Cursor can then find your Conversations, read their Notes and Transcripts, and change their Notes, through Bekitzur's MCP server. What an AI app reads goes to its model's provider, like Anthropic or OpenAI. Changes show in the Conversation's Chat tab, where you can undo them.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            LabeledContent("Connect an AI app") {
+                Button("Copy setup") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(AIApps.setup, forType: .string)
+                }
+            }
+            Text("Paste it into the AI app's MCP servers: ~/.cursor/mcp.json for Cursor, or Settings → Developer → Edit Config for Claude. Claude Code adds it with: claude mcp add bekitzur -- \"\(AIApps.command)\" --mcp")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        }
+    }
+}
+
 struct SettingsView: View {
     @Bindable var model: AppModel
 
@@ -230,7 +259,7 @@ struct SettingsView: View {
                 LabeledContent("Data folder") {
                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([BekitzurPaths.conversations]) }
                 }
-                Text("It holds your Conversations, with their recordings, Transcripts, and Notes, your voiceprints and vocabulary, and the models. All of it stays on this Mac.")
+                Text("It holds your Conversations, with their recordings, Transcripts, and Notes, your voiceprints and vocabulary, and the models. All of it stays on this Mac, unless you let AI apps use your Conversations.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 LabeledContent("Bekitzur") {
@@ -240,6 +269,8 @@ struct SettingsView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+
+            AIAppsSection(model: model)
 
             Section("About and updates") {
                 LabeledContent("Version", value: model.versionDescription)

@@ -164,6 +164,14 @@ final class AppModel {
         }
     }
 
+    /// AI apps like Claude and Cursor may use the Conversations through Bekitzur's MCP server, which checks this.
+    var allowsAIApps: Bool {
+        didSet {
+            UserDefaults.standard.set(allowsAIApps, forKey: MCPServer.allowedKey)
+            AppLog.write(allowsAIApps ? "AI apps may use the Conversations" : "AI apps may no longer use the Conversations")
+        }
+    }
+
     /// The language chosen for the app in Settings, which it shows once it restarts.
     var appLanguage: AppLanguage {
         didSet {
@@ -243,6 +251,7 @@ final class AppModel {
         notesLanguage = UserDefaults.standard.string(forKey: "notesLanguage").flatMap(ConversationLanguage.init(rawValue:)) ?? .english
         suggestsCalls = UserDefaults.standard.object(forKey: "suggestCalls") as? Bool ?? true
         recordsCallsAutomatically = UserDefaults.standard.bool(forKey: "recordCallsAutomatically")
+        allowsAIApps = UserDefaults.standard.bool(forKey: MCPServer.allowedKey)
         hasNewSettings = UserDefaults.standard.integer(forKey: "seenSettingsRevision") < NewSetting.revision
         vocabulary = VocabularyStore(url: BekitzurPaths.vocabulary).load()
         try? FileManager.default.createDirectory(at: BekitzurPaths.conversations, withIntermediateDirectories: true)
@@ -264,6 +273,11 @@ final class AppModel {
                 await self?.refreshPermissions()
                 self?.refreshModels()
             }
+        }
+        // An AI app changed a Conversation through Bekitzur's MCP server, which runs as another process.
+        DistributedNotificationCenter.default().addObserver(forName: MCPServer.changed, object: nil, queue: .main) { [weak self] notification in
+            let id = notification.object as? String
+            Task { @MainActor in self?.changedByAIApp(id) }
         }
         Task { await refreshPermissions() }
         Task(priority: .utility) { await lineUpCalls() }
@@ -1874,6 +1888,15 @@ final class AppModel {
     }
 
     // MARK: Chat
+
+    /// Reads a Conversation again after an AI app changed its Notes, which its chat shows with Undo.
+    private func changedByAIApp(_ id: String?) {
+        guard let id, conversations.contains(where: { $0.id == id }) else { return }
+        conversations = library.all()
+        if results[id] != nil { results[id] = library.result(for: id) }
+        if exchanges[id] != nil { exchanges[id] = library.chat(for: id) }
+        AppLog.write("\(id): Notes changed by an AI app")
+    }
 
     func loadChat(_ id: String) {
         if exchanges[id] == nil { exchanges[id] = library.chat(for: id) }

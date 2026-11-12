@@ -31,6 +31,8 @@
 "A new version of %@ is ready to download (%@)." = "גרסה חדשה של %@ מוכנה להורדה (%@).";
 "A recording or a Conversation" = "הקלטה או שיחה";
 "A recording takes under 100 MB an hour, but if the disk fills up, the rest of it is lost." = "הקלטה תופסת פחות מ-100 MB לשעה, אבל אם הדיסק מתמלא, שאר ההקלטה הולך לאיבוד.";
+"AI apps" = "אפליקציות AI";
+"AI apps like Claude and Cursor can then find your Conversations, read their Notes and Transcripts, and change their Notes, through Bekitzur's MCP server. What an AI app reads goes to its model's provider, like Anthropic or OpenAI. Changes show in the Conversation's Chat tab, where you can undo them." = "אפליקציות AI כמו Claude ו-Cursor יוכלו אז למצוא את השיחות שלך, לקרוא את הסיכומים והתמלולים שלהן ולשנות את הסיכומים, דרך שרת ה-MCP של בקיצור. מה שאפליקציית AI קוראת נשלח לספק המודל שלה, כמו Anthropic או OpenAI. השינויים מופיעים בלשונית הצ׳אט של השיחה, ושם אפשר לבטל אותם.";
 "About and updates" = "אודות ועדכונים";
 "Action Items" = "משימות";
 "Add" = "הוספה";
@@ -97,6 +99,8 @@
 "Changed a Decision: %@" = "שונתה החלטה: %@";
 "Changed an Action Item: %@" = "שונתה משימה: %@";
 "Changed an Open Question: %@" = "שונתה שאלה פתוחה: %@";
+"Changed by %@" = "שונה על ידי %@";
+"Changed by an AI app" = "שונה על ידי אפליקציית AI";
 "Changed the summary" = "התקציר שונה";
 "Changed the title: %@" = "הכותרת שונתה: %@";
 "Chat (beta)" = "צ׳אט (בטא)";
@@ -109,11 +113,13 @@
 "Choose recordings, or Conversations exported from Bekitzur." = "בחירת הקלטות, או שיחות שיוצאו מבקיצור.";
 "Clear Selection" = "ניקוי הבחירה";
 "Click a word to mark it wrong, or drag across words to select several. Right-click a word or a speaker to say what was said, or who said it. F marks the word just played, and ⌘F finds words." = "לחיצה על מילה מסמנת אותה כשגויה, וגרירה על פני מילים בוחרת כמה. לחיצה ימנית על מילה או על דובר מאפשרת לומר מה נאמר או מי אמר. F מסמן את המילה שנוגנה עכשיו, ו-⌘F מחפש מילים.";
+"Connect an AI app" = "חיבור אפליקציית AI";
 "Conversation" = "שיחה";
 "Conversations" = "שיחות";
 "Conversations with" = "שיחות עם";
 "Copy Notes" = "העתקת הסיכום";
 "Copy Transcript" = "העתקת התמלול";
+"Copy setup" = "העתקת ההגדרה";
 "Couldn't answer: %@" = "לא ניתן היה לענות: %@";
 "Couldn't check for updates" = "לא ניתן היה לבדוק אם יש עדכונים";
 "Couldn't delete the Conversation: %@" = "לא ניתן היה למחוק את השיחה: %@";
@@ -186,7 +192,7 @@
 "Installing the update stops the recording and restarts Bekitzur. The recording is kept and processed after the restart." = "התקנת העדכון עוצרת את ההקלטה ומפעילה את בקיצור מחדש. ההקלטה נשמרת ומעובדת אחרי ההפעלה מחדש.";
 "Install…" = "התקנה…";
 "Is this %@?" = "האם זה %@?";
-"It holds your Conversations, with their recordings, Transcripts, and Notes, your voiceprints and vocabulary, and the models. All of it stays on this Mac." = "היא מכילה את השיחות שלך, עם ההקלטות, התמלולים והסיכומים שלהן, את טביעות הקול והמונחים שלך, ואת המודלים. הכול נשאר ב-Mac הזה.";
+"It holds your Conversations, with their recordings, Transcripts, and Notes, your voiceprints and vocabulary, and the models. All of it stays on this Mac, unless you let AI apps use your Conversations." = "היא מכילה את השיחות שלך, עם ההקלטות, התמלולים והסיכומים שלהן, את טביעות הקול והמונחים שלך, ואת המודלים. הכול נשאר ב-Mac הזה, אלא אם מאפשרים לאפליקציות AI להשתמש בשיחות שלך.";
 "It isn't a Conversation exported from Bekitzur." = "זו לא שיחה שיוצאה מבקיצור.";
 "It tells Hebrew from English by the first half minute of speech. If it gets one wrong, choose Transcribe again as… in the Conversation's menu." = "הוא מבחין בין עברית לאנגלית לפי חצי הדקה הראשונה של הדיבור. אם הוא טועה, אפשר לבחור ״תמלול מחדש ב…״ בתפריט של השיחה.";
 "Its recording, Transcript, and Notes are deleted from this Mac. This can't be undone." = "ההקלטה, התמלול והסיכום שלה יימחקו מה-Mac הזה. אי אפשר לבטל את זה.";
@@ -197,6 +203,7 @@
 "Later" = "מאוחר יותר";
 "Learned from your corrections" = "נלמד מהתיקונים שלך";
 "Learning your voice…" = "לומד את הקול שלך…";
+"Let AI apps use your Conversations" = "לאפשר לאפליקציות AI להשתמש בשיחות שלך";
 "Let Bekitzur decide" = "בקיצור יחליט";
 "Listen" = "האזנה";
 "Listen: %@" = "האזנה: %@";
@@ -255,6 +262,7 @@
 "Open Questions" = "שאלות פתוחות";
 "Open Settings" = "פתיחת ההגדרות";
 "Past that, the model starts missing what's in the Transcript." = "מעבר לזה, המודל מתחיל לפספס דברים שבתמלול.";
+"Paste it into the AI app's MCP servers: ~/.cursor/mcp.json for Cursor, or Settings → Developer → Edit Config for Claude. Claude Code adds it with: claude mcp add bekitzur -- \"%@\" --mcp" = "יש להדביק אותה בשרתי ה-MCP של אפליקציית ה-AI: ‏~/.cursor/mcp.json ב-Cursor, או Settings → Developer → Edit Config ב-Claude. ב-Claude Code מוסיפים אותה כך: claude mcp add bekitzur -- \"%@\" --mcp";
 "Pause" = "השהיה";
 "People" = "אנשים";
 "People who spoke" = "אנשים שדיברו";
