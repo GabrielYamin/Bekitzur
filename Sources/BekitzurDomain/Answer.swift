@@ -1,7 +1,7 @@
 import Foundation
 
 /// What a Conversation's transcript says in answer to a question, or nothing when it doesn't say.
-public struct Answer: Sendable, Equatable {
+public struct Answer: Codable, Sendable, Equatable {
     /// Nil when the transcript doesn't answer the question; then there's no evidence either.
     public let text: String?
     /// The turns the answer comes from, each with a quote checked against the turn's text.

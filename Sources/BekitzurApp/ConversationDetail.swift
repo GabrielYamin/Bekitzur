@@ -9,7 +9,7 @@ struct ConversationDetail: View {
     @ViewState private var confirmingDelete = false
 
     enum Tab: Hashable {
-        case notes, transcript, speakers, ask
+        case notes, transcript, speakers, chat
     }
 
     private var result: ProcessedConversation? { model.results[info.id] }
@@ -186,7 +186,7 @@ struct ConversationDetail: View {
                         Text("Notes").tag(Tab.notes)
                         Text("Transcript").tag(Tab.transcript)
                         Text(speakersTabTitle(result)).tag(Tab.speakers)
-                        Text("Ask (beta)").tag(Tab.ask)
+                        Text("Chat (beta)").tag(Tab.chat)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -212,8 +212,8 @@ struct ConversationDetail: View {
                         TranscriptView(model: model, info: info, result: result, playback: playback)
                     case .speakers:
                         SpeakersView(model: model, info: info, result: result, playback: playback)
-                    case .ask:
-                        AskView(model: model, info: info, turns: result.turns, player: player)
+                    case .chat:
+                        ChatView(model: model, info: info, turns: result.turns, player: player)
                     }
                 }
             } else {
