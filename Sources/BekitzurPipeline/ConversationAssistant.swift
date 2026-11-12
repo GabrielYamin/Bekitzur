@@ -16,6 +16,8 @@ public actor ConversationAssistant {
     ///   - notes: The Notes as they are now, which the reply can change.
     ///   - earlier: The messages already sent about this Conversation, with the changes and answers the user was shown,
     ///     for a chat that starts over.
+    ///   - attached: Another Conversation the user picked to bring in with the message.
+    ///   - others: The other Conversations a message can name, for the chat to find the one it means.
     public func send(
         _ message: String,
         about id: String,
@@ -23,7 +25,9 @@ public actor ConversationAssistant {
         notes: Notes,
         date: Date,
         language: ConversationLanguage,
-        after earlier: [ChatExchange] = []
+        after earlier: [ChatExchange] = [],
+        bringing attached: ChatReference? = nil,
+        from others: OtherConversations? = nil
     ) throws -> ChatReply {
         defer { lastUse = Date() }
         let turns = NotesWriter.turns(from: transcript)
@@ -32,7 +36,7 @@ public actor ConversationAssistant {
             chat = ConversationChat(model: try LanguageModel(modelURL: BekitzurPaths.languageModel), turns: turns, date: date, language: language)
             conversation = id
         }
-        return try chat!.send(message, notes: notes, after: earlier)
+        return try chat!.send(message, notes: notes, after: earlier, bringing: attached, from: others)
     }
 
     /// The language model's last reply, before its quotes were checked.

@@ -25,18 +25,40 @@ struct ChatCommand: AsyncParsableCommand {
     @Flag(help: "Print the Notes as the chat left them.")
     var notes = false
 
+    @Option(help: "Another Conversation's folder, whose Notes the first message brings in, as picking it from the chat's menu does.")
+    var with: String?
+
+    @Flag(help: "Don't let messages find the other Conversations in the same folder by who was there and when.")
+    var alone = false
+
     func run() async throws {
-        var (id, transcript, date, current) = try load(URL(filePath: conversation, directoryHint: .checkFileSystem))
+        let url = URL(filePath: conversation, directoryHint: .checkFileSystem)
+        var (id, transcript, date, current) = try load(url)
+        let others = alone || !url.hasDirectoryPath ? nil : Self.conversations(beside: url, except: id)
+        var attached = try with.map { try Self.reference(to: URL(filePath: $0, directoryHint: .isDirectory)) }
         let assistant = ConversationAssistant()
         var earlier: [ChatExchange] = []
         for message in messages {
             if startOver { await assistant.unload(ifIdleFor: 0) }
             let started = Date()
-            let reply = try await assistant.send(message, about: id, transcript: transcript, notes: current, date: date, language: transcript.language, after: earlier)
             var exchange = ChatExchange(message: message)
+            let reply: ChatReply
+            do {
+                reply = try await assistant.send(
+                    message, about: id, transcript: transcript, notes: current, date: date, language: transcript.language, after: earlier,
+                    bringing: attached, from: attached == nil ? others : nil
+                )
+            } catch let error as ChatError {
+                exchange.failure = error.localizedDescription
+                earlier.append(exchange)
+                print("> \(message)\n   \(error.localizedDescription)")
+                continue
+            }
+            attached = nil
             exchange.answer = reply.answer
             exchange.edits = reply.edits
             exchange.reply = reply.raw
+            exchange.reference = reply.reference
             if let changed = reply.notes {
                 exchange.notesBefore = current
                 exchange.notesAfter = changed
@@ -45,6 +67,7 @@ struct ChatCommand: AsyncParsableCommand {
             earlier.append(exchange)
             print("> \(message)")
             if raw { print("   reply: \(await assistant.lastReply)") }
+            if let reference = reply.reference { print("   from \(reference.id): \(reference.title)") }
             if let text = reply.answer.text {
                 print(text)
             } else if reply.edits.isEmpty {
@@ -77,6 +100,31 @@ struct ChatCommand: AsyncParsableCommand {
         let result = try decoder.decode(ProcessedConversation.self, from: Data(contentsOf: url.appending(path: "result.json")))
         let flags = (try? decoder.decode(TranscriptFlags.self, from: Data(contentsOf: url.appending(path: "flags.json")))) ?? TranscriptFlags()
         return (info.id, result.transcript.applying(flags), info.startedAt, result.notes)
+    }
+
+    /// The other Conversations with Notes in the folder `url` is in, newest first, with who was there.
+    private static func conversations(beside url: URL, except id: String) -> OtherConversations {
+        let folder = url.deletingLastPathComponent()
+        let items = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        let candidates = items.compactMap { item -> ChatCandidate? in
+            guard let reference = try? Self.reference(to: item), reference.id != id else { return nil }
+            return ChatCandidate(id: reference.id, title: reference.title, date: reference.date, people: reference.people)
+        }
+        return OtherConversations(candidates: candidates.sorted { $0.date > $1.date }) { other in
+            try? Self.reference(to: folder.appending(path: other, directoryHint: .isDirectory)).notes
+        }
+    }
+
+    private static func reference(to url: URL) throws -> ChatReference {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let info = try decoder.decode(ConversationInfo.self, from: Data(contentsOf: url.appending(path: "info.json")))
+        guard info.status == .unreviewed || info.status == .reviewed else { throw ChatError.conversationNotFound }
+        let result = try decoder.decode(ProcessedConversation.self, from: Data(contentsOf: url.appending(path: "result.json")))
+        let candidate = ChatCandidate(
+            id: info.id, title: info.title ?? result.notes.title, date: info.startedAt, people: SearchEntry(result, user: "").people.sorted()
+        )
+        return ChatReference(candidate, notes: result.notes)
     }
 
     private func timestamp(_ seconds: Double?) -> String {

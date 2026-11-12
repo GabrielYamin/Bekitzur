@@ -12,6 +12,8 @@ struct ChatView: View {
     /// Plays a quoted line where it's shown.
     let player: SourcePlayer
     @ViewState private var message = ""
+    /// Another Conversation picked from the menu, whose Notes the next message brings in.
+    @ViewState private var attached: String?
 
     var body: some View {
         if model.chatTooLong(info.id) {
@@ -34,7 +36,7 @@ struct ChatView: View {
                 ContentUnavailableView {
                     Label("Chat about this Conversation", systemImage: "bubble.left.and.text.bubble.right")
                 } description: {
-                    Text("Ask about what was said, or ask to change the Notes. Answers come only from the Transcript and the Notes, with the lines they're based on, and you'll be told when they don't say.")
+                    Text("Ask about what was said, or ask to change the Notes. Answers come only from the Transcript and the Notes, with the lines they're based on, and you'll be told when they don't say. To use another Conversation's Notes, name it, like “my meeting with Dana last week”, or pick it from the menu beside the message box.")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -42,9 +44,10 @@ struct ChatView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 20) {
                             ForEach(exchanges) { exchange in
-                                ExchangeView(exchange: exchange, turns: turns, player: player, canUndo: model.canUndo(exchange, in: info.id)) {
-                                    model.undo(exchange, in: info.id)
-                                }
+                                ExchangeView(
+                                    exchange: exchange, turns: turns, player: player, canUndo: model.canUndo(exchange, in: info.id),
+                                    undo: { model.undo(exchange, in: info.id) }, open: { model.selection = $0 }
+                                )
                                 .id(exchange.id)
                             }
                         }
@@ -63,7 +66,12 @@ struct ChatView: View {
                 if model.isProcessing {
                     Text("The chat waits while Bekitzur processes a Conversation.").font(.caption).foregroundStyle(.secondary)
                 }
+                let candidates = model.chatCandidates(for: info.id)
+                if let candidate = candidates.first(where: { $0.id == attached }) {
+                    attachment(candidate)
+                }
                 HStack(spacing: 8) {
+                    bringIn(candidates)
                     TextField("Ask something, or ask to change the Notes", text: $message)
                         .textFieldStyle(.roundedBorder)
                         .onSubmit(send)
@@ -80,8 +88,35 @@ struct ChatView: View {
 
     private func send() {
         guard model.replyingID == nil, !model.isProcessing else { return }
-        model.send(message, about: info.id)
+        model.send(message, about: info.id, bringing: attached)
         message = ""
+        attached = nil
+    }
+
+    private func bringIn(_ candidates: [ChatCandidate]) -> some View {
+        Menu {
+            if candidates.isEmpty { Text("No other Conversations yet") }
+            ForEach(candidates.prefix(30)) { candidate in
+                Button(candidate.title + " · " + candidate.date.formatted(date: .abbreviated, time: .omitted)) { attached = candidate.id }
+            }
+        } label: {
+            Image(systemName: "link")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Bring in another Conversation's Notes")
+    }
+
+    private func attachment(_ candidate: ChatCandidate) -> some View {
+        HStack(spacing: 6) {
+            Label("With “\(candidate.title)” · \(candidate.date.formatted(date: .abbreviated, time: .omitted))", systemImage: "link")
+            Button { attached = nil } label: { Image(systemName: "xmark.circle.fill") }
+                .buttonStyle(.borderless)
+                .help("Don't bring it in")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 }
 
@@ -91,10 +126,13 @@ private struct ExchangeView: View {
     let player: SourcePlayer
     let canUndo: Bool
     let undo: () -> Void
+    /// Shows another Conversation.
+    let open: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             DirectionalText(exchange.message).font(.headline)
+            if let reference = exchange.reference { source(reference) }
             if let failure = exchange.failure {
                 Label("Couldn't answer: \(failure)", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
@@ -130,6 +168,16 @@ private struct ExchangeView: View {
             .contentShape(Rectangle())
         }
         .help("Listen")
+    }
+
+    /// The other Conversation whose Notes the reply used.
+    private func source(_ reference: ChatReference) -> some View {
+        Button { open(reference.id) } label: {
+            Label("From “\(reference.title)” · \(reference.date.formatted(date: .abbreviated, time: .omitted))", systemImage: "link")
+                .font(.caption)
+        }
+        .buttonStyle(.link)
+        .help("Show this Conversation")
     }
 
     /// What the reply changed in the Notes, struck through once undone.

@@ -251,6 +251,119 @@ struct ChatTests {
         #expect(ConversationChat.lastChange([edits[1]], in: notes) == "")
     }
 
+    private let theirs = Notes(
+        title: "Release sync",
+        summary: "The release moves to Thursday.",
+        decisions: [Decision(text: "Release on Thursday")],
+        actionItems: [ActionItem(text: "Tell support about the release", owner: "Dana")],
+        openQuestions: []
+    )
+    /// Monday, 2 November 2026, at noon in UTC, which is the same day in Israel.
+    private let released = ISO8601DateFormatter().date(from: "2026-11-02T12:00:00Z")!
+
+    private var reference: ChatReference {
+        ChatReference(ChatCandidate(id: "2026-11-02-120000", title: "Release sync", date: released, people: ["Dana", "Ron"]), notes: theirs)
+    }
+
+    @Test func anotherConversationsItemsHaveNamesNoEditCanUse() {
+        #expect(ConversationChat.brought(reference) == """
+            The Notes of another conversation, "Release sync" on Monday, 2 November 2026, with Dana, Ron:
+            Title: Release sync
+            Summary: The release moves to Thursday.
+            Decisions:
+            OD1. Release on Thursday
+            Action items:
+            OA1. Tell support about the release (owner: Dana)
+            Open questions: none
+            """)
+        #expect(ConversationChat.grammar.contains(#"noted ::= "{" ws "\"item\":" ws (item | theiritem) ws "}""#))
+        #expect(ConversationChat.grammar.contains(#"change ::= "{" ws "\"change\":" ws item ","#))
+    }
+
+    @Test func aMessageAboutAnotherConversationPicksItFromTheList() {
+        let candidates = [
+            ChatCandidate(id: "b", title: "Release sync", date: released, people: ["Dana", "Ron"]),
+            ChatCandidate(id: "a", title: "Kickoff", date: released.addingTimeInterval(-7 * 86_400), people: []),
+        ]
+        let today = released.addingTimeInterval(9 * 86_400)
+        let this = released.addingTimeInterval(-14 * 86_400)
+        let lookup = "{\n  \"asks\": \"another conversation\",\n  \"conversation\": \"C2\"\n}"
+
+        #expect(ConversationChat.choices(candidates, today: today, this: this, with: ["Ron", "Maya"]) == """
+            This conversation is from Monday, 19 October 2026, with Ron, Maya.
+            The user's other recorded conversations, newest first; today is Wednesday, 11 November 2026:
+            C1. Monday, 2 November 2026: "Release sync", with Dana, Ron
+            C2. Monday, 26 October 2026: "Kickoff"
+            """)
+        #expect(ConversationChat.asksAboutAnother(lookup) && ConversationChat.picked(lookup) == 2)
+        #expect(!ConversationChat.asksAboutAnother(#"{"asks": "question", "edits": [], "evidence": []}\#nAnswer: Ron."#))
+        #expect(ConversationChat.picked(#"{"asks": "another conversation", "conversation": null}"#) == nil)
+        #expect(ConversationChat.lookupGrammar.contains(#""\"another conversation\"," ws "\"conversation\":""#))
+        #expect(!ConversationChat.grammar.contains("another conversation"))
+    }
+
+    @Test func theOtherConversationsAreListedAfterTheNotes() {
+        let candidates = [ChatCandidate(id: "b", title: "Release sync", date: released, people: ["Dana", "Ron"])]
+        let today = released.addingTimeInterval(9 * 86_400)
+        let listing = ConversationChat.listing(notes)
+        let choices = ConversationChat.choices(candidates, today: today, this: released, with: ["Ron", "Maya"])
+
+        let opening = ConversationChat.opening("TRANSCRIPT", notes: notes, after: [], request: "Message: Hi", listing: choices)
+
+        #expect(opening == ["TRANSCRIPT\n\nThe Notes Bekitzur wrote from it:\n\(listing)\n\n\(choices)\n\nMessage: Hi"])
+    }
+
+    /// A follow-up about the other Conversation brought in for the message before stands on its Notes, still in the chat.
+    @Test func aReplyCitingTheNotesBroughtInIsFromThem() {
+        let byName = #"{"asks": "question", "edits": [], "evidence": [{"item": "OA1"}]}\#nAnswer: Dana."#
+        let byQuote = #"{"asks": "question", "edits": [], "evidence": [{"turn": "T001", "quote": "Tell support about the release"}]}\#nAnswer: Dana."#
+        let fromHere = #"{"asks": "question", "edits": [], "evidence": [{"item": "A1"}]}\#nAnswer: Ron."#
+
+        #expect(ConversationChat.cites(byName, from: theirs))
+        #expect(ConversationChat.cites(byQuote, from: theirs))
+        #expect(!ConversationChat.cites(fromHere, from: theirs))
+    }
+
+    /// An answer can stand on the other Conversation's Notes: items it has, cited by name or quoted as if a turn.
+    @Test func anAnswerCanStandOnAnotherConversationsNotes() {
+        let text = #"{"edits": [], "evidence": [{"item": "OA1"}]}\#nAnswer: Dana tells support."#
+        let quoted = #"{"edits": [], "evidence": [{"turn": "T002", "quote": "OA1. Tell support about the release (owner: Dana)"}]}\#nAnswer: Dana."#
+        let missing = #"{"edits": [], "evidence": [{"item": "OA2"}]}\#nAnswer: Ron tells support."#
+        let restated = #"{"edits": [], "evidence": []}\#nAnswer: Nothing was decided; Dana is to tell support about the release."#
+
+        let answered = ConversationChat.reply(from: text, turns: turns, notes: notes, other: theirs) { _ in nil }
+        let fromAQuote = ConversationChat.reply(from: quoted, turns: turns, notes: notes, other: theirs) { _ in nil }
+        let fromTheAnswer = ConversationChat.reply(from: restated, turns: turns, notes: notes, other: theirs) { _ in nil }
+        let alone = ConversationChat.reply(from: text, turns: turns, notes: notes) { _ in nil }
+        let restatedAlone = ConversationChat.reply(from: restated, turns: turns, notes: notes) { _ in nil }
+        let invented = ConversationChat.reply(from: missing, turns: turns, notes: notes, other: theirs) { _ in nil }
+
+        #expect(answered.answer.text == "Dana tells support.")
+        #expect(fromAQuote.answer.text == "Dana.")
+        #expect(fromTheAnswer.answer.text == "Nothing was decided; Dana is to tell support about the release.")
+        #expect(ConversationChat.cites(restated, from: theirs))
+        #expect(alone == ChatReply(answer: .notInConversation))
+        #expect(restatedAlone == ChatReply(answer: .notInConversation))
+        #expect(invented == ChatReply(answer: .notInConversation))
+    }
+
+    @Test func aChatThatStartsOverHasTheOtherConversationItUsed() {
+        var asked = ChatExchange(message: "What did we decide at the release sync?")
+        asked.answer = Answer(text: "To release on Thursday.", evidence: [])
+        asked.reply = #"{"asks": "question", "edits": [], "evidence": [{"item": "OD1"}]}"# + "\nAnswer: To release on Thursday."
+        asked.reference = reference
+        let brought = ConversationChat.brought(reference)
+        let request = ConversationChat.request(asked.message, notesIn: .english)
+
+        let opening = ConversationChat.opening("TRANSCRIPT", notes: notes, after: [asked], request: "Message: And who tells support?")
+        let history = ConversationChat.history([asked], in: notes)
+
+        #expect(opening.count == 3)
+        #expect(opening.first?.hasSuffix("\(brought)\n\n\(request)") == true)
+        #expect(opening.last == "Message: And who tells support?")
+        #expect(history.hasSuffix("Answer: To release on Thursday. From the Notes of \"Release sync\" on Monday, 2 November 2026."))
+    }
+
     /// A chat saved before replies were kept is given its earlier messages as a list.
     @Test func withoutTheLastReplyTheEarlierMessagesAreListed() {
         var old = ChatExchange(message: "Who works on the flow?")

@@ -47,7 +47,7 @@
 "All Action Items are done. Delete this Conversation?" = "כל המשימות בוצעו. למחוק את השיחה הזו?";
 "Allow…" = "מתן הרשאה…";
 "App language" = "שפת היישום";
-"Ask about what was said, or ask to change the Notes. Answers come only from the Transcript and the Notes, with the lines they're based on, and you'll be told when they don't say." = "אפשר לשאול על מה שנאמר, או לבקש לשנות את הסיכום. התשובות מגיעות רק מהתמלול ומהסיכום, עם השורות שעליהן הן מבוססות. כשאין בהם תשובה, זה ייאמר במפורש.";
+"Ask about what was said, or ask to change the Notes. Answers come only from the Transcript and the Notes, with the lines they're based on, and you'll be told when they don't say. To use another Conversation's Notes, name it, like “my meeting with Dana last week”, or pick it from the menu beside the message box." = "אפשר לשאול על מה שנאמר, או לבקש לשנות את הסיכום. התשובות מגיעות רק מהתמלול ומהסיכום, עם השורות שעליהן הן מבוססות. כשאין בהם תשובה, זה ייאמר במפורש. כדי להיעזר בסיכום של שיחה אחרת, אפשר לציין אותה, למשל “הפגישה שלי עם דנה בשבוע שעבר”, או לבחור אותה מהתפריט שליד תיבת ההודעה.";
 "Ask again in a week" = "לשאול שוב בעוד שבוע";
 "Ask something, or ask to change the Notes" = "אפשר לשאול, או לבקש לשנות את הסיכום";
 "Bekitzur" = "בקיצור";
@@ -86,6 +86,7 @@
 "Bekitzur switches once it restarts." = "בקיצור יעבור לשפה הזו כשיופעל מחדש.";
 "Bekitzur writes Notes in this language, whatever language the Conversation is in. Notes it wrote before stay as they are; to write a Conversation's Notes in this language, choose Write Notes again in the Conversation's menu." = "בקיצור כותב סיכומים בשפה הזו, לא משנה באיזו שפה השיחה. סיכומים שהוא כתב קודם נשארים כמו שהם; כדי לכתוב את הסיכום של שיחה בשפה הזו, אפשר לבחור ״כתיבת הסיכום מחדש״ בתפריט של השיחה.";
 "Bekitzur's notifications work" = "העדכונים של בקיצור עובדים";
+"Bring in another Conversation's Notes" = "הוספת הסיכום של שיחה אחרת";
 "Can't convert %@: %@" = "לא ניתן להמיר את %@: %@";
 "Can't create a language model context" = "לא ניתן ליצור context למודל השפה";
 "Can't load the language model at %@" = "לא ניתן לטעון את מודל השפה מ-%@";
@@ -146,6 +147,7 @@
 "Detecting the language" = "מזהה את השפה";
 "Did the call end?" = "השיחה הסתיימה?";
 "Disclaimer" = "הסתייגות";
+"Don't bring it in" = "לא להוסיף אותה";
 "Done" = "סיום";
 "Done reviewing" = "סיימתי לעבור";
 "Download" = "הורדה";
@@ -168,6 +170,7 @@
 "Finishing the live Transcript" = "מסיים את התמלול החי";
 "Follow" = "מעקב";
 "Forget" = "לשכוח";
+"From “%@” · %@" = "מתוך “%@” · %@";
 "Hebrew" = "עברית";
 "Hebrew speech model" = "מודל דיבור בעברית";
 "Hugging Face answered with HTTP %lld." = "Hugging Face ענה עם HTTP %lld.";
@@ -230,7 +233,9 @@
 "No one spoke in the voice sample. Try again a little closer to the microphone." = "אף אחד לא דיבר בדגימת הקול. כדאי לנסות שוב קרוב יותר למיקרופון.";
 "No one yet. Name Speakers in a Conversation and they're added here." = "עוד אין אף אחד. כשנותנים שמות לדוברים בשיחה, הם מתווספים לכאן.";
 "No one yet. Name Speakers in a Conversation to find its Conversations by them." = "עוד אין אף אחד. אפשר לתת שמות לדוברים בשיחה כדי למצוא שיחות לפיהם.";
+"No other Conversations yet" = "אין עדיין שיחות אחרות";
 "No time" = "ללא שעה";
+"None of your other Conversations fits that. You can pick it from the menu beside the message box." = "אף אחת מהשיחות האחרות שלך לא מתאימה. אפשר לבחור את השיחה מהתפריט שליד תיבת ההודעה.";
 "Not downloaded, %@" = "לא הורד, %@";
 "Not found" = "לא נמצא";
 "Not now" = "לא עכשיו";
@@ -321,6 +326,7 @@
 "Show in Transcript" = "הצגה בתמלול";
 "Show only Conversations with the people you pick" = "הצגת שיחות רק עם האנשים שנבחרו";
 "Show the live Transcript" = "הצגת התמלול החי";
+"Show this Conversation" = "הצגת השיחה הזו";
 "Some of Bekitzur's data couldn't be moved to the Trash" = "חלק מהנתונים של בקיצור לא הועברו לפח";
 "Someone with Bekitzur can open this file to add the Conversation, with its recording, Transcript, Speakers, and Notes." = "מי שיש לו בקיצור יכול לפתוח את הקובץ הזה כדי להוסיף את השיחה, עם ההקלטה, התמלול, הדוברים והסיכום שלה.";
 "Speaker" = "דובר";
@@ -405,6 +411,7 @@
 "Who is this?" = "מי זה?";
 "With %@" = "עם %@";
 "With %@ + %lld" = "עם %@ ועוד %lld";
+"With “%@” · %@" = "עם “%@” · %@";
 "Write Notes Again" = "כתיבת הסיכום מחדש";
 "Write Notes again" = "כתיבת הסיכום מחדש";
 "Writing Notes" = "כותב סיכום";
