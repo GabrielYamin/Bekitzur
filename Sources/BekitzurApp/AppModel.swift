@@ -235,7 +235,10 @@ final class AppModel {
     @ObservationIgnored private lazy var mainWindow = WindowController(title: String(localized: "Bekitzur"), autosaveName: "Main", size: NSSize(width: 1040, height: 720)) {
         MainWindow(model: self)
     }
-    @ObservationIgnored private lazy var settingsWindow = WindowController(title: String(localized: "Bekitzur Settings"), autosaveName: "Settings", size: NSSize(width: 560, height: 640)) {
+    /// Saved under a name of its own since it has a sidebar: the frame saved for one long list is too narrow for it.
+    @ObservationIgnored private lazy var settingsWindow = WindowController(
+        title: String(localized: "Bekitzur Settings"), autosaveName: "SettingsPanes", size: NSSize(width: 760, height: 560)
+    ) {
         SettingsView(model: self)
     }
 
