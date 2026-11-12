@@ -120,3 +120,5 @@ public struct ConversationLibrary: Sendable {
         return decoder
     }()
 }
+
+extension ConversationLibrary: ConversationStore {}

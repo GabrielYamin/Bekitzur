@@ -24,6 +24,9 @@ public struct ChatExchange: Codable, Sendable, Equatable, Identifiable {
     public var reply: String?
     /// Another Conversation whose Notes the reply used, picked from the menu or found from the message's words.
     public var reference: ChatReference?
+    /// The AI app, like Claude, that made these changes to the Notes through Bekitzur's MCP server, with `message` its
+    /// reason; nil for a message the user sent. The chat leaves these out of what it tells its model.
+    public var from: String?
 
     public init(message: String) {
         id = UUID()
