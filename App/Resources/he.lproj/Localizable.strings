@@ -42,10 +42,12 @@
 "Add a time" = "הוספת שעה";
 "Add an Action Item" = "הוספת משימה";
 "Add an Open Question" = "הוספת שאלה פתוחה";
+"Add the skill" = "הוספת ה-skill";
 "Add to Calendar" = "הוספה ליומן";
 "Added a Decision: %@" = "נוספה החלטה: %@";
 "Added an Action Item: %@" = "נוספה משימה: %@";
 "Added an Open Question: %@" = "נוספה שאלה פתוחה: %@";
+"Added to %@, from its next chat." = "נוסף ל-%@, החל מהצ׳אט הבא שלו.";
 "All Action Items are done. Delete this Conversation?" = "כל המשימות בוצעו. למחוק את השיחה הזו?";
 "Allow…" = "מתן הרשאה…";
 "App language" = "שפת היישום";
@@ -120,6 +122,7 @@
 "Copy Notes" = "העתקת הסיכום";
 "Copy Transcript" = "העתקת התמלול";
 "Copy setup" = "העתקת ההגדרה";
+"Couldn't add the skill: %@" = "לא ניתן היה להוסיף את ה-skill: %@";
 "Couldn't answer: %@" = "לא ניתן היה לענות: %@";
 "Couldn't check for updates" = "לא ניתן היה לבדוק אם יש עדכונים";
 "Couldn't delete the Conversation: %@" = "לא ניתן היה למחוק את השיחה: %@";
@@ -415,6 +418,7 @@
 "What you type replaces all of them as one phrase, which a click takes back." = "מה שמקלידים מחליף את כולן בביטוי אחד, ולחיצה מבטלת אותו.";
 "What's still open" = "מה עוד פתוח";
 "When Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, Bekitzur offers to record, and once it stops, to stop recording. A call can't be seen while it rings, so the offer comes when you answer or join." = "כש-Slack, Teams, Zoom, FaceTime או הדפדפן מתחילים להשתמש במיקרופון, בקיצור מציע להקליט, וכשהם מפסיקים, להפסיק להקליט. אי אפשר לזהות שיחה בזמן שהיא מצלצלת, ולכן ההצעה מגיעה כשעונים או מצטרפים.";
+"When an AI app can't use MCP servers, its agent can run Bekitzur's tools from its terminal instead, and the skill tells it how." = "כשאפליקציית AI לא יכולה להשתמש בשרתי MCP, הסוכן שלה יכול להריץ את הכלים של בקיצור מהטרמינל שלו במקום זאת, וה-skill מסביר לו איך.";
 "When an English term is spoken in Hebrew, Bekitzur writes it in English letters. It knows %lld common tech terms; add your team's own here. Typing what was said for a word in the Transcript teaches it too." = "כשאומרים מונח באנגלית בתוך עברית, בקיצור כותב אותו באותיות לועזיות. הוא מכיר %lld מונחים טכניים נפוצים; כאן אפשר להוסיף את המונחים של הצוות. גם הקלדה של מה שנאמר במקום מילה בתמלול מלמדת אותו.";
 "Who is this?" = "מי זה?";
 "With %@" = "עם %@";

@@ -119,6 +119,8 @@ private struct PeopleSection: View {
 /// Whether AI apps may use the Conversations through Bekitzur's MCP server, and how to connect one.
 private struct AIAppsSection: View {
     @Bindable var model: AppModel
+    /// What adding the skill to an agent came to.
+    @ViewState private var added: String? = nil
 
     var body: some View {
         Section("AI apps") {
@@ -141,6 +143,28 @@ private struct AIAppsSection: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
+            LabeledContent("Add the skill") {
+                HStack {
+                    ForEach(AIApps.Agent.allCases, id: \.self) { agent in
+                        Button(agent.rawValue) { add(agent) }
+                    }
+                }
+            }
+            Text("When an AI app can't use MCP servers, its agent can run Bekitzur's tools from its terminal instead, and the skill tells it how.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            if let added {
+                Text(added).font(.callout)
+            }
+        }
+    }
+
+    private func add(_ agent: AIApps.Agent) {
+        do {
+            try AIApps.addSkill(for: agent)
+            added = String(localized: "Added to \(agent.rawValue), from its next chat.")
+        } catch {
+            added = String(localized: "Couldn't add the skill: \(error.localizedDescription)")
         }
     }
 }

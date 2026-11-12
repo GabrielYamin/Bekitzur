@@ -297,6 +297,44 @@ struct MCPServerTests {
         #expect(errorCode(notJSON) == -32700)
     }
 
+    /// Where MCP servers aren't allowed, an AI agent runs the tools from its terminal, through the same checks.
+    @Test func anAgentInATerminalRunsAToolByName() throws {
+        let (library, id) = try library()
+        defer { try? FileManager.default.removeItem(at: library.root) }
+        let server = server(library)
+
+        let found = server.call("find_conversations", arguments: ["text": "runbook"], by: "Cursor")
+        let unknown = server.call("search", arguments: [:], by: nil)
+        let refused = self.server(library, allowed: false).call("list_people", arguments: [:], by: "Cursor")
+
+        #expect(!found.failed)
+        #expect(found.text.hasPrefix("- \(id):"))
+        #expect(server.client == "Cursor")
+        #expect(unknown.failed)
+        #expect(unknown.text.contains("find_conversations"))
+        #expect(refused.text == MCPServer.notAllowed)
+    }
+
+    @Test func theToolsAreListedForTheTerminal() {
+        let help = MCPServer.toolsHelp
+
+        #expect(help.contains("edit_notes: Changes a Conversation's Notes"))
+        #expect(help.contains("""
+
+              conversation (string, required): The Conversation's ID, from find_conversations.
+              edits (a list of objects, required)
+                action (add | change | remove | title | summary, required)
+            """))
+    }
+
+    @Test func theSkillTellsAnAgentHowToRunThem() {
+        let skill = MCPServer.skill(command: "/Users/dana/Applications/Bekitzur.app/Contents/MacOS/Bekitzur", app: "Cursor")
+
+        #expect(skill.hasPrefix("---\nname: bekitzur\ndescription: Reads and edits the user's recorded meetings and calls"))
+        #expect(skill.contains(#""/Users/dana/Applications/Bekitzur.app/Contents/MacOS/Bekitzur" --tool find_conversations '{"person": "Dana", "after": "2026-11-02"}' --as "Cursor""#))
+        #expect(skill.contains(#"`"/Users/dana/Applications/Bekitzur.app/Contents/MacOS/Bekitzur" --tools` lists the tools"#))
+    }
+
     @Test(arguments: [
         (["name": "claude-ai", "version": "1"], "Claude"),
         (["name": "claude-code", "version": "1"], "Claude Code"),

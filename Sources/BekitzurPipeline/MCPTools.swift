@@ -40,6 +40,80 @@ extension MCPServer {
         (try? JSONSerialization.jsonObject(with: Data(toolsJSON.utf8))) as? [Any] ?? []
     }
 
+    /// The tools and their arguments, for an AI agent that runs them from its terminal.
+    public static var toolsHelp: String {
+        var lines: [String] = []
+        for case let tool as [String: Any] in tools {
+            let name = tool["name"] as? String ?? ""
+            lines.append("\(name): \(tool["description"] as? String ?? "")")
+            lines += argumentLines(tool["inputSchema"] as? [String: Any] ?? [:], indent: "  ")
+            lines.append("")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// An object's properties, the required ones first, with what each takes.
+    private static func argumentLines(_ schema: [String: Any], indent: String) -> [String] {
+        let required = Set(schema["required"] as? [String] ?? [])
+        let properties = schema["properties"] as? [String: Any] ?? [:]
+        let names = properties.keys.filter(required.contains).sorted() + properties.keys.filter { !required.contains($0) }.sorted()
+        var lines: [String] = []
+        for name in names {
+            guard let property = properties[name] as? [String: Any] else { continue }
+            let items = property["items"] as? [String: Any]
+            var kind = property["type"] as? String ?? "value"
+            if let choices = property["enum"] as? [String] { kind = choices.joined(separator: " | ") }
+            if items != nil { kind = "a list of objects" }
+            if required.contains(name) { kind += ", required" }
+            let description = property["description"] as? String
+            lines.append("\(indent)\(name) (\(kind))" + (description.map { ": \($0)" } ?? ""))
+            if let items { lines += argumentLines(items, indent: indent + "  ") }
+        }
+        return lines
+    }
+
+    /// The skill that tells an AI agent how to run Bekitzur's tools from its terminal, with the command that does.
+    /// - Parameter app: The agent's name, which it gives Bekitzur with each call.
+    public static func skill(command: String, app: String) -> String {
+        let run = "\"\(command)\" \(toolArgument)"
+        let list = "\"\(command)\" \(toolsArgument)"
+        return """
+        ---
+        name: bekitzur
+        description: Reads and edits the user's recorded meetings and calls in Bekitzur, their Notes (summary, Decisions, Action Items, Open Questions) and Transcripts. Use when the user asks about a meeting, call, or Conversation, what someone said or committed to, their Action Items or decisions, or to change a Conversation's Notes.
+        ---
+
+        # Bekitzur
+
+        Bekitzur records the user's conversations on this Mac and writes Notes for each. Run its tools from the terminal, the arguments a JSON object:
+
+        ```bash
+        \(run) find_conversations '{"person": "Dana", "after": "2026-11-02"}' --as "\(app)"
+        ```
+
+        `\(list)` lists the tools and their arguments.
+
+        1. Find Conversations with `find_conversations` (words, a person, days), or the names `person` takes with `list_people`.
+        2. Read one with `get_conversation` (its Notes, their item names like A2, and their version) and `get_transcript`, a stretch of minutes at a time for a long one.
+        3. Answer from those, quoting the Transcript as it is: Conversations are often in Hebrew with English terms.
+
+        Change Notes only when the user asks: call `get_conversation` again, then `edit_notes` with its `notes_version` and the items as it named them. Give arguments that hold an apostrophe on stdin, with `-` in their place:
+
+        ```bash
+        \(run) edit_notes - --as "\(app)" <<'EOF'
+        {"conversation": "…", "notes_version": "…", "edits": [{"action": "add", "section": "action_item", "text": "…", "owner": "Dana's team"}]}
+        EOF
+        ```
+
+        The user sees each change in Bekitzur, and can undo it. If a tool says AI apps aren't allowed, ask the user to turn on Settings → AI apps → Let AI apps use your Conversations in Bekitzur.
+        """
+    }
+
+    /// Runs one tool from the terminal: `--tool <name> ['<arguments as JSON>' | -] [--as <agent>]`.
+    public static let toolArgument = "--tool"
+    /// Lists the tools and their arguments.
+    public static let toolsArgument = "--tools"
+
     func run(_ tool: Tool, with arguments: [String: Any]) throws -> String {
         switch tool {
         case .findConversations: try find(arguments)

@@ -14,7 +14,7 @@ Bekitzur is open source, under the [MIT License](LICENSE). Its releases are on t
 - Writes the Notes with Gemma 4 26B-A4B through llama.cpp. Quotes are checked against the Transcript, and due dates are worked out in code.
 - For review: listen back along the Transcript, hear the moment a Notes item or an answer comes from without leaving it, fix words and Speakers, update or edit the Notes, copy the Notes or the Transcript as Markdown, rename Conversations, check Action Items off and add the ones with a due day to your calendar, and chat about a Conversation of up to 2 hours: answers come only from its Transcript and Notes, or another Conversation's Notes when a message names it or you pick it, and the chat changes the Notes when asked, with Undo. Once every Action Item is done, it offers, now and then, to delete the Conversation.
 - Finds Conversations by the people in them and by what was said in them, in their titles, Notes, and Transcripts.
-- Lets AI apps like Claude and Cursor find your Conversations, read their Notes and Transcripts, and change their Notes, with Undo, through its MCP server, once you turn that on in Settings ([AI apps](#ai-apps-mcp)).
+- Lets AI apps like Claude and Cursor find your Conversations, read their Notes and Transcripts, and change their Notes, with Undo, through its MCP server or from their terminal, once you turn that on in Settings ([AI apps](#ai-apps)).
 - Speaks English or Hebrew: Settings → Language picks the app's language, or follows the Mac's, and, on its own, the language Notes are written in, whatever language the Conversation is in.
 - Downloads its own models with their progress, imports recordings made elsewhere, exports a Conversation as one file that someone else with Bekitzur opens to add it, and updates itself from signed releases after asking.
 
@@ -52,7 +52,7 @@ Bekitzur is provided as is, without warranty of any kind, and its authors aren't
 
 Bekitzur checks for new versions and asks before installing one; **Check for Updates…** in its menu checks right away. Updates keep your Conversations, names, and settings.
 
-## AI apps (MCP)
+## AI apps
 
 AI apps like Claude, Claude Code, and Cursor can use your Conversations with a frontier model through Bekitzur's MCP server: find them by words, a person, or dates, read their Notes and Transcripts, and change their Notes. The server is the app itself, started with `--mcp`, so it updates with Bekitzur. What an AI app reads goes to its model's provider.
 
@@ -75,6 +75,8 @@ AI apps like Claude, Claude Code, and Cursor can use your Conversations with a f
    - Claude Code: `claude mcp add bekitzur -- ~/Applications/Bekitzur.app/Contents/MacOS/Bekitzur --mcp`
 
 Its tools are `find_conversations`, `list_people`, `get_conversation` (details, Speakers, and Notes), `get_transcript` (all of it or a stretch), and `edit_notes`. Changes an AI app makes show in the Conversation's Chat tab, as changed by Claude or whichever app it was, with Undo, and the open app shows them right away.
+
+When an AI app can't use MCP servers, its agent can run the same tools from its terminal: `Bekitzur --tool <name> '<arguments as JSON>'`, with `Bekitzur --tools` listing them. **Add the skill** in Settings → AI apps adds a skill to Cursor or Claude Code that tells the agent how, as does `~/Applications/Bekitzur.app/Contents/MacOS/Bekitzur --add-skill cursor` (or `claude-code`). The setting, the log, and Undo work the same way.
 
 ## Uninstall
 

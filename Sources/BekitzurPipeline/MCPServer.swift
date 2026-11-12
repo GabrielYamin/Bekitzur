@@ -104,11 +104,21 @@ public final class MCPServer {
 
     private var serverInfo: [String: Any] { ["name": "bekitzur", "title": "Bekitzur", "version": version] }
 
+    /// Runs a tool by name for an AI agent that calls Bekitzur from its terminal, where MCP servers aren't allowed.
+    /// - Parameter app: The agent, as it names itself, for the log and for its changes in the Conversation's chat.
+    public func call(_ name: String, arguments: [String: Any], by app: String?) -> (text: String, failed: Bool) {
+        client = app ?? client
+        guard let tool = Tool(rawValue: name) else {
+            return ("No tool is called \(name). The tools are " + Tool.allCases.map(\.rawValue).joined(separator: ", ") + ".", true)
+        }
+        return call(tool, with: arguments)
+    }
+
     /// A tool's text, and whether it failed, which the model sees to do better, as the protocol asks of a tool's errors.
     private func call(_ tool: Tool, with arguments: [String: Any]) -> (text: String, failed: Bool) {
         guard allowed() else { return (Self.notAllowed, true) }
         let conversation = arguments["conversation"] as? String
-        log("MCP: \(client ?? "an AI app") used \(tool.rawValue)" + (conversation.map { " on \($0)" } ?? ""))
+        log("AI apps: \(client ?? "an AI app") used \(tool.rawValue)" + (conversation.map { " on \($0)" } ?? ""))
         do {
             return (try run(tool, with: arguments), false)
         } catch let failure as ToolFailure {
