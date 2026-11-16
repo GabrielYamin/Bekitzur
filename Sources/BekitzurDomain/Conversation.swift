@@ -61,6 +61,12 @@ public struct ConversationSpeaker: Codable, Sendable, Equatable {
         if case .named(let name, _) = naming { return name }
         return label
     }
+
+    /// It's shown under a name, one the user gave it or a Participant's it was recognized as, not only suggested one.
+    public var isNamed: Bool {
+        if case .named = naming { return true }
+        return false
+    }
 }
 
 /// A stretch where two Speakers or more talked at once, by their labels, which naming them doesn't change.
@@ -101,6 +107,21 @@ public struct ProcessedConversation: Codable, Sendable, Equatable {
         self.notes = notes
         self.notesFixes = notesFixes
         self.notesEdited = notesEdited
+    }
+
+    /// Who an Action Item can be for, to pick an Owner from: the Speakers, the named ones first, and those without a name
+    /// by their label ("Speaker 2"), which naming them later changes in the Owners too; then anyone else the Notes have as
+    /// an Owner, like someone named who wasn't there.
+    public var ownerChoices: [String] {
+        var choices: [String] = []
+        func choose(_ name: String) {
+            let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty, !choices.contains(name) { choices.append(name) }
+        }
+        for speaker in speakers where speaker.isNamed { choose(speaker.displayName) }
+        for speaker in speakers where !speaker.isNamed { choose(speaker.label) }
+        for owner in notes.actionItems.compactMap(\.owner) { choose(owner) }
+        return choices
     }
 
     /// Shows a person under a new name everywhere in the Conversation, as `renamingSpeaker` does for each Speaker named
