@@ -75,9 +75,9 @@ struct NotesView: View {
                     .environment(\.layoutDirection, direction)
 
                 if !notes.decisions.isEmpty {
-                    NotesSection(title: "Decisions", systemImage: "checkmark.seal", direction: direction) {
-                        ForEach(Array(notes.decisions.enumerated()), id: \.offset) { _, decision in
-                            NoteItem(text: decision.text, quote: decision.quote, sources: decision.sourceTurns, turns: turns, player: player)
+                    NotesSection(title: "Decisions", direction: direction) {
+                        ForEach(Array(notes.decisions.enumerated()), id: \.offset) { index, decision in
+                            NoteItem(text: decision.text, quote: decision.quote, sources: decision.sourceTurns, turns: turns, player: player, first: index == 0)
                         }
                     }
                 }
@@ -85,7 +85,7 @@ struct NotesView: View {
                 if !notes.actionItems.isEmpty {
                     let done = notes.actionItems.filter { $0.done == true }.count
                     let detail = done > 0 ? String(localized: "\(done) of \(notes.actionItems.count) done") : nil
-                    NotesSection(title: "Action Items", systemImage: "checklist", detail: detail, direction: direction) {
+                    NotesSection(title: "Action Items", detail: detail, direction: direction) {
                         ForEach(Array(notes.actionItems.enumerated()), id: \.offset) { index, item in
                             NoteItem(
                                 text: item.text,
@@ -93,10 +93,11 @@ struct NotesView: View {
                                 sources: item.sourceTurns,
                                 turns: turns,
                                 player: player,
+                                first: index == 0,
                                 done: Binding(get: { item.done == true }, set: { setDone(index, $0) })
                             ) {
-                                HStack(spacing: 6) {
-                                    Chip(item.owner.map(ShownNames.speaker) ?? String(localized: "No Owner"), systemImage: "person", prominent: item.owner != nil)
+                                HStack(spacing: 14) {
+                                    OwnerToken(owner: item.owner)
                                     if let due = NotesMarkdown.dueText(item) {
                                         let said = item.duePhrase.map { String(localized: "Said: \"\($0)\"") }
                                         if item.dueDate != nil {
@@ -104,7 +105,9 @@ struct NotesView: View {
                                                 addToCalendar(item)
                                             }
                                         } else {
-                                            Chip(due, systemImage: "calendar", prominent: true)
+                                            Label(due, systemImage: "calendar")
+                                                .font(.callout)
+                                                .foregroundStyle(.secondary)
                                                 .help(said ?? "")
                                         }
                                     }
@@ -115,9 +118,9 @@ struct NotesView: View {
                 }
 
                 if !notes.openQuestions.isEmpty {
-                    NotesSection(title: "Open Questions", systemImage: "questionmark.bubble", direction: direction) {
-                        ForEach(Array(notes.openQuestions.enumerated()), id: \.offset) { _, question in
-                            NoteItem(text: question.text, quote: nil, sources: question.sourceTurns, turns: turns, player: player)
+                    NotesSection(title: "Open Questions", direction: direction) {
+                        ForEach(Array(notes.openQuestions.enumerated()), id: \.offset) { index, question in
+                            NoteItem(text: question.text, quote: nil, sources: question.sourceTurns, turns: turns, player: player, first: index == 0)
                         }
                     }
                 }
@@ -400,28 +403,27 @@ private struct ActionItemDetails: View {
     }()
 }
 
+/// A part of the Notes under a small title, its items one after another like lines in a document.
 private struct NotesSection<Content: View>: View {
     let title: LocalizedStringKey
-    let systemImage: String
     /// Beside the title, like how many Action Items are done.
     var detail: String?
     /// The items', which can be the other way from the title's.
     let direction: LayoutDirection
     @ViewBuilder let content: Content
 
-    init(title: LocalizedStringKey, systemImage: String, detail: String? = nil, direction: LayoutDirection, @ViewBuilder content: () -> Content) {
+    init(title: LocalizedStringKey, detail: String? = nil, direction: LayoutDirection, @ViewBuilder content: () -> Content) {
         self.title = title
-        self.systemImage = systemImage
         self.detail = detail
         self.direction = direction
         self.content = content()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Label(title, systemImage: systemImage).font(.title3.bold())
-                if let detail { Text(detail).font(.callout).foregroundStyle(.secondary).monospacedDigit() }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title).font(.caption.weight(.semibold)).textCase(.uppercase).tracking(0.6).foregroundStyle(.secondary)
+                if let detail { Text(detail).font(.caption).foregroundStyle(.tertiary).monospacedDigit() }
             }
             content.environment(\.layoutDirection, direction)
         }
@@ -434,6 +436,8 @@ private struct NoteItem<Details: View>: View {
     let sources: [String]
     let turns: [String: Turn]
     let player: SourcePlayer
+    /// The section's first item, with no hairline above it.
+    let first: Bool
     /// An Action Item's check box; nil for a Decision or an Open Question.
     var done: Binding<Bool>?
     @ViewBuilder let details: Details
@@ -444,6 +448,7 @@ private struct NoteItem<Details: View>: View {
         sources: [String],
         turns: [String: Turn],
         player: SourcePlayer,
+        first: Bool,
         done: Binding<Bool>? = nil,
         @ViewBuilder details: () -> Details
     ) {
@@ -452,6 +457,7 @@ private struct NoteItem<Details: View>: View {
         self.sources = sources
         self.turns = turns
         self.player = player
+        self.first = first
         self.done = done
         self.details = details()
     }
@@ -472,20 +478,20 @@ private struct NoteItem<Details: View>: View {
             }
             content.opacity(done?.wrappedValue == true ? 0.6 : 1)
         }
-        .padding(12)
+        .padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .top) {
+            if !first { Divider() }
+        }
     }
 
+    /// The item and its Sources; the quote it stands on shows in a Source's popover, which plays it.
     private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(text).fontWeight(.medium).strikethrough(done?.wrappedValue == true)
+            Text(text).fontWeight(done == nil ? .regular : .medium).strikethrough(done?.wrappedValue == true)
             details
-            if let quote, !quote.isEmpty {
-                DirectionalText("“\(quote)”").font(.callout).foregroundStyle(.secondary)
-            }
             if !sources.isEmpty {
-                HStack(spacing: 6) {
+                HStack(spacing: 12) {
                     ForEach(sources, id: \.self) { id in
                         if let turn = turns[id] {
                             SourceButton(speaker: turn.speaker, text: turn.text, player: player) {
@@ -494,9 +500,7 @@ private struct NoteItem<Details: View>: View {
                                 Label("\(ShownNames.speaker(turn.speaker)) \(timestamp(turn.start))", systemImage: "play.fill")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(.quaternary.opacity(0.6), in: Capsule())
+                                    .contentShape(Rectangle())
                             }
                             .help("Listen: \(turn.text)")
                         }
@@ -509,33 +513,32 @@ private struct NoteItem<Details: View>: View {
 }
 
 extension NoteItem where Details == EmptyView {
-    init(text: String, quote: String?, sources: [String], turns: [String: Turn], player: SourcePlayer) {
-        self.init(text: text, quote: quote, sources: sources, turns: turns, player: player) { EmptyView() }
+    init(text: String, quote: String?, sources: [String], turns: [String: Turn], player: SourcePlayer, first: Bool) {
+        self.init(text: text, quote: quote, sources: sources, turns: turns, player: player, first: first) { EmptyView() }
     }
 }
 
-private struct Chip: View {
-    let text: String
-    let systemImage: String
-    let prominent: Bool
-
-    init(_ text: String, systemImage: String, prominent: Bool) {
-        self.text = text
-        self.systemImage = systemImage
-        self.prominent = prominent
-    }
+/// An Action Item's Owner with their avatar, or No Owner.
+private struct OwnerToken: View {
+    let owner: String?
 
     var body: some View {
-        Label(text, systemImage: systemImage)
+        if let owner {
+            HStack(spacing: 5) {
+                PersonAvatar(name: owner, size: 16)
+                Text(ShownNames.speaker(owner))
+            }
             .font(.callout)
-            .foregroundStyle(prominent ? .primary : .secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(prominent ? AnyShapeStyle(.tint.opacity(0.15)) : AnyShapeStyle(.quaternary.opacity(0.5)), in: Capsule())
+            .foregroundStyle(.secondary)
+        } else {
+            Label("No Owner", systemImage: "person")
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+        }
     }
 }
 
-/// A due day that adds its Action Item to the calendar: the due Chip with a + after the day, lit under the pointer.
+/// A due day that adds its Action Item to the calendar, with a + after the day, lit under the pointer.
 private struct DueChip: View {
     let text: String
     let help: String
@@ -553,10 +556,10 @@ private struct DueChip: View {
                 Image(systemName: "calendar")
             }
             .font(.callout)
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(.tint.opacity(hovering ? 0.28 : 0.15), in: Capsule())
+            .foregroundStyle(hovering ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.tint.opacity(hovering ? 0.12 : 0), in: Capsule())
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)

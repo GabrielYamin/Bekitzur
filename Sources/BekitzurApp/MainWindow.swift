@@ -7,23 +7,20 @@ struct MainWindow: View {
 
     var body: some View {
         NavigationSplitView {
-            // Above the list rather than in its safe area, where rows scroll under the boxes and show through them.
+            // Above the list rather than in its safe area, where rows scroll under the notes and show through them.
             VStack(spacing: 0) {
                 VStack(spacing: 6) {
                     RequirementsNote(model: model)
                     PermissionsNote(model: model)
                     ModelsNote(model: model)
                     UpdateNote(model: model)
-                    StartButtons(model: model)
                 }
                 .padding(.horizontal, 10)
-                .padding(.top, 6)
-                .padding(.bottom, 8)
-                if !model.conversations.isEmpty {
-                    ConversationListHeader(model: model)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 2)
-                }
+                .padding(.top, 4)
+                .padding(.bottom, 6)
+                ConversationListHeader(model: model)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 2)
                 conversationList
             }
             .dropDestination(for: URL.self) { urls, _ in
@@ -31,6 +28,18 @@ struct MainWindow: View {
                 return !urls.isEmpty
             }
             .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
+            .toolbar {
+                ToolbarItemGroup {
+                    RecordButton(model: model)
+                    Button {
+                        Task { await model.chooseRecordingsToImport() }
+                    } label: {
+                        Label("Import", systemImage: "square.and.arrow.down")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .help("Import a recording made elsewhere, like a voice memo, or a Conversation exported from Bekitzur")
+                }
+            }
         } detail: {
             Group {
                 if let id = model.selection, let info = model.conversations.first(where: { $0.id == id }) {
@@ -51,15 +60,6 @@ struct MainWindow: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    model.refresh()
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .keyboardShortcut("r", modifiers: .command)
-                .help("Read the Conversations folder again, for Conversations added or changed outside Bekitzur (⌘R)")
-            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     model.showSettings()
@@ -91,24 +91,47 @@ struct MainWindow: View {
         return model.conversations.filter { model.filter.matches(title: $0.displayTitle, entry: model.searchEntries[$0.id]) }
     }
 
+    /// Today, Yesterday, Previous 7 Days, Previous 30 Days, then each month, with its year when it isn't this one.
+    private static func title(of section: DaySection) -> String {
+        switch section {
+        case .today: return String(localized: "Today")
+        case .yesterday: return String(localized: "Yesterday")
+        case .previous7Days: return String(localized: "Previous 7 Days")
+        case .previous30Days: return String(localized: "Previous 30 Days")
+        case .month(let first):
+            if Calendar.current.isDate(first, equalTo: Date(), toGranularity: .year) {
+                return first.formatted(.dateTime.month(.wide))
+            }
+            return first.formatted(.dateTime.month(.wide).year())
+        }
+    }
+
     private var conversationList: some View {
         List(selection: $model.selection) {
-            ForEach(shownConversations) { info in
-                VStack(alignment: .leading, spacing: 2) {
-                    ConversationRow(info: info)
-                    if let excerpt = model.filter.excerpt(title: info.displayTitle, entry: model.searchEntries[info.id]) {
-                        SearchExcerpt(excerpt: excerpt).padding(.leading, 16)
+            ForEach(DaySection.group(shownConversations, date: \.startedAt, now: Date()), id: \.section) { group in
+                Section(Self.title(of: group.section)) {
+                    ForEach(group.items) { info in
+                        VStack(alignment: .leading, spacing: 2) {
+                            ConversationRow(
+                                info: info,
+                                people: (model.searchEntries[info.id]?.people ?? []).sorted(),
+                                timeOnly: group.section == .today || group.section == .yesterday
+                            )
+                            if let excerpt = model.filter.excerpt(title: info.displayTitle, entry: model.searchEntries[info.id]) {
+                                SearchExcerpt(excerpt: excerpt).padding(.leading, 16)
+                            }
+                        }
+                        .tag(info.id)
+                        .contextMenu {
+                            Button("Rename…") { model.renaming = info.id }
+                            Button("Export…") { Task { await model.export(info.id) } }
+                                .disabled(info.status == .recording || info.status == .processing)
+                            Button("Show in Finder") { model.showInFinder(info.id) }
+                            Divider()
+                            Button("Delete", role: .destructive) { model.delete(info.id) }
+                                .disabled(info.status == .recording || info.status == .processing)
+                        }
                     }
-                }
-                .tag(info.id)
-                .contextMenu {
-                    Button("Rename…") { model.renaming = info.id }
-                    Button("Export…") { Task { await model.export(info.id) } }
-                        .disabled(info.status == .recording || info.status == .processing)
-                    Button("Show in Finder") { model.showInFinder(info.id) }
-                    Divider()
-                    Button("Delete", role: .destructive) { model.delete(info.id) }
-                        .disabled(info.status == .recording || info.status == .processing)
                 }
             }
         }
@@ -141,79 +164,41 @@ struct MainWindow: View {
     }
 }
 
-/// Recording and importing, each in a box of its own at the top of the list; as toolbar icons, they're easy to miss.
-private struct StartButtons: View {
+/// Record, or while recording Stop and how long it's been, in red with its name beside it: as an icon alone, Record went
+/// unnoticed.
+private struct RecordButton: View {
     let model: AppModel
 
     var body: some View {
-        HStack(spacing: 8) {
-            if let startedAt = model.recordingStartedAt {
-                BoxButton(title: "Stop", systemImage: "stop.fill", tint: .red, filled: true) {
-                    model.stopRecording()
-                } subtitle: {
+        if let startedAt = model.recordingStartedAt {
+            Button {
+                model.stopRecording()
+            } label: {
+                Label {
                     HStack(spacing: 4) {
-                        Text("Recording")
+                        Text("Stop")
                         RecordingTimer(since: startedAt)
                     }
+                } icon: {
+                    Image(systemName: "stop.fill")
                 }
-                .help("Stop recording and write the Notes")
-            } else {
-                BoxButton(title: "Record", systemImage: "record.circle", tint: .red) {
-                    Task { await model.startRecording() }
-                } subtitle: {
-                    Text("A call or a meeting")
-                }
-                .disabled(model.voiceSample != .idle && !model.voiceSample.isFinished)
-                .help("Record your microphone and what your Mac plays")
             }
-            BoxButton(title: "Import", systemImage: "square.and.arrow.down", tint: .accentColor) {
-                Task { await model.chooseRecordingsToImport() }
-            } subtitle: {
-                Text("A recording or a Conversation")
+            .labelStyle(.titleAndIcon)
+            .buttonStyle(.glassProminent)
+            .tint(.red)
+            .help("Stop recording and write the Notes")
+        } else {
+            Button {
+                Task { await model.startRecording() }
+            } label: {
+                Label("Record", systemImage: "record.circle")
             }
-            .help("Import a recording made elsewhere, like a voice memo, or a Conversation exported from Bekitzur")
+            .labelStyle(.titleAndIcon)
+            .buttonStyle(.glassProminent)
+            .tint(.red)
+            .disabled(model.voiceSample != .idle && !model.voiceSample.isFinished)
+            .help("Record your microphone and what your Mac plays")
         }
-        // As tall as the taller box, whose line of text wraps, so both boxes are the same size.
-        .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-/// A neutral box with its icon in `tint`, or, `filled`, the whole box in it, for a recording going on: a red Record box
-/// would look like recording while nothing is.
-private struct BoxButton<Subtitle: View>: View {
-    let title: LocalizedStringKey
-    let systemImage: String
-    let tint: Color
-    var filled = false
-    let action: () -> Void
-    @ViewBuilder let subtitle: Subtitle
-    @Environment(\.isEnabled) private var isEnabled
-    @ViewState private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 4) {
-                Image(systemName: systemImage).font(.title2).foregroundStyle(filled ? .white : tint)
-                Text(title).font(.headline).foregroundStyle(filled ? .white : .primary)
-                subtitle
-                    .font(.caption)
-                    .foregroundStyle(filled ? AnyShapeStyle(.white.opacity(0.85)) : AnyShapeStyle(.secondary))
-                    .lineLimit(2)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(10)
-            .background(background, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(filled ? Color.clear : Color.primary.opacity(0.12)))
-            .contentShape(RoundedRectangle(cornerRadius: 10))
-            .opacity(isEnabled ? 1 : 0.5)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-    }
-
-    private var background: AnyShapeStyle {
-        let lit = hovering && isEnabled
-        return filled ? AnyShapeStyle(tint.opacity(lit ? 0.85 : 1)) : AnyShapeStyle(Color.primary.opacity(lit ? 0.09 : 0.05))
     }
 }
 
@@ -228,33 +213,48 @@ struct RecordingTimer: View {
     }
 }
 
+/// A Conversation in the list: its title, when and how long, or what processing it is at, and who was in it.
 struct ConversationRow: View {
     let info: ConversationInfo
+    /// The people named in it, other than the user.
+    let people: [String]
+    /// Under Today and Yesterday the time is enough; further back, the day.
+    let timeOnly: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             StatusDot(status: info.status).padding(.top, 5)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(info.displayTitle)
                     .fontWeight(info.status == .unreviewed ? .semibold : .regular)
                     .lineLimit(2)
                 HStack(spacing: 4) {
-                    Text(info.displayDate)
-                    if info.status == .recording {
-                        Text("·")
-                        RecordingTimer(since: info.startedAt)
-                    } else if let minutes = info.minutes {
-                        Text("· \(minutes) min")
+                    if info.status == .processing {
+                        Text(ShownNames.step(info.step))
+                    } else {
+                        Text(when)
+                        if info.status == .recording {
+                            Text("·")
+                            RecordingTimer(since: info.startedAt)
+                        } else if let minutes = info.minutes {
+                            Text("· \(minutes) min")
+                        }
+                    }
+                    Spacer(minLength: 6)
+                    if !people.isEmpty {
+                        AvatarStack(names: people, size: 15)
                     }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                if info.status == .processing {
-                    Text(ShownNames.step(info.step)).font(.caption).foregroundStyle(.secondary)
-                }
             }
         }
         .padding(.vertical, 3)
+    }
+
+    private var when: String {
+        if timeOnly { return info.startedAt.formatted(date: .omitted, time: .shortened) }
+        return info.startedAt.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 }
 

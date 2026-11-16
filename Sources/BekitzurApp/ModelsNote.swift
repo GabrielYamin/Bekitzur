@@ -33,7 +33,7 @@ struct ModelsNote: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background((download.failure == nil ? Color.blue : .orange).opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 10))
         } else if !model.missingModels.isEmpty {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "arrow.down.circle.fill").foregroundStyle(.blue)
@@ -43,7 +43,7 @@ struct ModelsNote: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 10))
         }
     }
 }

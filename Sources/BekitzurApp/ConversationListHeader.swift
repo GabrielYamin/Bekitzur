@@ -2,7 +2,8 @@ import BekitzurDomain
 import SwiftUI
 
 /// Above the Conversation list: its title, which a magnifying glass (⌥⌘F; ⌘F is Find in the Transcript) turns into a
-/// search of titles, Notes, and Transcripts, and the People menu, which shows only Conversations with everyone picked.
+/// search of titles, Notes, and Transcripts, the People menu, which shows only Conversations with everyone picked, and
+/// Refresh.
 struct ConversationListHeader: View {
     @Bindable var model: AppModel
     @ViewState private var searching = false
@@ -54,6 +55,14 @@ struct ConversationListHeader: View {
             .popover(isPresented: $picking, arrowEdge: .bottom) {
                 PeopleChecklist(model: model).frame(width: 250).padding(12)
             }
+            Button {
+                model.refresh()
+            } label: {
+                Image(systemName: "arrow.clockwise").foregroundStyle(.secondary).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("r", modifiers: .command)
+            .help("Read the Conversations folder again, for Conversations added or changed outside Bekitzur (⌘R)")
         }
         .font(.subheadline)
         .onChange(of: searching) { _, now in

@@ -32,6 +32,6 @@ struct RequirementsNote: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 10))
     }
 }

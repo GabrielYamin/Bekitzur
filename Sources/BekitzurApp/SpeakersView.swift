@@ -66,6 +66,7 @@ private struct SpeakerRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
+                PersonAvatar(name: speaker.displayName, size: 22)
                 Text(ShownNames.speaker(speaker.displayName)).font(.headline)
                 Text(Duration.seconds(speaker.speechSeconds).formatted(.units(allowed: [.minutes, .seconds], width: .abbreviated)))
                     .foregroundStyle(.secondary)

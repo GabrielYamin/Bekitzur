@@ -23,17 +23,10 @@ struct ConversationDetail: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            if let warning = info.warning, result != nil {
-                Label(NotesWarning(saved: warning)?.shown ?? warning, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
             Divider()
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .toolbar { toolbar }
         .task(id: "\(info.id)-\(info.status)") {
             model.loadResult(info.id)
             model.loadFlags(info.id)
@@ -60,63 +53,105 @@ struct ConversationDetail: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(info.displayTitle).font(.title2.bold()).textSelection(.enabled)
-                Text(subtitle).foregroundStyle(.secondary)
-                if isSeparating {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("Separating people who talk at once…")
-                    }
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .help("What people said over each other comes into the Transcript when it's done; everything else is ready.")
+        VStack(alignment: .leading, spacing: 6) {
+            Text(info.displayTitle).font(.title2.bold()).textSelection(.enabled)
+            HStack(spacing: 8) {
+                if !people.isEmpty {
+                    AvatarStack(names: people, size: 18, limit: 5)
+                    Text(verbatim: ListFormatter.localizedString(byJoining: people.map(ShownNames.speaker)))
+                    Text(verbatim: "·")
                 }
+                Text(subtitle)
             }
-            Spacer()
-            if result != nil {
-                Button {
-                    model.copyNotes(info.id)
-                } label: {
-                    Label("Copy Notes", systemImage: "doc.on.doc")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            if isSeparating {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Separating people who talk at once…")
                 }
-                Button {
-                    model.copyTranscript(info.id)
-                } label: {
-                    Label("Copy Transcript", systemImage: "text.quote")
-                }
-                if info.status == .unreviewed {
-                    Button("Done reviewing") { model.markReviewed(info.id) }
-                        .buttonStyle(.borderedProminent)
-                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .help("What people said over each other comes into the Transcript when it's done; everything else is ready.")
             }
-            Menu {
-                if info.status == .reviewed {
-                    Button("Mark as not reviewed") { model.markUnreviewed(info.id) }
-                }
-                if info.status == .unreviewed || info.status == .reviewed || info.status == .failed {
-                    Button("Write Notes again") { model.replaceNotes(of: info.id) { model.writeNotesAgain(info.id) } }
-                    Button("Transcribe again") { model.replaceNotes(of: info.id) { model.transcribeAgain(info.id, language: info.language) } }
-                    ForEach(ConversationLanguage.allCases.filter { $0 != info.language }, id: \.self) { language in
-                        Button("Transcribe again as \(ShownNames.language(language))") { model.replaceNotes(of: info.id) { model.transcribeAgain(info.id, language: language) } }
-                    }
-                }
-                Button("Rename…") { model.renaming = info.id }
-                Button("Export…") { Task { await model.export(info.id) } }
-                    .disabled(info.status == .recording || info.status == .processing)
-                Button("Show in Finder") { model.showInFinder(info.id) }
-                Divider()
-                Button("Delete", role: .destructive) { model.delete(info.id) }
-                    .disabled(info.status == .recording || info.status == .processing)
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
         }
-        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
+    }
+
+    /// Who the Conversation's Speakers are, named or not, each once.
+    private var people: [String] {
+        var seen = Set<String>()
+        return (result?.speakers ?? []).map(\.displayName).filter { seen.insert($0).inserted }
+    }
+
+    /// The four views in the middle of the toolbar, and on its right what's done with the whole Conversation.
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        if let result, info.status == .unreviewed || info.status == .reviewed {
+            ToolbarItem(placement: .principal) {
+                Picker("View", selection: $tab) {
+                    Text("Notes").tag(Tab.notes)
+                    Text("Transcript").tag(Tab.transcript)
+                    Text(speakersTabTitle(result)).tag(Tab.speakers)
+                    Text("Chat (beta)").tag(Tab.chat)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
+            if result != nil {
+                Menu {
+                    Button("Copy Notes") { model.copyNotes(info.id) }
+                    Button("Copy Transcript") { model.copyTranscript(info.id) }
+                    Divider()
+                    Button("Export…") { Task { await model.export(info.id) } }
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                .help("Copy the Notes or the Transcript, or export the Conversation")
+                if info.status == .unreviewed {
+                    Button {
+                        model.markReviewed(info.id)
+                    } label: {
+                        Label("Done", systemImage: "checkmark")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .help("Done reviewing")
+                }
+            }
+            moreMenu
+        }
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            if info.status == .reviewed {
+                Button("Mark as not reviewed") { model.markUnreviewed(info.id) }
+            }
+            if info.status == .unreviewed || info.status == .reviewed || info.status == .failed {
+                Button("Write Notes again") { model.replaceNotes(of: info.id) { model.writeNotesAgain(info.id) } }
+                Button("Transcribe again") { model.replaceNotes(of: info.id) { model.transcribeAgain(info.id, language: info.language) } }
+                ForEach(ConversationLanguage.allCases.filter { $0 != info.language }, id: \.self) { language in
+                    Button("Transcribe again as \(ShownNames.language(language))") { model.replaceNotes(of: info.id) { model.transcribeAgain(info.id, language: language) } }
+                }
+            }
+            Button("Rename…") { model.renaming = info.id }
+            Button("Export…") { Task { await model.export(info.id) } }
+                .disabled(info.status == .recording || info.status == .processing)
+            Button("Show in Finder") { model.showInFinder(info.id) }
+            Divider()
+            Button("Delete", role: .destructive) { model.delete(info.id) }
+                .disabled(info.status == .recording || info.status == .processing)
+        } label: {
+            Label("More", systemImage: "ellipsis")
+        }
+        .menuIndicator(.hidden)
+        .help("More")
     }
 
     private var subtitle: String {
@@ -156,42 +191,25 @@ struct ConversationDetail: View {
         case .unreviewed, .reviewed:
             if let result {
                 VStack(spacing: 0) {
+                    if let warning = info.warning {
+                        QuietNotice(NotesWarning(saved: warning)?.shown ?? warning, systemImage: "exclamationmark.triangle.fill", tint: .orange)
+                    }
                     if model.notesAreBehind(info.id) {
-                        HStack {
-                            if model.fixedSinceNotes(info.id) {
-                                Label("You've fixed the Transcript since the Notes were written.", systemImage: "pencil.circle")
-                            } else {
-                                Label("Separating people who talked at once changed lines the Notes cite.", systemImage: "person.2.wave.2")
-                            }
-                            Spacer()
+                        let fixed = model.fixedSinceNotes(info.id)
+                        QuietNotice(
+                            fixed ? String(localized: "You've fixed the Transcript since the Notes were written.") : String(localized: "Separating people who talked at once changed lines the Notes cite."),
+                            systemImage: fixed ? "pencil.circle" : "person.2.wave.2"
+                        ) {
                             Button("Update Notes") { model.replaceNotes(of: info.id) { model.updateNotes(info.id) } }
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 8)
-                        .background(.yellow.opacity(0.12))
                     }
                     if model.suggestsDeleting(info) {
-                        HStack {
-                            Label("All Action Items are done. Delete this Conversation?", systemImage: "checkmark.circle")
-                            Spacer()
+                        QuietNotice(String(localized: "All Action Items are done. Delete this Conversation?"), systemImage: "checkmark.circle", tint: .green) {
                             Button("Not now") { model.notNowForDeleting(info.id) }
                                 .help("Ask again in a week")
                             Button("Delete…", role: .destructive) { confirmingDelete = true }
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 8)
-                        .background(.green.opacity(0.12))
                     }
-                    Picker("View", selection: $tab) {
-                        Text("Notes").tag(Tab.notes)
-                        Text("Transcript").tag(Tab.transcript)
-                        Text(speakersTabTitle(result)).tag(Tab.speakers)
-                        Text("Chat (beta)").tag(Tab.chat)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(maxWidth: 520)
-                    .padding(.vertical, 10)
                     let player = SourcePlayer(playback: playback, transcript: { result.transcript.applying(model.flags[info.id] ?? TranscriptFlags()) }) { time in
                         tab = .transcript
                         playback.seek(to: time)
@@ -225,6 +243,43 @@ struct ConversationDetail: View {
     private func speakersTabTitle(_ result: ProcessedConversation) -> String {
         let unnamed = result.speakers.filter { if case .named = $0.naming { false } else { true } }.count
         return unnamed > 0 ? String(localized: "Speakers (\(unnamed) to name)") : String(localized: "Speakers")
+    }
+}
+
+/// A line about the Conversation above its views, with what can be done about it: quieter than the colored bands these
+/// were, which competed with the Notes.
+private struct QuietNotice<Actions: View>: View {
+    let text: String
+    let systemImage: String
+    let tint: Color
+    @ViewBuilder let actions: Actions
+
+    init(_ text: String, systemImage: String, tint: Color = .secondary, @ViewBuilder actions: () -> Actions) {
+        self.text = text
+        self.systemImage = systemImage
+        self.tint = tint
+        self.actions = actions()
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage).foregroundStyle(tint)
+            Text(text).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            actions.controlSize(.small)
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+    }
+}
+
+extension QuietNotice where Actions == EmptyView {
+    init(_ text: String, systemImage: String, tint: Color = .secondary) {
+        self.init(text, systemImage: systemImage, tint: tint) { EmptyView() }
     }
 }
 

@@ -658,6 +658,7 @@ private struct LineView: View, @MainActor Equatable {
         let runs = TextDirection.runs(texts, in: direction)
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
+                PersonAvatar(name: line.speaker, size: 18)
                 Text(ShownNames.speaker(line.speaker)).font(.headline)
                 Button(timestamp(line.start)) { actions.play(line.start) }
                     .buttonStyle(.link)
