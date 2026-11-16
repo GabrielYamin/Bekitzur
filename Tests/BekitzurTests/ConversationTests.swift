@@ -149,4 +149,23 @@ struct ConversationTests {
         #expect(third.owner == nil && third.duePhrase == "by Friday")
         #expect(try JSONDecoder().decode(ActionItem.self, from: JSONEncoder().encode(second)) == second)
     }
+
+    /// The Owner field offers the named Speakers first, then those without a name by their label, even one only
+    /// suggested as someone, then the Notes' other Owners, each once.
+    @Test func ownerChoicesAreTheSpeakersThenTheNotesOtherOwners() {
+        var conversation = conversation()
+        conversation.speakers += [
+            ConversationSpeaker(label: "Speaker 11", speechSeconds: 30, embedding: [], naming: .named("Dana", similarity: 0.9)),
+            ConversationSpeaker(label: "Speaker 12", speechSeconds: 4, embedding: [], naming: .named("Dana", similarity: 1)),
+        ]
+        conversation.notes.actionItems += [
+            ActionItem(text: "Send the deck", owner: "Maya"),
+            ActionItem(text: "Book the room", owner: "Dana"),
+            ActionItem(text: "Write it up"),
+        ]
+
+        let choices = conversation.ownerChoices
+
+        #expect(choices == ["Dana", "Speaker 1", "Speaker 10", "Maya"])
+    }
 }

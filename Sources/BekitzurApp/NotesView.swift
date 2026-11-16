@@ -54,7 +54,7 @@ struct NotesView: View {
             .frame(maxWidth: .infinity)
             if editing {
                 ScrollView {
-                    NotesEditor(draft: $draft, direction: direction)
+                    NotesEditor(draft: $draft, direction: direction, owners: result.ownerChoices)
                         .padding(24)
                         .frame(maxWidth: 780, alignment: .leading)
                         .frame(maxWidth: .infinity)
@@ -186,6 +186,8 @@ private struct NotesEditor: View {
     @Binding var draft: NotesDraft
     /// The Notes' language's, for what they say.
     let direction: LayoutDirection
+    /// Who Action Items can be for, from the Notes as saved, so a name half typed in one isn't offered in the others.
+    let owners: [String]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -219,7 +221,7 @@ private struct NotesEditor: View {
                     EditedItem(text: $item.item.text, placeholder: "What to do") {
                         draft.actionItems.removeAll { $0.id == item.id }
                     } details: {
-                        ActionItemDetails(item: $item.item)
+                        ActionItemDetails(item: $item.item, owners: owners)
                     }
                 }
             }
@@ -309,11 +311,19 @@ extension EditedItem where Details == EmptyView {
 /// a day ("after the release") shows as it was said until a day is picked.
 private struct ActionItemDetails: View {
     @Binding var item: ActionItem
+    /// Who it can be for, which the Owner field lists while it's edited.
+    let owners: [String]
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "person").foregroundStyle(.secondary)
             TextField("No Owner", text: Binding(get: { item.owner.map(ShownNames.speaker) ?? "" }, set: { item.owner = $0 }))
+                // A Speaker without a name is picked by its label, which naming it later changes in the Owner too.
+                .textInputSuggestions {
+                    ForEach(suggestedOwners, id: \.self) { owner in
+                        Label(ShownNames.speaker(owner), systemImage: "person").textInputCompletion(owner)
+                    }
+                }
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 200)
             Image(systemName: "calendar").foregroundStyle(.secondary).padding(.leading, 6)
@@ -348,6 +358,14 @@ private struct ActionItemDetails: View {
             }
         }
         .font(.callout)
+    }
+
+    /// The Owners to pick from for what's typed: all of them until it narrows them down, so one already picked can be
+    /// swapped for another.
+    private var suggestedOwners: [String] {
+        let typed = (item.owner ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty, !owners.contains(typed) else { return owners }
+        return owners.filter { ShownNames.speaker($0).localizedStandardContains(typed) }
     }
 
     private var removeDue: some View {
