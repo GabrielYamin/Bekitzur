@@ -28,24 +28,41 @@ struct MainWindow: View {
                 return !urls.isEmpty
             }
             .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
-            .toolbar {
-                ToolbarItemGroup {
-                    RecordButton(model: model)
-                    Button {
-                        Task { await model.chooseRecordingsToImport() }
-                    } label: {
-                        Label("Import", systemImage: "square.and.arrow.down")
-                    }
-                    .labelStyle(.titleAndIcon)
-                    .help("Import a recording made elsewhere, like a voice memo, or a Conversation exported from Bekitzur")
-                }
-            }
         } detail: {
             Group {
                 if let id = model.selection, let info = model.conversations.first(where: { $0.id == id }) {
                     ConversationDetail(model: model, info: info)
                 } else {
                     ContentUnavailableView("Select a Conversation", systemImage: "text.bubble")
+                }
+            }
+            // In the detail's part of the toolbar, with the Conversation's own items, so they're laid out together: above
+            // the sidebar, Record and Import didn't fit beside its button.
+            .toolbar {
+                ToolbarItemGroup(placement: .navigation) {
+                    RecordButton(model: model)
+                    Button {
+                        Task { await model.chooseRecordingsToImport() }
+                    } label: {
+                        Label("Import", systemImage: "square.and.arrow.down")
+                    }
+                    .help("Import a recording made elsewhere, like a voice memo, or a Conversation exported from Bekitzur")
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        model.showSettings()
+                    } label: {
+                        Label {
+                            Text("Settings")
+                        } icon: {
+                            Image(systemName: "gearshape")
+                                .overlay(alignment: .topTrailing) {
+                                    if model.hasNewSettings { NewDot().offset(x: 2, y: -2) }
+                                }
+                        }
+                    }
+                    .keyboardShortcut(",", modifiers: .command)
+                    .help(model.hasNewSettings ? "Settings has something new (⌘,)" : "Settings (⌘,)")
                 }
             }
             .alert("Replace your changes to the Notes?", isPresented: Binding(get: { model.replacingNotes != nil }, set: { if !$0 { model.replacingNotes = nil } })) {
@@ -59,24 +76,8 @@ struct MainWindow: View {
                 Text("You've edited this Conversation's Notes or checked off its Action Items. Writing the Notes again replaces your changes and unchecks them.")
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    model.showSettings()
-                } label: {
-                    Label {
-                        Text("Settings")
-                    } icon: {
-                        Image(systemName: "gearshape")
-                            .overlay(alignment: .topTrailing) {
-                                if model.hasNewSettings { NewDot().offset(x: 2, y: -2) }
-                            }
-                    }
-                }
-                .keyboardShortcut(",", modifiers: .command)
-                .help(model.hasNewSettings ? "Settings has something new (⌘,)" : "Settings (⌘,)")
-            }
-        }
+        // The window's name only took room the toolbar's items need.
+        .toolbar(removing: .title)
         .alert("Bekitzur", isPresented: Binding(get: { model.alert != nil }, set: { if !$0 { model.alert = nil } })) {
             Button("OK") { model.alert = nil }
         } message: {

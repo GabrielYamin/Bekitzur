@@ -50,6 +50,7 @@ struct NotesView: View {
                 }
             }
             .padding(.horizontal, 24)
+            .padding(.top, 10)
             .frame(maxWidth: 780)
             .frame(maxWidth: .infinity)
             if editing {
@@ -69,8 +70,8 @@ struct NotesView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 Text(notes.summary)
-                    .font(.body)
-                    .lineSpacing(3)
+                    .font(.system(size: 14))
+                    .lineSpacing(4)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .environment(\.layoutDirection, direction)
 
@@ -130,7 +131,9 @@ struct NotesView: View {
                 }
             }
             .textSelection(.enabled)
-            .padding(24)
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
             .frame(maxWidth: 780, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
@@ -422,8 +425,8 @@ private struct NotesSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(title).font(.caption.weight(.semibold)).textCase(.uppercase).tracking(0.6).foregroundStyle(.secondary)
-                if let detail { Text(detail).font(.caption).foregroundStyle(.tertiary).monospacedDigit() }
+                Text(title).font(.system(size: 11, weight: .semibold)).textCase(.uppercase).tracking(0.6).foregroundStyle(.secondary)
+                if let detail { Text(detail).font(.system(size: 11)).foregroundStyle(.tertiary).monospacedDigit() }
             }
             content.environment(\.layoutDirection, direction)
         }
@@ -485,30 +488,42 @@ private struct NoteItem<Details: View>: View {
         }
     }
 
-    /// The item and its Sources; the quote it stands on shows in a Source's popover, which plays it.
+    /// The item, then on one line its Owner and due day and its Sources; the quote it stands on shows in a Source's
+    /// popover, which plays it.
     private var content: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(text).fontWeight(done == nil ? .regular : .medium).strikethrough(done?.wrappedValue == true)
-            details
-            if !sources.isEmpty {
-                HStack(spacing: 12) {
-                    ForEach(sources, id: \.self) { id in
-                        if let turn = turns[id] {
-                            SourceButton(speaker: turn.speaker, text: turn.text, player: player) {
-                                SourceClip(quote: quote, speaker: turn.speaker, start: turn.start, end: turn.end, in: player.transcript())
-                            } label: {
-                                Label("\(ShownNames.speaker(turn.speaker)) \(timestamp(turn.start))", systemImage: "play.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .contentShape(Rectangle())
-                            }
-                            .help("Listen: \(turn.text)")
-                        }
-                    }
-                }
+        VStack(alignment: .leading, spacing: 5) {
+            Text(text)
+                .font(.system(size: 14, weight: done == nil ? .regular : .medium))
+                .strikethrough(done?.wrappedValue == true)
+            HStack(spacing: 14) {
+                details
+                sourceButtons
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Each Source's time, with who said it only where that changes, so three of one person's lines read as one name.
+    private var sourceButtons: some View {
+        let shown = sources.compactMap { turns[$0] }
+        return HStack(spacing: 10) {
+            ForEach(Array(shown.enumerated()), id: \.offset) { index, turn in
+                let named = index == 0 || shown[index - 1].speaker != turn.speaker
+                SourceButton(speaker: turn.speaker, text: turn.text, player: player) {
+                    SourceClip(quote: quote, speaker: turn.speaker, start: turn.start, end: turn.end, in: player.transcript())
+                } label: {
+                    Label {
+                        Text(verbatim: named ? "\(ShownNames.speaker(turn.speaker)) \(timestamp(turn.start))" : timestamp(turn.start))
+                    } icon: {
+                        Image(systemName: "play.fill").imageScale(.small)
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
+                }
+                .help("Listen: \(turn.text)")
+            }
+        }
     }
 }
 

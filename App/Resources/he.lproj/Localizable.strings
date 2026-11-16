@@ -1,6 +1,5 @@
 /* Bekitzur in Hebrew. Each key is the English the code shows; keys come from the compiler: swift build -Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path -Xswiftc <folder>. */
 
-"%@ %@" = "%@ %@";
 "%@ / %@" = "%@ / %@";
 "%@ in it points outside the Conversation, so nothing was imported." = "%@ שבקובץ מצביע אל מחוץ לשיחה, ולכן שום דבר לא יובא.";
 "%@ is already in People: they become one person, with both voices." = "%@ כבר נמצא באנשים: הם יהפכו לאדם אחד, עם שני הקולות.";
