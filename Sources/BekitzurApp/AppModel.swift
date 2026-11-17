@@ -1261,6 +1261,8 @@ final class AppModel {
         let notesLanguage = self.notesLanguage
         AppLog.write("\(id): processing (\(info.language?.name ?? "language to detect")\(info.people.map { ", \($0) people" } ?? ""), \(how), \(flags.fixes.count) fixes, Notes in \(notesLanguage.name))")
         let assistant = self.assistant
+        let library = self.library
+        let yourNotes: @Sendable () -> [UserNote] = { library.yourNotes(for: id) }
         Task {
             // The chat's copy of the language model goes first, once a reply it's writing is done: two copies don't fit
             // a 32 GB Mac.
@@ -1272,7 +1274,7 @@ final class AppModel {
                 let measuredDelays: [TrackDelay]?
                 if let notesOnly {
                     result = try await Self.rewrite(
-                        notesOnly, flags: flags, date: info.startedAt, language: notesOnly.transcript.language, notesLanguage: notesLanguage
+                        notesOnly, flags: flags, date: info.startedAt, language: notesOnly.transcript.language, notesLanguage: notesLanguage, yourNotes: yourNotes
                     ) { step in
                         Task { @MainActor in
                             AppModel.shared.update(id) { if $0.status == .processing { $0.step = step.rawValue } }
@@ -1294,7 +1296,8 @@ final class AppModel {
                         transcript: transcript,
                         givenIsLive: kept == nil && live != nil,
                         salvage: salvage,
-                        flags: flags
+                        flags: flags,
+                        yourNotes: yourNotes
                     ) { step in
                         AppLog.write(String(format: "%@: %@ (%.0f s)", id, step.rawValue, Date().timeIntervalSince(started)))
                         Task { @MainActor in
@@ -1352,6 +1355,7 @@ final class AppModel {
         date: Date,
         language: ConversationLanguage,
         notesLanguage: ConversationLanguage,
+        yourNotes: @escaping @Sendable () -> [UserNote],
         progress: @escaping @Sendable (ProcessingStep) -> Void
     ) async throws -> ProcessedConversation {
         try ConversationProcessor.rewriteNotes(
@@ -1361,7 +1365,8 @@ final class AppModel {
             date: date,
             language: language,
             notesLanguage: notesLanguage,
-            progress: progress
+            progress: progress,
+            yourNotes: yourNotes
         )
     }
 
@@ -1390,6 +1395,7 @@ final class AppModel {
         givenIsLive: Bool,
         salvage: Transcript?,
         flags: TranscriptFlags,
+        yourNotes: @escaping @Sendable () -> [UserNote],
         progress: @escaping @Sendable (ProcessingStep) -> Void
     ) async throws -> (result: ProcessedConversation, warning: String?, measuredDelay: Double?, measuredDelays: [TrackDelay]?) {
         for track in RecordingFiles.unfinished(in: folder) {
@@ -1414,7 +1420,8 @@ final class AppModel {
                 date: date,
                 language: salvage.language,
                 notesLanguage: notesLanguage,
-                progress: progress
+                progress: progress,
+                yourNotes: yourNotes
             )
             let minutes = Int(((salvage.segments.last?.end ?? 0) / 60).rounded(.up))
             return (result, NotesWarning.liveTranscriptOnly(minutes: minutes).saved, nil, nil)
@@ -1454,7 +1461,8 @@ final class AppModel {
             transcript: transcript,
             flags: flags,
             vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load(),
-            progress: progress
+            progress: progress,
+            yourNotes: yourNotes
         )
         let silent = Set(audio.silentTracks.map { $0.deletingPathExtension().lastPathComponent })
         var warning: NotesWarning?

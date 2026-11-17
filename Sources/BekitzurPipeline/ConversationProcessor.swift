@@ -210,6 +210,8 @@ public enum ConversationProcessor {
     ///   - vocabulary: The user's own terms and taught spellings, on top of the built-in terms.
     ///   - separation: What separating people who talk at once needs, when its model is downloaded.
     ///   - notesLanguage: What the Notes are written in, whatever language the Conversation is in.
+    ///   - yourNotes: What the user wrote while recording, read when the Notes are written, so what they add meanwhile
+    ///     counts.
     public static func process(
         _ samples: [Float],
         date: Date,
@@ -222,7 +224,8 @@ public enum ConversationProcessor {
         flags: TranscriptFlags = TranscriptFlags(),
         vocabulary: Vocabulary = Vocabulary(),
         separation: OverlapSeparation.Resources? = nil,
-        progress: @Sendable (ProcessingStep) -> Void = { _ in }
+        progress: @Sendable (ProcessingStep) -> Void = { _ in },
+        yourNotes: @Sendable () -> [UserNote] = { [] }
     ) async throws -> ProcessedConversation {
         var transcript: Transcript
         if let existing, existing.language == language {
@@ -274,7 +277,7 @@ public enum ConversationProcessor {
         let labels = Dictionary(speakers.map { ($0.voice, $0.label) }, uniquingKeysWith: { first, _ in first })
         separated.together = OverlapSeparation.together(turns, labels: labels, length: Double(samples.count) / 16_000)
         return try rewriteNotes(
-            separated, flags: flags, vocabulary: vocabulary, date: date, language: language, notesLanguage: notesLanguage, progress: progress
+            separated, flags: flags, vocabulary: vocabulary, date: date, language: language, notesLanguage: notesLanguage, progress: progress, yourNotes: yourNotes
         )
     }
 
@@ -287,7 +290,8 @@ public enum ConversationProcessor {
         date: Date,
         language: ConversationLanguage,
         notesLanguage: ConversationLanguage = .english,
-        progress: @Sendable (ProcessingStep) -> Void = { _ in }
+        progress: @Sendable (ProcessingStep) -> Void = { _ in },
+        yourNotes: @Sendable () -> [UserNote] = { [] }
     ) throws -> ProcessedConversation {
         var result = result
         let model = try LanguageModel(modelURL: BekitzurPaths.languageModel)
@@ -297,7 +301,9 @@ public enum ConversationProcessor {
         }
         progress(.writingNotes)
         let turns = NotesWriter.turns(from: result.transcript.applying(flags))
-        result.notes = try NotesWriter(model: model).write(turns: turns, date: date, language: language, notesLanguage: notesLanguage).notes
+        result.notes = try NotesWriter(model: model)
+            .write(turns: turns, date: date, language: language, notesLanguage: notesLanguage, yourNotes: yourNotes())
+            .notes
         result.turns = turns
         result.notesFixes = flags.fixes
         result.separationChangedNotes = nil

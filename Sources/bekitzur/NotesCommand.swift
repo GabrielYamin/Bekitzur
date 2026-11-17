@@ -32,14 +32,19 @@ struct NotesCommand: AsyncParsableCommand {
     @Option(help: "Most tokens the language model's context grows to; 32768 keeps it at the size it starts with.")
     var maxContext: Int = LanguageModel.maximumContextSize
 
+    @Option(help: "The user's own notes: a text file with a line per note and when it was written, like \"03:14 Thursday, if the regression is green\".")
+    var yourNotes: String?
+
     func run() async throws {
         let (turns, header) = try loadTurns(URL(filePath: input))
         guard let day = (date ?? header.date).flatMap(parseDay) else {
             throw ValidationError("Give the Conversation date with --date YYYY-MM-DD")
         }
+        let written = try yourNotes.map { try loadYourNotes(URL(filePath: $0)) } ?? []
         let model = try LanguageModel(modelURL: URL(filePath: model), largestContext: maxContext)
         let started = Date()
-        let (notes, draftNotes, completion) = try NotesWriter(model: model).write(turns: turns, date: day, language: header.language, notesLanguage: notesLanguage)
+        let (notes, draftNotes, completion) = try NotesWriter(model: model)
+            .write(turns: turns, date: day, language: header.language, notesLanguage: notesLanguage, yourNotes: written)
         try output(notes, completion: completion, json: json)
         if let draft { try writeJSON(draftNotes, to: draft) }
         log(String(format: "Draft and check: %.1f s, in a %d-token context", Date().timeIntervalSince(started), model.contextSize))
@@ -68,6 +73,16 @@ func loadTurns(_ url: URL) throws -> ([Turn], TurnsHeader) {
         }
     }
     return (turns, header)
+}
+
+/// Lines like "03:14 Thursday, if the regression is green" or "[03:14] …", the time into the recording each was written.
+func loadYourNotes(_ url: URL) throws -> [UserNote] {
+    try String(contentsOf: url, encoding: .utf8).split(separator: "\n").compactMap { line in
+        guard let match = line.firstMatch(of: /^\[?(\d+):(\d{2})\]?\s+(.+)$/), let minutes = Double(match.1), let seconds = Double(match.2) else {
+            return nil
+        }
+        return UserNote(at: minutes * 60 + seconds, text: String(match.3))
+    }
 }
 
 func parseDay(_ text: String) -> Date? {

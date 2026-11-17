@@ -23,6 +23,8 @@ public struct Decision: Codable, Sendable, Equatable {
     /// The Source: turn IDs where the Decision was reached.
     public var sourceTurns: [String]
     public var quote: String
+    /// The note of the user's it came from, for one the Notes have only because of it.
+    public var yourNote: UUID?
 
     /// Without a Source, for one the user adds.
     public init(text: String, sourceTurns: [String] = [], quote: String = "") {
@@ -45,6 +47,8 @@ public struct ActionItem: Codable, Sendable, Equatable {
     public var quote: String
     /// The user checked it off.
     public var done: Bool?
+    /// The note of the user's it came from, for one the Notes have only because of it.
+    public var yourNote: UUID?
 
     public init(
         text: String,
@@ -78,6 +82,7 @@ public struct ActionItem: Codable, Sendable, Equatable {
         sourceTurns = try container.decode([String].self, forKey: .sourceTurns)
         quote = try container.decode(String.self, forKey: .quote)
         done = try container.decodeIfPresent(Bool.self, forKey: .done)
+        yourNote = try container.decodeIfPresent(UUID.self, forKey: .yourNote)
     }
 
     private static func given(_ text: String?) -> String? {
@@ -109,6 +114,8 @@ extension ActionItem {
 public struct OpenQuestion: Codable, Sendable, Equatable {
     public var text: String
     public var sourceTurns: [String]
+    /// The note of the user's it came from, for one the Notes have only because of it.
+    public var yourNote: UUID?
 
     public init(text: String, sourceTurns: [String] = []) {
         self.text = text
