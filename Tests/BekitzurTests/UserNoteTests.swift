@@ -75,22 +75,26 @@ struct UserNoteTests {
         #expect(places[empty.id] == nil)
     }
 
-    /// An item a note made sits beside that note, whatever was said around it.
-    @Test func aNoteSitsBesideTheItemItMade() {
+    /// A note sits beside the item it made or added to, whatever was said around it.
+    @Test func aNoteSitsBesideTheItemItShaped() {
         let turns = [Turn(id: "T001", speaker: "Dana", text: "מעלים את 2.4 ביום חמישי", start: 192, end: 199)]
-        let note = UserNote(at: 195, text: "[ ] send Maya the deck")
+        let deck = UserNote(at: 195, text: "[ ] send Maya the deck")
+        let rollback = UserNote(at: 196, text: "rollback plan first")
         var made = ActionItem(text: "Send Maya the deck", sourceTurns: ["T001"])
-        made.yourNote = note.id
+        made.fromYourNote = deck.id
+        var question = OpenQuestion(text: "Who runs the release?", sourceTurns: ["T001"])
+        question.withYourNotes = [rollback.id]
         let written = Notes(
             title: "Release sync",
             summary: "Release 2.4 goes out on Thursday.",
             decisions: [Decision(text: "Release 2.4 on Thursday", sourceTurns: ["T001"])],
             actionItems: [made],
-            openQuestions: []
+            openQuestions: [question]
         )
 
-        let places = UserNote.places(of: [note], in: written, turns: turns)
+        let places = UserNote.places(of: [deck, rollback], in: written, turns: turns)
 
-        #expect(places[note.id] == .actionItem(0))
+        #expect(places[deck.id] == .actionItem(0))
+        #expect(places[rollback.id] == .openQuestion(0))
     }
 }

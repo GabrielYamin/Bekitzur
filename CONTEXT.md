@@ -61,7 +61,7 @@ The moment in the Transcript that a Decision or Action Item came from.
 _Avoid_: Citation, evidence
 
 **Your notes**:
-What the user writes while recording, a line at a time, each line keeping the moment it was started. The Notes add what they point to and show them in the margin beside what they're about. They're the user's own, so an exported Conversation leaves them out.
+What the user writes while recording, a line at a time, each line keeping the moment it was started. They add to what was said and never change it: the Notes take what they say that the Transcript doesn't, like a task nobody said aloud or an Action Item's due date, and show them in the margin beside what they're about. They're the user's own, so an exported Conversation leaves them out.
 _Avoid_: Margin notes (that's where they show), annotations, user notes
 
 ### Review

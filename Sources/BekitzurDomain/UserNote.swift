@@ -60,26 +60,27 @@ extension UserNote {
     /// How long after something was said a note is still taken to be about it; written before it was said, half that.
     static let reach = 150.0
 
-    /// Each note beside the item it's about: the item it made, or an item without turns, like one the user added, that
-    /// it shares two words with; otherwise the item whose turns were said closest before it was written, within `reach`,
-    /// and the rest beside the summary.
+    /// Each note beside the item it's about: the item it made or added to, or an item without turns, like one the user
+    /// added, that it shares two words with; otherwise the item whose turns were said closest before it was written,
+    /// within `reach`, and the rest beside the summary.
     public static func places(of notes: [UserNote], in written: Notes, turns: [Turn]) -> [UUID: UserNotePlace] {
         let starts = Dictionary(turns.compactMap { turn in turn.start.map { (turn.id, $0) } }, uniquingKeysWith: { first, _ in first })
         func times(_ sources: [String]) -> [Double] { sources.compactMap { starts[$0] } }
+        func noted(_ from: UUID?, _ with: [UUID]?) -> [UUID] { [from].compactMap { $0 } + (with ?? []) }
         var items: [Candidate] = []
         for (index, item) in written.decisions.enumerated() {
-            items.append(Candidate(place: .decision(index), times: times(item.sourceTurns), text: item.text, yourNote: item.yourNote))
+            items.append(Candidate(place: .decision(index), times: times(item.sourceTurns), text: item.text, notes: noted(item.fromYourNote, item.withYourNotes)))
         }
         for (index, item) in written.actionItems.enumerated() {
-            items.append(Candidate(place: .actionItem(index), times: times(item.sourceTurns), text: item.text, yourNote: item.yourNote))
+            items.append(Candidate(place: .actionItem(index), times: times(item.sourceTurns), text: item.text, notes: noted(item.fromYourNote, item.withYourNotes)))
         }
         for (index, item) in written.openQuestions.enumerated() {
-            items.append(Candidate(place: .openQuestion(index), times: times(item.sourceTurns), text: item.text, yourNote: item.yourNote))
+            items.append(Candidate(place: .openQuestion(index), times: times(item.sourceTurns), text: item.text, notes: noted(item.fromYourNote, item.withYourNotes)))
         }
         var places: [UUID: UserNotePlace] = [:]
         for note in notes where !note.words.isEmpty {
-            let made = items.first { $0.yourNote == note.id }?.place
-            places[note.id] = made ?? sharingWords(with: note, among: items) ?? closest(to: note, among: items) ?? .summary
+            let shaped = items.first { $0.notes.contains(note.id) }?.place
+            places[note.id] = shaped ?? sharingWords(with: note, among: items) ?? closest(to: note, among: items) ?? .summary
         }
         return places
     }
@@ -88,7 +89,8 @@ extension UserNote {
         let place: UserNotePlace
         let times: [Double]
         let text: String
-        let yourNote: UUID?
+        /// The notes that made it or added to it.
+        let notes: [UUID]
     }
 
     private static func sharingWords(with note: UserNote, among items: [Candidate]) -> UserNotePlace? {

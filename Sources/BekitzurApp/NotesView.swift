@@ -91,7 +91,7 @@ struct NotesView: View {
                                 player: player,
                                 first: index == 0,
                                 margin: margins.beside(.decision(index)),
-                                fromYourNote: decision.yourNote != nil
+                                fromYourNote: decision.fromYourNote != nil
                             )
                         }
                     }
@@ -110,7 +110,7 @@ struct NotesView: View {
                                 player: player,
                                 first: index == 0,
                                 margin: margins.beside(.actionItem(index)),
-                                fromYourNote: item.yourNote != nil,
+                                fromYourNote: item.fromYourNote != nil,
                                 done: Binding(get: { item.done == true }, set: { setDone(index, $0) })
                             ) {
                                 HStack(spacing: 14) {
@@ -145,7 +145,7 @@ struct NotesView: View {
                                 player: player,
                                 first: index == 0,
                                 margin: margins.beside(.openQuestion(index)),
-                                fromYourNote: question.yourNote != nil
+                                fromYourNote: question.fromYourNote != nil
                             )
                         }
                     }

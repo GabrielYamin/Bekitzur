@@ -35,6 +35,9 @@ struct NotesCommand: AsyncParsableCommand {
     @Option(help: "The user's own notes: a text file with a line per note and when it was written, like \"03:14 Thursday, if the regression is green\".")
     var yourNotes: String?
 
+    @Option(help: "Who wrote the notes, as the Transcript names them, for notes that say \"I\".")
+    var user: String?
+
     func run() async throws {
         let (turns, header) = try loadTurns(URL(filePath: input))
         guard let day = (date ?? header.date).flatMap(parseDay) else {
@@ -44,7 +47,7 @@ struct NotesCommand: AsyncParsableCommand {
         let model = try LanguageModel(modelURL: URL(filePath: model), largestContext: maxContext)
         let started = Date()
         let (notes, draftNotes, completion) = try NotesWriter(model: model)
-            .write(turns: turns, date: day, language: header.language, notesLanguage: notesLanguage, yourNotes: written)
+            .write(turns: turns, date: day, language: header.language, notesLanguage: notesLanguage, yourNotes: written, user: user)
         try output(notes, completion: completion, json: json)
         if let draft { try writeJSON(draftNotes, to: draft) }
         log(String(format: "Draft and check: %.1f s, in a %d-token context", Date().timeIntervalSince(started), model.contextSize))
