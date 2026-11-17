@@ -115,7 +115,7 @@ extension UserNote {
     }
 
     /// The words that say something, in any language: three letters or more, and not one of English's commonest.
-    static func significantWords(_ text: String) -> Set<String> {
+    public static func significantWords(_ text: String) -> Set<String> {
         let common: Set<String> = ["the", "and", "for", "with", "about", "that", "this", "from", "into", "will", "who", "what", "when"]
         let words = text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
         return Set(words.filter { $0.count >= 3 && !common.contains($0) })
