@@ -8,6 +8,7 @@ struct UserNoteTests {
         ("[ ] who tells support", "task", "who tells support"),
         ("[]call Avi", "task", "call Avi"),
         ("  Thursday, if the regression is green", "point", "Thursday, if the regression is green"),
+        ("#3 on the list", "point", "#3 on the list"),
     ])
     func aLineIsAHeadingATaskOrAPoint(text: String, kind: String, words: String) {
         let note = UserNote(at: 0, text: text)
@@ -19,6 +20,23 @@ struct UserNoteTests {
 
         #expect(name == kind)
         #expect(note.words == words)
+    }
+
+    /// Edited on its own, a line keeps the spaces being typed, and its "#" or "[ ]" stays; typing one at the start of a
+    /// line makes it a heading or a task.
+    @Test func typingKeepsTheMarkerAndTheSpaces() {
+        var task = UserNote(at: 0, text: "[] who tells")
+        var point = UserNote(at: 0, text: "")
+
+        task.setContent(task.content + " ")
+        point.setContent("[] ")
+        let typedTask = task.content
+        point.setContent(point.content + "send the deck")
+
+        #expect(typedTask == "who tells ")
+        #expect(task.text == "[ ] who tells ")
+        #expect(point.kind == .task)
+        #expect(point.text == "[ ] send the deck")
     }
 
     /// A note sits beside what was said just before it was written, or by an item its own words made, like a task the

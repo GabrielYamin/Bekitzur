@@ -104,6 +104,9 @@ final class AppModel {
     private(set) var liveTranscripts: [String: Transcript] = [:]
     /// Conversations whose live transcription stopped while they were recorded.
     private(set) var liveStopped: Set<String> = []
+    /// What the user wrote while recording, loaded as each Conversation shows, with the line being typed, which is saved
+    /// once it has words.
+    private(set) var yourNotes: [String: [UserNote]] = [:]
     /// Each Conversation's chat, loaded as its Chat tab opens.
     private(set) var exchanges: [String: [ChatExchange]] = [:]
     /// The Conversation whose message the chat is replying to; one message at a time.
@@ -1884,8 +1887,29 @@ final class AppModel {
         flags[id] = nil
         liveTranscripts[id] = nil
         liveStopped.remove(id)
+        yourNotes[id] = nil
         if selection == id { selection = nil }
         conversations = library.all()
+    }
+
+    func loadYourNotes(_ id: String) {
+        guard yourNotes[id] == nil else { return }
+        yourNotes[id] = library.yourNotes(for: id)
+    }
+
+    /// Saved as they change: the Notes are written from what's saved, and take what the user adds until then.
+    func setYourNotes(_ notes: [UserNote], for id: String) {
+        yourNotes[id] = notes
+        do {
+            try library.save(notes.filter { !$0.words.isEmpty }, for: id)
+        } catch {
+            AppLog.write("\(id): your notes not saved: \(error)")
+        }
+    }
+
+    /// Your notes can change until the Notes are being written, which is when they're read.
+    func takesYourNotes(_ info: ConversationInfo) -> Bool {
+        info.status == .recording || info.status == .processing && info.step != ProcessingStep.writingNotes.rawValue
     }
 
     /// Reads the Conversations folder again, for Conversations added, changed, or removed outside the app; one left

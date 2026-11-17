@@ -17,23 +17,37 @@ public struct UserNote: Codable, Sendable, Equatable, Identifiable {
         case heading, task, point
     }
 
-    /// A line starting with "#" is a heading, and one starting with "[ ]" or "[]" something to do.
+    /// A line starting with "# " is a heading, and one starting with "[ ]" or "[]" something to do.
     public var kind: Kind {
-        let line = text.trimmingCharacters(in: .whitespaces)
-        if line.hasPrefix("#") { return .heading }
+        let line = text.drop(while: \.isWhitespace)
+        if line.first == "#", line.drop(while: { $0 == "#" }).first?.isWhitespace == true { return .heading }
         if line.hasPrefix("[ ]") || line.hasPrefix("[]") { return .task }
         return .point
     }
 
+    /// What follows a heading's "#" or a task's "[ ]", as it was typed, to edit on its own.
+    public var content: String {
+        let line = text.drop(while: \.isWhitespace)
+        return switch kind {
+        case .heading: String(line.drop { $0 == "#" }.drop(while: \.isWhitespace))
+        case .task: String(line.dropFirst(line.hasPrefix("[ ]") ? 3 : 2).drop(while: \.isWhitespace))
+        case .point: text
+        }
+    }
+
     /// What it says, without a heading's "#" or a task's "[ ]".
     public var words: String {
-        let line = text.trimmingCharacters(in: .whitespaces)
-        let shown = switch kind {
-        case .heading: String(line.drop { $0 == "#" })
-        case .task: String(line.dropFirst(line.hasPrefix("[ ]") ? 3 : 2))
-        case .point: line
+        content.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Changes what follows the "#" or "[ ]", which stay. Typed at the start of a line, "# " makes it a heading and
+    /// "[ ]" or "[]" a task.
+    public mutating func setContent(_ content: String) {
+        text = switch kind {
+        case .heading: "# " + content
+        case .task: "[ ] " + content
+        case .point: content
         }
-        return shown.trimmingCharacters(in: .whitespaces)
     }
 }
 

@@ -30,6 +30,7 @@ struct ConversationDetail: View {
         .task(id: "\(info.id)-\(info.status)") {
             model.loadResult(info.id)
             model.loadFlags(info.id)
+            model.loadYourNotes(info.id)
         }
         // Reloaded when the status changes, since processing turns the recorded .aac tracks into .m4a files, and once a
         // call's tracks are lined up.
@@ -169,9 +170,9 @@ struct ConversationDetail: View {
     private var content: some View {
         switch info.status {
         case .recording:
-            LiveTranscriptView(model: model, info: info)
-        case .processing where model.liveTranscripts[info.id] != nil:
-            LiveTranscriptView(model: model, info: info)
+            RecordingView(model: model, info: info)
+        case .processing where model.liveTranscripts[info.id] != nil || model.yourNotes[info.id]?.contains(where: { !$0.words.isEmpty }) == true:
+            RecordingView(model: model, info: info)
         case .processing:
             ContentUnavailableView {
                 Label(ShownNames.step(info.step), systemImage: "hourglass")
@@ -217,7 +218,7 @@ struct ConversationDetail: View {
                     }
                     switch tab {
                     case .notes:
-                        NotesView(result: result, player: player) { notes in
+                        NotesView(result: result, yourNotes: model.yourNotes[info.id] ?? [], player: player) { notes in
                             model.saveNotes(notes, for: info.id)
                         } addToCalendar: { item in
                             model.addToCalendar(item, in: info.id)
