@@ -19,8 +19,9 @@ struct MainWindow: View {
                 .padding(.top, 4)
                 .padding(.bottom, 6)
                 ConversationListHeader(model: model)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 2)
+                    .padding(.bottom, 6)
                 conversationList
             }
             .dropDestination(for: URL.self) { urls, _ in
