@@ -265,8 +265,14 @@ struct TranscriptView: View {
     let info: ConversationInfo
     let result: ProcessedConversation
     let playback: PlaybackModel
+    /// Lyrics, to listen along, or List, to read and fix words; it stays as the user last chose.
+    @AppStorage("transcriptMode") private var mode = Mode.list
     @ViewState private var follow = true
     @ViewState private var correcting: WordsToCorrect?
+
+    enum Mode: String {
+        case lyrics, list
+    }
     @ViewState private var selection = WordSelection()
     @ViewState private var finding = false
     @ViewState private var query = ""
@@ -320,68 +326,29 @@ struct TranscriptView: View {
 
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                TranscriptHint(selection: selection, hasWords: !words.isEmpty)
-                Spacer()
-                if !flags.words.isEmpty || !flags.speakers.isEmpty {
-                    let corrected = flags.words.filter { $0.correction != nil && $0.phrase == nil }.count
-                    let moved = flags.words.filter { $0.saidBy != nil || $0.otherSpeaker == true }.count
-                    let wrong = flags.words.filter { !$0.isFix }.count
-                    Text([
-                        corrected > 0 ? String(localized: "\(corrected) corrected") : nil,
-                        moved > 0 ? String(localized: "\(moved) moved to another speaker") : nil,
-                        wrong + flags.speakers.count > 0 ? String(localized: "\(wrong + flags.speakers.count) marked wrong") : nil,
-                    ].compactMap { $0 }.joined(separator: " · "))
-                    .font(.callout)
+                if mode == .list {
+                    listControls(flags: flags, words: words, selection: selection)
+                } else {
+                    Spacer()
                 }
-                Button("Mark word just played") {
-                    // With people talking at once, the words don't show in the order they're said.
-                    let said = words.indices.sorted { words[$0].word.start < words[$1].word.start }
-                    if let index = TranscriptLine.word(at: max(0, playback.time - 0.4), starts: said.map { words[$0].word.start }) {
-                        model.toggleFlag(words[said[index]].word, in: info.id)
-                    }
+                Picker("Show the Transcript as", selection: $mode) {
+                    Text("Lyrics").tag(Mode.lyrics)
+                    Text("List").tag(Mode.list)
                 }
-                .keyboardShortcut(typingQuery ? nil : KeyboardShortcut("f", modifiers: []))
-                .disabled(words.isEmpty || !playback.isLoaded)
-                Button {
-                    finding = true
-                    typingQuery = true
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .keyboardShortcut("f", modifiers: .command)
-                .help("Find in the Transcript (⌘F)")
-                .disabled(words.isEmpty)
-                Toggle("Follow", isOn: $follow).toggleStyle(.checkbox)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Lyrics follows along as it plays; List is for reading and fixing words")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
             Divider()
-            if finding {
-                findBar(matches: matches.count)
-                Divider()
+            if mode == .lyrics {
+                LyricsView(rows: rows, fallback: result.transcript.language == .hebrew ? .rightToLeft : .leftToRight, playback: playback, play: actions.play)
+            } else {
+                list(rows: rows, rowOfWord: rowOfWord, flags: flags, lines: lines, matches: matches, currentMatch: currentMatch, selection: selection, actions: actions)
             }
-            // Nothing in the Transcript moves while it's read: what separating found waits to be shown.
-            if let found = model.separationsFound[info.id] {
-                SeparationNote(places: found.places) {
-                    selection.range = nil
-                    model.mergeSeparation(info.id)
-                }
-                Divider()
-            }
-            TranscriptLines(
-                rows: rows,
-                rowOfWord: rowOfWord,
-                flags: flags,
-                speakers: result.speakers.map(\.displayName),
-                fallback: result.transcript.language == .hebrew ? .rightToLeft : .leftToRight,
-                follow: follow,
-                playback: playback,
-                selection: selection,
-                matches: Self.matchesByLine(matches, in: lines),
-                currentMatch: currentMatch,
-                actions: actions
-            )
-            PlayerBar(playback: playback, spaceBar: !typingQuery)
+            PeopleTimeline(timeline: timeline(flags: flags), notes: result.notes, playback: playback, spaceBar: !typingQuery)
         }
         .task(id: info.id) { model.loadFlags(info.id) }
         .onAppear { model.transcriptAppeared(info.id) }
@@ -397,6 +364,92 @@ struct TranscriptView: View {
                 selection.range = nil
             }
         }
+    }
+
+    private func timeline(flags: TranscriptFlags) -> ConversationTimeline {
+        ConversationTimeline(
+            transcript: result.transcript.applying(flags),
+            notes: result.notes,
+            turns: result.turns,
+            yourNotes: model.yourNotes[info.id] ?? [],
+            length: playback.duration > 0 ? playback.duration : nil
+        )
+    }
+
+    /// What marking words needs: the hint, what's been fixed, marking the word just played, Find, and Follow.
+    @ViewBuilder
+    private func listControls(flags: TranscriptFlags, words: [NumberedWord], selection: WordSelection) -> some View {
+        TranscriptHint(selection: selection, hasWords: !words.isEmpty)
+        Spacer()
+        if !flags.words.isEmpty || !flags.speakers.isEmpty {
+            let corrected = flags.words.filter { $0.correction != nil && $0.phrase == nil }.count
+            let moved = flags.words.filter { $0.saidBy != nil || $0.otherSpeaker == true }.count
+            let wrong = flags.words.filter { !$0.isFix }.count
+            Text([
+                corrected > 0 ? String(localized: "\(corrected) corrected") : nil,
+                moved > 0 ? String(localized: "\(moved) moved to another speaker") : nil,
+                wrong + flags.speakers.count > 0 ? String(localized: "\(wrong + flags.speakers.count) marked wrong") : nil,
+            ].compactMap { $0 }.joined(separator: " · "))
+            .font(.callout)
+        }
+        Button("Mark word just played") {
+            // With people talking at once, the words don't show in the order they're said.
+            let said = words.indices.sorted { words[$0].word.start < words[$1].word.start }
+            if let index = TranscriptLine.word(at: max(0, playback.time - 0.4), starts: said.map { words[$0].word.start }) {
+                model.toggleFlag(words[said[index]].word, in: info.id)
+            }
+        }
+        .keyboardShortcut(typingQuery ? nil : KeyboardShortcut("f", modifiers: []))
+        .disabled(words.isEmpty || !playback.isLoaded)
+        Button {
+            finding = true
+            typingQuery = true
+        } label: {
+            Image(systemName: "magnifyingglass")
+        }
+        .keyboardShortcut("f", modifiers: .command)
+        .help("Find in the Transcript (⌘F)")
+        .disabled(words.isEmpty)
+        Toggle("Follow", isOn: $follow).toggleStyle(.checkbox)
+    }
+
+    /// The lines to read and fix, under Find and what separating found.
+    @ViewBuilder
+    private func list(
+        rows: [TranscriptRow],
+        rowOfWord: [Int],
+        flags: TranscriptFlags,
+        lines: [TranscriptLine],
+        matches: [ClosedRange<Int>],
+        currentMatch: ClosedRange<Int>?,
+        selection: WordSelection,
+        actions: TranscriptActions
+    ) -> some View {
+        if finding {
+            findBar(matches: matches.count)
+            Divider()
+        }
+        // Nothing in the Transcript moves while it's read: what separating found waits to be shown.
+        if let found = model.separationsFound[info.id] {
+            SeparationNote(places: found.places) {
+                selection.range = nil
+                model.mergeSeparation(info.id)
+            }
+            Divider()
+        }
+        TranscriptLines(
+            rows: rows,
+            rowOfWord: rowOfWord,
+            flags: flags,
+            speakers: result.speakers.map(\.displayName),
+            fallback: result.transcript.language == .hebrew ? .rightToLeft : .leftToRight,
+            follow: follow,
+            playback: playback,
+            selection: selection,
+            matches: Self.matchesByLine(matches, in: lines),
+            currentMatch: currentMatch,
+            actions: actions
+        )
     }
 
     /// What the sheet starts with: what was typed for these words before, if every one of them has a correction.

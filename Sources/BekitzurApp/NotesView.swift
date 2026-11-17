@@ -13,6 +13,8 @@ struct NotesView: View {
     let addToCalendar: (ActionItem) -> Void
     /// Checks the Action Item at an index off, or back on.
     let setDone: (Int, Bool) -> Void
+    /// Shows the Transcript, with who spoke when along its timeline.
+    let openTranscript: () -> Void
     /// The Notes being changed while `editing`. It's never nil: the editor's fields still read it once more as editing
     /// ends, and an optional one set to nil on Save or Cancel would crash the app as SwiftUI unwraps it.
     @ViewState private var draft = NotesDraft(Notes())
@@ -64,6 +66,17 @@ struct NotesView: View {
                 }
             } else {
                 notesView
+                TimelineRibbon(
+                    timeline: ConversationTimeline(
+                        transcript: player.transcript(),
+                        notes: notes,
+                        turns: result.turns,
+                        yourNotes: yourNotes,
+                        length: player.playback.duration > 0 ? player.playback.duration : nil
+                    ),
+                    playback: player.playback,
+                    openTranscript: openTranscript
+                )
             }
         }
     }
