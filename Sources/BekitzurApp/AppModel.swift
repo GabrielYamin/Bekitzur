@@ -802,7 +802,9 @@ final class AppModel {
         }
     }
 
-    func stopRecording() {
+    /// - Parameter opening: Opens the Conversation in the window, where its processing shows; off when the call ending
+    ///   stopped it, which a notification says instead of taking over the screen.
+    func stopRecording(opening: Bool = true) {
         guard let id = recordingID, let recorder else { return }
         let reports = recorder.stop()
         endRecordingActivity()
@@ -821,6 +823,7 @@ final class AppModel {
             $0.status = .processing
             $0.step = live == nil ? "Waiting" : "Finishing the live Transcript"
         }
+        if opening { showMainWindow(selecting: id) }
         Task {
             if let live { await finishLive(live, for: id) }
             enqueue(id)
@@ -1008,7 +1011,7 @@ final class AppModel {
         guard let id = recordingID else { return }
         AppLog.write("Stopped recording on its own, since the call in \(app) ended")
         withdrawNotification(Self.recordingCallNotification)
-        stopRecording()
+        stopRecording(opening: false)
         notify(id, title: String(localized: "The call ended"), body: String(localized: "Bekitzur stopped recording the call in \(app) and is writing the Notes."))
     }
 
