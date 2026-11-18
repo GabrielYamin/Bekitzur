@@ -188,7 +188,8 @@ private struct YourNoteLine: View {
         .textFieldStyle(.plain)
         .focused(focused, equals: note.id)
         .onSubmit(onReturn)
-        .onKeyPress(.delete) {
+        // The Mac's Delete key types U+007F, which `.delete` (U+0008) doesn't match.
+        .onKeyPress(keys: [.delete, KeyEquivalent("\u{7F}")]) { _ in
             guard content.isEmpty else { return .ignored }
             onDeleteEmpty()
             return .handled
