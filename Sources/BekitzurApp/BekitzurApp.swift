@@ -61,13 +61,19 @@ struct BekitzurApp: App {
     }
 }
 
-/// The app's bubble (drawn by scripts/make-icon.swift), with a dot while a Conversation waits for review.
+/// The app's bubble (drawn by scripts/make-icon.swift), with a dot while a Conversation waits for review; while
+/// recording, how long it's been.
 private struct MenuBarLabel: View {
     let model: AppModel
 
     var body: some View {
         let unreviewed = model.unreviewedCount > 0
-        if let symbol = model.menuBarSymbol {
+        if model.isRecording, let symbol = model.menuBarSymbol {
+            HStack(spacing: 4) {
+                Image(systemName: symbol)
+                Text(verbatim: timestamp(Double(model.recordingSeconds))).monospacedDigit()
+            }
+        } else if let symbol = model.menuBarSymbol {
             Image(systemName: symbol)
         } else if let bubble = NSImage(named: unreviewed ? "MenuBarBadgedTemplate" : "MenuBarTemplate") {
             Image(nsImage: bubble)

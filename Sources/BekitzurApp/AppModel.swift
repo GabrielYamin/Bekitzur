@@ -69,6 +69,28 @@ final class AppModel {
     /// The app of the call that started the recording, which stops it once the call is over; nil for a recording the
     /// user started, which a call ending only offers to stop.
     @ObservationIgnored private var recordingCall: String?
+    /// The microphone's and the Mac's levels while recording, for the pill and the menu bar to show both are heard.
+    private(set) var levels = RecordingLevels()
+    /// Whole seconds the recording has gone on, for the menu bar.
+    private(set) var recordingSeconds = 0
+    @ObservationIgnored private var metering: Task<Void, Never>?
+    /// A small pill floats over other apps while recording.
+    var showsPill: Bool {
+        didSet {
+            UserDefaults.standard.set(showsPill, forKey: "showsPill")
+            if showsPill, isRecording { pill.show() } else { pill.hide() }
+        }
+    }
+    /// Adds a note at this moment from any app.
+    var quickNoteShortcut: KeyShortcut {
+        didSet {
+            UserDefaults.standard.set(try? JSONEncoder().encode(quickNoteShortcut), forKey: "quickNoteShortcut")
+            quickNoteKey.register(quickNoteShortcut)
+        }
+    }
+    @ObservationIgnored private lazy var pill = RecordingPill(model: self)
+    @ObservationIgnored private lazy var quickNote = QuickNotePanel(model: self)
+    @ObservationIgnored private lazy var quickNoteKey = GlobalShortcut(id: 1) { [weak self] in self?.openQuickNote() }
     /// Settings has something the user hasn't seen: a dot on the Settings buttons until they open it.
     private(set) var hasNewSettings: Bool
     /// The microphone to record, by UID (`AudioInputDevice`); nil for the Mac's default.
@@ -265,6 +287,8 @@ final class AppModel {
         recordsCallsAutomatically = UserDefaults.standard.bool(forKey: "recordCallsAutomatically")
         allowsAIApps = UserDefaults.standard.bool(forKey: MCPServer.allowedKey)
         hasNewSettings = UserDefaults.standard.integer(forKey: "seenSettingsRevision") < NewSetting.revision
+        showsPill = UserDefaults.standard.object(forKey: "showsPill") as? Bool ?? true
+        quickNoteShortcut = UserDefaults.standard.data(forKey: "quickNoteShortcut").flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) } ?? .quickNote
         vocabulary = VocabularyStore(url: BekitzurPaths.vocabulary).load()
         try? FileManager.default.createDirectory(at: BekitzurPaths.conversations, withIntermediateDirectories: true)
         conversations = library.all()
@@ -304,6 +328,7 @@ final class AppModel {
         AppLog.write("Microphones: \(microphones.map(\.name).joined(separator: ", ")); the Mac's default is \(defaultMicrophone?.name ?? "none"); recording \(recordingMicrophone?.name ?? "none")")
         microphonesWatch = AudioInputWatch { Task { @MainActor in AppModel.shared.refreshMicrophones() } }
         trashWatch = TrashWatch(app: Bundle.main.bundleURL) { [weak self] in self?.movedToTrash() }
+        quickNoteKey.register(quickNoteShortcut)
     }
 
     func refreshMicrophones() {
@@ -742,9 +767,10 @@ final class AppModel {
                     onFailure: { Task { @MainActor in AppModel.shared.liveFailed(id) } }
                 )
             }
-            var listener: ConversationRecorder.TrackListener?
-            if let live {
-                listener = { track, samples, sampleRate in live.receive(samples, sampleRate: sampleRate, track: track.rawValue) }
+            let meter = LevelMeter()
+            let listener: ConversationRecorder.TrackListener = { [live] track, samples, sampleRate in
+                meter.receive(samples, track: track)
+                live?.receive(samples, sampleRate: sampleRate, track: track.rawValue)
             }
             let recorder = ConversationRecorder()
             do {
@@ -762,6 +788,8 @@ final class AppModel {
             recordingStartedAt = info.startedAt
             conversations = library.all()
             selection = info.id
+            startMetering(meter, since: info.startedAt)
+            if showsPill { pill.show() }
             AppLog.write("\(info.id): recording started")
             if !speechModels {
                 liveStopped.insert(info.id)
@@ -784,6 +812,7 @@ final class AppModel {
         recordingID = nil
         recordingStartedAt = nil
         recordingCall = nil
+        stopMetering()
         checkCall()
         let live = liveTranscriber
         liveTranscriber = nil
@@ -801,6 +830,66 @@ final class AppModel {
     private func endRecordingActivity() {
         if let recordingActivity { ProcessInfo.processInfo.endActivity(recordingActivity) }
         recordingActivity = nil
+    }
+
+    /// The levels and the time the pill and the menu bar show, a dozen times a second while recording.
+    private func startMetering(_ meter: LevelMeter, since start: Date) {
+        metering?.cancel()
+        levels = RecordingLevels()
+        recordingSeconds = 0
+        metering = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(80))
+                guard let self, !Task.isCancelled else { return }
+                let taken = meter.take()
+                self.levels.add(microphone: taken.microphone, systemAudio: taken.systemAudio)
+                let seconds = Int(Date().timeIntervalSince(start))
+                if seconds != self.recordingSeconds { self.recordingSeconds = seconds }
+            }
+        }
+    }
+
+    private func stopMetering() {
+        metering?.cancel()
+        metering = nil
+        levels = RecordingLevels()
+        recordingSeconds = 0
+        pill.hide()
+        quickNote.close()
+    }
+
+    /// The app of the call being recorded, for the menu bar: the one that started it, or one on a call meanwhile.
+    var recordedCall: String? {
+        recordingCall ?? callWatch.call
+    }
+
+    /// A note at this moment, from the pill or any app; pressed again, it closes. Without a recording, there's nothing
+    /// to note.
+    func openQuickNote() {
+        guard let startedAt = recordingStartedAt else {
+            NSSound.beep()
+            return
+        }
+        if quickNote.isOpen {
+            quickNote.close()
+        } else {
+            quickNote.open(at: Date().timeIntervalSince(startedAt), below: pill.frame)
+        }
+    }
+
+    /// Before the line being typed in the recording's notes, if there is one, so it stays last.
+    func addQuickNote(_ text: String, at time: Double) {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let id = recordingID, !words.isEmpty else { return }
+        loadYourNotes(id)
+        var notes = yourNotes[id] ?? []
+        let note = UserNote(at: time, text: words)
+        if let last = notes.last, last.words.isEmpty {
+            notes.insert(note, at: notes.count - 1)
+        } else {
+            notes.append(note)
+        }
+        setYourNotes(notes, for: id)
     }
 
     /// How each track kept time: when its device started, and anything that went wrong on the way.
@@ -1000,6 +1089,7 @@ final class AppModel {
         }
         recorder = nil
         recordingID = nil
+        stopMetering()
     }
 
     // MARK: Removing Bekitzur
