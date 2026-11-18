@@ -198,11 +198,8 @@ struct ConversationDetail: View {
                         QuietNotice(NotesWarning(saved: warning)?.shown ?? warning, systemImage: "exclamationmark.triangle.fill", tint: .orange)
                     }
                     if model.notesAreBehind(info.id) {
-                        let fixed = model.fixedSinceNotes(info.id)
-                        QuietNotice(
-                            fixed ? String(localized: "You've fixed the Transcript since the Notes were written.") : String(localized: "Separating people who talked at once changed lines the Notes cite."),
-                            systemImage: fixed ? "pencil.circle" : "person.2.wave.2"
-                        ) {
+                        let behind = Self.behind(fixed: model.fixedSinceNotes(info.id), noted: model.changedYourNotesSinceNotes(info.id))
+                        QuietNotice(behind.text, systemImage: behind.symbol) {
                             Button("Update Notes") { model.replaceNotes(of: info.id) { model.updateNotes(info.id) } }
                         }
                     }
@@ -228,6 +225,8 @@ struct ConversationDetail: View {
                             model.setActionItem(index, done: done, in: info.id)
                         } openTranscript: {
                             tab = .transcript
+                        } changeYourNotes: { notes in
+                            model.setYourNotes(notes, for: info.id)
                         }
                         // A Conversation's draft stays with it when another one is selected.
                         .id(info.id)
@@ -242,6 +241,17 @@ struct ConversationDetail: View {
             } else {
                 ContentUnavailableView("The Notes file is missing", systemImage: "questionmark.folder")
             }
+        }
+    }
+
+    /// Why the Notes are behind: the user's fixes to the Transcript, their notes, or both, or else separating people who
+    /// talked at once.
+    private static func behind(fixed: Bool, noted: Bool) -> (text: String, symbol: String) {
+        switch (fixed, noted) {
+        case (true, true): (String(localized: "You've fixed the Transcript and changed your notes since the Notes were written."), "pencil.circle")
+        case (true, false): (String(localized: "You've fixed the Transcript since the Notes were written."), "pencil.circle")
+        case (false, true): (String(localized: "You've changed your notes since the Notes were written."), "pencil")
+        case (false, false): (String(localized: "Separating people who talked at once changed lines the Notes cite."), "person.2.wave.2")
         }
     }
 

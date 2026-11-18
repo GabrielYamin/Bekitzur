@@ -304,11 +304,13 @@ public enum ConversationProcessor {
         }
         progress(.writingNotes)
         let turns = NotesWriter.turns(from: result.transcript.applying(flags))
+        let read = yourNotes()
         result.notes = try NotesWriter(model: model)
-            .write(turns: turns, date: date, language: language, notesLanguage: notesLanguage, yourNotes: yourNotes(), user: user)
+            .write(turns: turns, date: date, language: language, notesLanguage: notesLanguage, yourNotes: read, user: user)
             .notes
         result.turns = turns
         result.notesFixes = flags.fixes
+        result.notesYourNotes = read.filter { !$0.words.isEmpty }
         result.separationChangedNotes = nil
         return result
     }

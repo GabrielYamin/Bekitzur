@@ -91,6 +91,8 @@ public struct ProcessedConversation: Codable, Sendable, Equatable {
     public var notes: Notes
     /// The user's fixes to the Transcript when the Notes were written; the Notes are behind when these differ.
     public var notesFixes: Set<TranscriptFlags.Word>?
+    /// The user's notes when the Notes were written; the Notes are behind when the notes have changed since.
+    public var notesYourNotes: [UserNote]?
     /// The user changed the Notes, which writing them again replaces.
     public var notesEdited: Bool?
     /// Separating people who talked at once, after the Notes were written, changed lines they cite.

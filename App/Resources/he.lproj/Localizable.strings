@@ -28,6 +28,7 @@
 "A Conversation shows when everyone picked in People is in it and the search is in its title, Notes, or Transcript." = "שיחה מוצגת כשכל מי שנבחר באנשים משתתף בה, ומה שחיפשתם מופיע בכותרת, בסיכום או בתמלול שלה.";
 "A downloaded model didn't match its checksum, so it was deleted." = "מודל שהורד לא עבר את בדיקת התקינות, ולכן הוא נמחק.";
 "A new version of %@ is ready to download (%@)." = "גרסה חדשה של %@ מוכנה להורדה (%@).";
+"A note of your own, in the margin, at where playback is" = "הערה משלך, בשוליים, בנקודה שבה הניגון נמצא";
 "A recording takes under 100 MB an hour, but if the disk fills up, the rest of it is lost." = "הקלטה תופסת פחות מ-100 MB לשעה, אבל אם הדיסק מתמלא, שאר ההקלטה הולך לאיבוד.";
 "A small pill floats over other apps with the time, your microphone's and your Mac's levels, a pen for a quick note, and Stop. Drag it anywhere." = "חלונית קטנה צפה מעל אפליקציות אחרות עם הזמן, עוצמת הקול של המיקרופון ושל ה-Mac, עט להערה מהירה וכפתור עצירה. אפשר לגרור אותה לכל מקום.";
 "AI apps" = "אפליקציות AI";
@@ -37,6 +38,7 @@
 "Action Items" = "משימות";
 "Add" = "הוספה";
 "Add a Decision" = "הוספת החלטה";
+"Add a Note" = "הוספת הערה";
 "Add a due date" = "הוספת תאריך יעד";
 "Add a note at %@" = "הוספת הערה ב-%@";
 "Add a note at this moment (%@)" = "הוספת הערה ברגע זה (%@)";
@@ -156,6 +158,7 @@
 "Delete" = "מחיקה";
 "Delete Bekitzur?" = "למחוק את בקיצור?";
 "Delete Bekitzur…" = "מחיקת בקיצור…";
+"Delete Note" = "מחיקת ההערה";
 "Delete Only the App" = "מחיקת היישום בלבד";
 "Delete with Everything" = "מחיקה עם הכול";
 "Delete with the Models" = "מחיקה עם המודלים";
@@ -178,6 +181,7 @@
 "Each line keeps the moment you wrote it. Bekitzur reads them when it writes the Notes." = "כל שורה שומרת את הרגע שבו כתבת אותה. בקיצור קורא אותן כשהוא כותב את הסיכום.";
 "Earlier in this recording" = "קודם בהקלטה הזו";
 "Edit" = "עריכה";
+"Edit Note…" = "עריכת ההערה…";
 "English" = "אנגלית";
 "English speech model" = "מודל דיבור באנגלית";
 "Everything runs on this Mac." = "הכול רץ על ה-Mac הזה.";
@@ -464,8 +468,10 @@
 "Wrong speaker" = "דובר שגוי";
 "Yes" = "כן";
 "Yesterday" = "אתמול";
+"You've changed your notes since the Notes were written." = "שינית את ההערות שלך מאז שהסיכום נכתב.";
 "You've edited these Notes" = "ערכת את הסיכום הזה";
 "You've edited this Conversation's Notes or checked off its Action Items. Writing the Notes again replaces your changes and unchecks them." = "ערכת את הסיכום של השיחה הזו או סימנת משימות כבוצעו. כתיבת הסיכום מחדש תחליף את השינויים שלך ותבטל את הסימונים.";
+"You've fixed the Transcript and changed your notes since the Notes were written." = "תיקנת את התמלול ושינית את ההערות שלך מאז שהסיכום נכתב.";
 "You've fixed the Transcript since the Notes were written." = "תיקנת את התמלול מאז שהסיכום נכתב.";
 "Your microphone recorded only silence. Check the input device in System Settings → Sound." = "המיקרופון הקליט רק שקט. כדאי לבדוק את התקן הקלט בהגדרות המערכת ← צליל.";
 "Your microphone's recording couldn't be read, so these Notes only have the call's sound." = "לא ניתן היה לקרוא את ההקלטה מהמיקרופון, ולכן בסיכום הזה יש רק את הצליל של השיחה.";

@@ -15,6 +15,10 @@ struct NotesView: View {
     let setDone: (Int, Bool) -> Void
     /// Shows the Transcript, with who spoke when along its timeline.
     let openTranscript: () -> Void
+    /// Saves the user's notes, changed in the margin or added at where playback is.
+    let changeYourNotes: ([UserNote]) -> Void
+    /// Where the note being added goes, in seconds: where playback was when Add a Note was clicked.
+    @ViewState private var addingAt: Double?
     /// The Notes being changed while `editing`. It's never nil: the editor's fields still read it once more as editing
     /// ends, and an optional one set to nil on Save or Cancel would crash the app as SwiftUI unwraps it.
     @ViewState private var draft = NotesDraft(Notes())
@@ -34,6 +38,20 @@ struct NotesView: View {
                 }
                 Spacer()
                 if !editing {
+                    Button {
+                        addingAt = player.playback.time
+                    } label: {
+                        Label("Add a Note", systemImage: "pencil.line")
+                    }
+                    .help("A note of your own, in the margin, at where playback is")
+                    .popover(isPresented: Binding(get: { addingAt != nil }, set: { if !$0 { addingAt = nil } })) {
+                        NoteField(at: addingAt ?? 0, text: "") { text in
+                            add(text, at: addingAt ?? 0)
+                            addingAt = nil
+                        } cancel: {
+                            addingAt = nil
+                        }
+                    }
                     Button {
                         draft = NotesDraft(notes)
                         editing = true
@@ -175,6 +193,77 @@ struct NotesView: View {
             .frame(maxWidth: margins.isShown ? 780 + MarginColumn.width + MarginColumn.spacing : 780, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .environment(\.changeYourNote, change)
+    }
+
+    /// The note in its place by time, among the ones with words.
+    private func add(_ text: String, at time: Double) {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return }
+        let notes = yourNotes.filter { !$0.words.isEmpty } + [UserNote(at: time, text: words)]
+        changeYourNotes(notes.sorted { $0.at < $1.at })
+    }
+
+    /// New words for one of the user's notes; none removes it.
+    private func change(_ id: UUID, to text: String?) {
+        var notes = yourNotes
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        let words = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if words.isEmpty {
+            notes.remove(at: index)
+        } else {
+            notes[index].text = words
+        }
+        changeYourNotes(notes)
+    }
+}
+
+private struct ChangeYourNoteKey: EnvironmentKey {
+    static let defaultValue: (@MainActor (UUID, String?) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    /// Changes one of the user's notes in the margin, or with no words removes it.
+    fileprivate var changeYourNote: (@MainActor (UUID, String?) -> Void)? {
+        get { self[ChangeYourNoteKey.self] }
+        set { self[ChangeYourNoteKey.self] = newValue }
+    }
+}
+
+/// One of the user's notes being written or changed, pinned to its moment: Return keeps it, and Escape leaves it as it
+/// was.
+private struct NoteField: View {
+    let at: Double
+    @ViewState private var text: String
+    let save: (String) -> Void
+    let cancel: () -> Void
+    @FocusState private var focused: Bool
+
+    init(at: Double, text: String, save: @escaping (String) -> Void, cancel: @escaping () -> Void) {
+        self.at = at
+        _text = ViewState(initialValue: text)
+        self.save = save
+        self.cancel = cancel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "pencil").foregroundStyle(.tint)
+                Text("Note at \(timestamp(at))")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            TextField("Note", text: $text, prompt: Text("What's worth remembering"), axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(3, reservesSpace: true)
+                .focused($focused)
+                .onSubmit { save(text) }
+        }
+        .padding(12)
+        .frame(width: 300)
+        .onAppear { focused = true }
+        .onExitCommand(perform: cancel)
     }
 }
 
@@ -243,17 +332,35 @@ private struct MarginNote: View {
 
     let entry: Entry
     let player: SourcePlayer
+    @Environment(\.changeYourNote) private var change
+    @ViewState private var editing = false
 
     var body: some View {
-        if let turn = entry.heard {
-            SourceButton(speaker: turn.speaker, text: turn.text, player: player) {
-                SourceClip(quote: nil, speaker: turn.speaker, start: turn.start, end: turn.end, in: player.transcript())
-            } label: {
+        Group {
+            if let turn = entry.heard {
+                SourceButton(speaker: turn.speaker, text: turn.text, player: player) {
+                    SourceClip(quote: nil, speaker: turn.speaker, start: turn.start, end: turn.end, in: player.transcript())
+                } label: {
+                    label
+                }
+                .help("Listen to what was being said when you wrote this")
+            } else {
                 label
             }
-            .help("Listen to what was being said when you wrote this")
-        } else {
-            label
+        }
+        .contextMenu {
+            if let change {
+                Button("Edit Note…") { editing = true }
+                Button("Delete Note", role: .destructive) { change(entry.note.id, nil) }
+            }
+        }
+        .popover(isPresented: $editing) {
+            NoteField(at: entry.note.at, text: entry.note.text) { text in
+                change?(entry.note.id, text)
+                editing = false
+            } cancel: {
+                editing = false
+            }
         }
     }
 
