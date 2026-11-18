@@ -89,7 +89,7 @@ extension Notes {
                 case .actionItem:
                     if let newText { notes.actionItems[index].text = newText }
                     if let owner { notes.actionItems[index].owner = Self.given(owner) }
-                    if let dueSaid { Self.set(dueSaid, on: &notes.actionItems[index], due: due) }
+                    if let dueSaid, !Self.isDue(dueSaid, of: notes.actionItems[index]) { Self.set(dueSaid, on: &notes.actionItems[index], due: due) }
                     // Not done is no mark, as unchecking an item in the Notes leaves it.
                     if let done { notes.actionItems[index].done = done ? true : nil }
                 }
@@ -164,6 +164,15 @@ extension Notes {
     private static func given(_ text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Whether an item is already due as said: its due phrase, or its day and time as the chat lists them. Given back
+    /// the day it listed, "2026-11-19", for an item due "tomorrow" that a change was asked only to rename, the item
+    /// took the day for its phrase and lost its due date.
+    private static func isDue(_ said: String, of item: ActionItem) -> Bool {
+        let said = said.trimmingCharacters(in: .whitespacesAndNewlines)
+        let listed = item.dueDate.map { [$0, item.dueTime].compactMap(\.self).joined(separator: " ") }
+        return said == item.duePhrase || said == listed || said == item.dueDate
     }
 
     /// The due phrase, and the day and time it says; an empty one takes the due date off.

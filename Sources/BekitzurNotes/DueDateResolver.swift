@@ -26,6 +26,14 @@ public enum DueDateResolver {
     }
 
     public static func resolve(_ phrase: String, from conversationDate: Date, calendar: Calendar = .current) -> Date? {
+        if let match = phrase.firstMatch(of: /\d{4}-\d{2}-\d{2}/) {
+            let formatter = DateFormatter()
+            formatter.calendar = calendar
+            formatter.timeZone = calendar.timeZone
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            if let day = formatter.date(from: String(match.output)) { return day }
+        }
         let text = phrase.lowercased()
         let words = text.split { !$0.isLetter && !$0.isNumber }.map(String.init)
         let today = calendar.startOfDay(for: conversationDate)
