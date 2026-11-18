@@ -61,17 +61,19 @@ struct PeopleTimeline: View {
                         .offset(y: Self.marks + Self.lane * CGFloat(index))
                         .allowsHitTesting(false)
                 }
+                // Hovering and clicking go on the mark before it's placed: a placed mark fills the timeline, and so would
+                // its hover.
                 ForEach(Array(timeline.items.enumerated()), id: \.offset) { index, item in
                     ItemMark(kind: item.kind, active: hovered == .item(index))
-                        .position(x: scale.x(item.at), y: Self.marks / 2)
                         .onHover { hover(.item(index), $0) }
                         .onTapGesture { play(from: item.at) }
+                        .position(x: scale.x(item.at), y: Self.marks / 2)
                 }
                 ForEach(timeline.yourNotes) { note in
                     NoteMark(active: hovered == .note(note.id))
-                        .position(x: scale.x(note.at), y: height - Self.marks / 2)
                         .onHover { hover(.note(note.id), $0) }
                         .onTapGesture { play(from: note.at) }
+                        .position(x: scale.x(note.at), y: height - Self.marks / 2)
                 }
                 Playhead(playback: playback, scale: scale, height: height)
             }
