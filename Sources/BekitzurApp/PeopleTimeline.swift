@@ -12,24 +12,45 @@ struct PeopleTimeline: View {
     var spaceBar = true
     @ViewState private var hovered: TimelineMark?
 
+    private static let inset: CGFloat = 16
     private static let label: CGFloat = 96
+    private static let gap: CGFloat = 10
     private static let lane: CGFloat = 17
     private static let marks: CGFloat = 24
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             PlayControls(playback: playback, spaceBar: spaceBar)
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: Self.gap) {
                 labels
                 tracks
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Self.inset)
         .padding(.top, 8)
         .padding(.bottom, 8)
         .background(.bar)
         .overlay(alignment: .top) { Divider() }
+        .overlay { hoverCard }
         .disabled(!playback.isLoaded)
+    }
+
+    /// The hovered mark's item or note, above the timeline over the Transcript, where it hides none of the marks.
+    @ViewBuilder
+    private var hoverCard: some View {
+        if let hovered, let card = card(for: hovered) {
+            GeometryReader { geometry in
+                let tracks = Self.inset + Self.label + Self.gap
+                let scale = TimeScale(length: timeline.length, width: geometry.size.width - tracks - Self.inset)
+                let left = min(max(tracks + scale.x(card.at) - 40, 8), max(geometry.size.width - 288, 8))
+                TimelineCard(card: card)
+                    .frame(width: 280, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 280, height: 0, alignment: .bottomLeading)
+                    .offset(x: left, y: -6)
+            }
+            .allowsHitTesting(false)
+        }
     }
 
     private var labels: some View {
@@ -76,16 +97,6 @@ struct PeopleTimeline: View {
                         .position(x: scale.x(note.at), y: height - Self.marks / 2)
                 }
                 Playhead(playback: playback, scale: scale, height: height)
-            }
-            .overlay(alignment: .topLeading) {
-                if let hovered, let card = card(for: hovered) {
-                    let left = min(max(scale.x(card.at) - 40, 0), max(geometry.size.width - 280, 0))
-                    TimelineCard(card: card)
-                        .frame(width: 280, alignment: .leading)
-                        .alignmentGuide(.top) { $0[.bottom] + 6 }
-                        .alignmentGuide(.leading) { _ in -left }
-                        .allowsHitTesting(false)
-                }
             }
         }
         .frame(height: height)

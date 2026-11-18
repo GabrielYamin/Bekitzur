@@ -24,7 +24,9 @@ struct ConversationDetail: View {
         VStack(spacing: 0) {
             header
             Divider()
-            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The split view keeps the detail at least as tall as its minimum, measured at the narrowest width, where
+            // text wraps word by word and can come out taller than the window, pushing the bottom out of sight.
+            content.frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         }
         .toolbar { toolbar }
         .task(id: "\(info.id)-\(info.status)") {
