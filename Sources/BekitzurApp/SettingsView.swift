@@ -147,7 +147,7 @@ private struct RecordingPane: View {
                     if model.newSettingsShown.contains(.pill) { NewBadge() }
                 }
             }
-            Text("A small pill floats over other apps with the time, your microphone's and your Mac's levels, and a pen for a quick note. Drag it anywhere.")
+            Text("A small pill floats over other apps with the time, your microphone's and your Mac's levels, a pen for a quick note, and Stop. Drag it anywhere.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             LabeledContent {

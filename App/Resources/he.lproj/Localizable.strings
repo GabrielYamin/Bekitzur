@@ -29,7 +29,7 @@
 "A downloaded model didn't match its checksum, so it was deleted." = "מודל שהורד לא עבר את בדיקת התקינות, ולכן הוא נמחק.";
 "A new version of %@ is ready to download (%@)." = "גרסה חדשה של %@ מוכנה להורדה (%@).";
 "A recording takes under 100 MB an hour, but if the disk fills up, the rest of it is lost." = "הקלטה תופסת פחות מ-100 MB לשעה, אבל אם הדיסק מתמלא, שאר ההקלטה הולך לאיבוד.";
-"A small pill floats over other apps with the time, your microphone's and your Mac's levels, and a pen for a quick note. Drag it anywhere." = "חלונית קטנה צפה מעל אפליקציות אחרות עם הזמן, עוצמת הקול של המיקרופון ושל ה-Mac, ועט להערה מהירה. אפשר לגרור אותה לכל מקום.";
+"A small pill floats over other apps with the time, your microphone's and your Mac's levels, a pen for a quick note, and Stop. Drag it anywhere." = "חלונית קטנה צפה מעל אפליקציות אחרות עם הזמן, עוצמת הקול של המיקרופון ושל ה-Mac, עט להערה מהירה וכפתור עצירה. אפשר לגרור אותה לכל מקום.";
 "AI apps" = "אפליקציות AI";
 "AI apps like Claude and Cursor can then find your Conversations, read their Notes and Transcripts, and change their Notes, through Bekitzur's MCP server. What an AI app reads goes to its model's provider, like Anthropic or OpenAI. Changes show in the Conversation's Chat tab, where you can undo them." = "אפליקציות AI כמו Claude ו-Cursor יוכלו אז למצוא את השיחות שלך, לקרוא את הסיכומים והתמלולים שלהן ולשנות את הסיכומים, דרך שרת ה-MCP של בקיצור. מה שאפליקציית AI קוראת נשלח לספק המודל שלה, כמו Anthropic או OpenAI. השינויים מופיעים בלשונית הצ׳אט של השיחה, ושם אפשר לבטל אותם.";
 "About" = "אודות";

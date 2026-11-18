@@ -25,8 +25,8 @@ private final class FloatingPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// While recording, a small pill over every app with the time, the microphone's and the Mac's levels, and a pen for a
-/// quick note. Dragged anywhere, it stays there for the next recording.
+/// While recording, a small pill over every app with the time, the microphone's and the Mac's levels, a pen for a quick
+/// note, and Stop. Dragged anywhere, it stays there for the next recording.
 @MainActor
 final class RecordingPill {
     private let panel = FloatingPanel(takesKeys: false)
@@ -136,18 +136,7 @@ private struct PillView: View {
             .help("Show the recording in Bekitzur")
             LevelBars(symbol: "mic.fill", levels: model.levels.microphone)
             LevelBars(symbol: "speaker.wave.2.fill", levels: model.levels.systemAudio)
-            Button {
-                model.openQuickNote()
-            } label: {
-                Image(systemName: "pencil")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 30, height: 30)
-                    .background(.tint, in: Circle())
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .help("Add a note at this moment (\(model.quickNoteShortcut.shown))")
+            buttons
         }
         .padding(.leading, 14)
         .padding(.trailing, 5)
@@ -163,6 +152,35 @@ private struct PillView: View {
         .help("Drag to move it")
         .padding(1)
         .fixedSize()
+    }
+
+    private var buttons: some View {
+        HStack(spacing: 6) {
+            Button {
+                model.openQuickNote()
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(.tint, in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Add a note at this moment (\(model.quickNoteShortcut.shown))")
+            Button {
+                model.stopRecording()
+            } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(.red, in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Stop recording and write the Notes")
+        }
     }
 }
 
