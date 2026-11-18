@@ -13,9 +13,9 @@ struct PeopleTimeline: View {
     @ViewState private var hovered: TimelineMark?
 
     private static let inset: CGFloat = 16
-    private static let label: CGFloat = 96
+    private static let label: CGFloat = 110
     private static let gap: CGFloat = 10
-    private static let lane: CGFloat = 17
+    private static let lane: CGFloat = 20
     private static let marks: CGFloat = 24
 
     var body: some View {
@@ -58,11 +58,10 @@ struct PeopleTimeline: View {
             Color.clear.frame(height: Self.marks)
             ForEach(timeline.lanes, id: \.speaker) { lane in
                 HStack(spacing: 6) {
-                    PersonAvatar(name: lane.speaker, size: 13)
+                    PersonAvatar(name: lane.speaker, size: 16)
                     Text(ShownNames.speaker(lane.speaker)).lineLimit(1)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.callout)
                 .frame(height: Self.lane)
             }
             Color.clear.frame(height: Self.marks)
