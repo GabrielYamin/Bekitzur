@@ -40,15 +40,19 @@ struct PersonAvatar: View {
 struct AvatarStack: View {
     let names: [String]
     var size: CGFloat = 16
-    var limit = 3
+    var limit = 5
 
     var body: some View {
         HStack(spacing: 3) {
             HStack(spacing: -size * 0.3) {
                 ForEach(Array(names.prefix(limit)), id: \.self) { name in
                     PersonAvatar(name: name, size: size)
+                        // A ring cut out of the avatar before it, in whatever color is behind the row.
+                        .background(Circle().fill(.black).padding(-2).blendMode(.destinationOut))
                 }
             }
+            // Composited as one: drawn one by one, a sidebar row blended each avatar with the one under it.
+            .compositingGroup()
             if names.count > limit {
                 Text(verbatim: "+\(names.count - limit)").font(.caption2).foregroundStyle(.secondary)
             }
