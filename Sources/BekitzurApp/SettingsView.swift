@@ -2,6 +2,7 @@ import BekitzurDomain
 import BekitzurModels
 import BekitzurPipeline
 import BekitzurVocabulary
+import Carbon.HIToolbox
 import SwiftUI
 
 /// Settings, a pane at a time, picked in the sidebar: in one long list they had grown past a screen.
@@ -92,7 +93,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     /// It has one of these settings.
     func holds(_ settings: Set<NewSetting>) -> Bool {
         let own: Set<NewSetting> = switch self {
-        case .recording: [.microphone, .recordCallsAutomatically]
+        case .recording: [.microphone, .recordCallsAutomatically, .pill, .quickNoteShortcut]
         case .language: [.appLanguage, .notesLanguage]
         case .aiApps: [.aiApps]
         case .people, .vocabulary, .models, .storage, .about: []
@@ -140,6 +141,28 @@ private struct RecordingPane: View {
             }
         }
         Section {
+            Toggle(isOn: $model.showsPill) {
+                HStack(spacing: 6) {
+                    Text("Show the floating pill while recording")
+                    if model.newSettingsShown.contains(.pill) { NewBadge() }
+                }
+            }
+            Text("A small pill floats over other apps with the time, your microphone's and your Mac's levels, a pen for a quick note, and Stop. Drag it anywhere.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            LabeledContent {
+                ShortcutRecorder(shortcut: $model.quickNoteShortcut)
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Quick note shortcut")
+                    if model.newSettingsShown.contains(.quickNoteShortcut) { NewBadge() }
+                }
+            }
+            Text("Adds a note at this moment from any app. With the pill off, the note field opens under Bekitzur's icon in the menu bar.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        Section {
             Text("Bekitzur records your microphone and everything your Mac plays. On calls, use headphones so your microphone doesn't pick up the other side a second time.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -147,6 +170,48 @@ private struct RecordingPane: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+/// A shortcut and a way to change it: Change waits for the next key pressed with ⌘, ⌥, or ⌃, and Escape keeps the one
+/// there is.
+private struct ShortcutRecorder: View {
+    @Binding var shortcut: KeyShortcut
+    @ViewState private var recording = false
+    @ViewState private var monitor: Any?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(recording ? String(localized: "Type the shortcut") : shortcut.shown)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 6))
+            Button(recording ? "Cancel" : "Change") {
+                if recording { stop() } else { start() }
+            }
+        }
+        .onDisappear(perform: stop)
+    }
+
+    private func start() {
+        recording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == UInt16(kVK_Escape) {
+                stop()
+            } else if let typed = KeyShortcut(event), typed.isUsable {
+                shortcut = typed
+                stop()
+            } else {
+                NSSound.beep()
+            }
+            return nil
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        recording = false
     }
 }
 

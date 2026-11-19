@@ -1,5 +1,7 @@
 /* Bekitzur in Hebrew. Each key is the English the code shows; keys come from the compiler: swift build -Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path -Xswiftc <folder>. */
 
+"%@ call" = "שיחת %@";
+"%@ from any app" = "%@ מכל אפליקציה";
 "%@ in it points outside the Conversation, so nothing was imported." = "%@ שבקובץ מצביע אל מחוץ לשיחה, ולכן שום דבר לא יובא.";
 "%@ is already in People: they become one person, with both voices." = "%@ כבר נמצא באנשים: הם יהפכו לאדם אחד, עם שני הקולות.";
 "%@ is using the microphone." = "%@ משתמש במיקרופון.";
@@ -27,6 +29,7 @@
 "A downloaded model didn't match its checksum, so it was deleted." = "מודל שהורד לא עבר את בדיקת התקינות, ולכן הוא נמחק.";
 "A new version of %@ is ready to download (%@)." = "גרסה חדשה של %@ מוכנה להורדה (%@).";
 "A recording takes under 100 MB an hour, but if the disk fills up, the rest of it is lost." = "הקלטה תופסת פחות מ-100 MB לשעה, אבל אם הדיסק מתמלא, שאר ההקלטה הולך לאיבוד.";
+"A small pill floats over other apps with the time, your microphone's and your Mac's levels, a pen for a quick note, and Stop. Drag it anywhere." = "חלונית קטנה צפה מעל אפליקציות אחרות עם הזמן, עוצמת הקול של המיקרופון ושל ה-Mac, עט להערה מהירה וכפתור עצירה. אפשר לגרור אותה לכל מקום.";
 "AI apps" = "אפליקציות AI";
 "AI apps like Claude and Cursor can then find your Conversations, read their Notes and Transcripts, and change their Notes, through Bekitzur's MCP server. What an AI app reads goes to its model's provider, like Anthropic or OpenAI. Changes show in the Conversation's Chat tab, where you can undo them." = "אפליקציות AI כמו Claude ו-Cursor יוכלו אז למצוא את השיחות שלך, לקרוא את הסיכומים והתמלולים שלהן ולשנות את הסיכומים, דרך שרת ה-MCP של בקיצור. מה שאפליקציית AI קוראת נשלח לספק המודל שלה, כמו Anthropic או OpenAI. השינויים מופיעים בלשונית הצ׳אט של השיחה, ושם אפשר לבטל אותם.";
 "About" = "אודות";
@@ -35,6 +38,8 @@
 "Add" = "הוספה";
 "Add a Decision" = "הוספת החלטה";
 "Add a due date" = "הוספת תאריך יעד";
+"Add a note at %@" = "הוספת הערה ב-%@";
+"Add a note at this moment (%@)" = "הוספת הערה ברגע זה (%@)";
 "Add a term, like your product's name" = "הוספת מונח, למשל שם המוצר שלכם";
 "Add a time" = "הוספת שעה";
 "Add an Action Item" = "הוספת משימה";
@@ -45,6 +50,7 @@
 "Added an Action Item: %@" = "נוספה משימה: %@";
 "Added an Open Question: %@" = "נוספה שאלה פתוחה: %@";
 "Added to %@, from its next chat." = "נוסף ל-%@, החל מהצ׳אט הבא שלו.";
+"Adds a note at this moment from any app. With the pill off, the note field opens under Bekitzur's icon in the menu bar." = "מוסיף הערה ברגע זה מכל אפליקציה. כשהחלונית הצפה כבויה, שדה ההערה נפתח מתחת לסמל של בקיצור בשורת התפריטים.";
 "All Action Items are done. Delete this Conversation?" = "כל המשימות בוצעו. למחוק את השיחה הזו?";
 "Allow…" = "מתן הרשאה…";
 "App language" = "שפת היישום";
@@ -97,6 +103,7 @@
 "Can't load the speech model at %@" = "לא ניתן לטעון את מודל הדיבור מ-%@";
 "Can't read audio from %@" = "לא ניתן לקרוא שמע מ-%@";
 "Cancel" = "ביטול";
+"Change" = "שינוי";
 "Change the Notes: the title, summary, and each item" = "עריכת הסיכום: הכותרת, התקציר וכל פריט";
 "Changed a Decision: %@" = "שונתה החלטה: %@";
 "Changed an Action Item: %@" = "שונתה משימה: %@";
@@ -165,9 +172,11 @@
 "Downloading %@" = "מוריד את %@";
 "Downloading Bekitzur %@…" = "מוריד את בקיצור %@…";
 "Downloading the speaker models" = "מוריד את מודלי הדוברים";
+"Drag to move it" = "אפשר לגרור כדי להזיז";
 "Due" = "תאריך יעד";
 "Each Conversation shown has all of them." = "בכל שיחה שמוצגת משתתפים כולם.";
 "Each line keeps the moment you wrote it. Bekitzur reads them when it writes the Notes." = "כל שורה שומרת את הרגע שבו כתבת אותה. בקיצור קורא אותן כשהוא כותב את הסיכום.";
+"Earlier in this recording" = "קודם בהקלטה הזו";
 "Edit" = "עריכה";
 "English" = "אנגלית";
 "English speech model" = "מודל דיבור באנגלית";
@@ -190,8 +199,8 @@
 "Hugging Face answered with HTTP %lld." = "Hugging Face ענה עם HTTP %lld.";
 "If Bekitzur found the wrong number of people, say how many spoke. Speakers and Notes are made again; the Transcript stays. Names you gave are kept only for voices Bekitzur recognizes." = "אם בקיצור מצא מספר שגוי של אנשים, אפשר לציין כמה דיברו. הדוברים והסיכום ייעשו מחדש; התמלול נשאר. שמות שנתתם נשמרים רק לקולות שבקיצור מזהה.";
 "Import" = "ייבוא";
+"Import a recording" = "ייבוא הקלטה";
 "Import a recording made elsewhere, like a voice memo, or a Conversation exported from Bekitzur" = "ייבוא הקלטה שנעשתה במקום אחר, כמו תזכיר קולי, או שיחה שיוצאה מבקיצור";
-"Import recording…" = "ייבוא הקלטה…";
 "Install" = "התקנה";
 "Install Bekitzur %@?" = "להתקין את בקיצור %@?";
 "Install Now" = "התקנה עכשיו";
@@ -220,6 +229,7 @@
 "Listen: %@" = "האזנה: %@";
 "Live" = "בזמן אמת";
 "Live transcription stopped. The recording goes on, and its Transcript will be made from the recording when you stop." = "התמלול החי נעצר. ההקלטה ממשיכה, והתמלול שלה ייעשה מההקלטה כשתעצרו.";
+"Live, about half a minute behind" = "בזמן אמת, בפיגור של כחצי דקה";
 "Looking in the Transcript…" = "מחפש בתמלול…";
 "Lyrics" = "מילים";
 "Lyrics follows along as it plays; List is for reading and fixing words" = "מילים עוקבות אחרי הניגון, ורשימה מיועדת לקריאה ולתיקון מילים";
@@ -265,6 +275,7 @@
 "Not said: part of what you typed for the words before it" = "לא נאמר: חלק ממה שהוקלד במקום המילים שלפניו";
 "Not showing? Check System Settings → Notifications → Bekitzur, and that Focus is off." = "לא מופיע? כדאי לבדוק את הגדרות המערכת ← עדכונים ← בקיצור, ושמצב ריכוז כבוי.";
 "Note" = "הערה";
+"Note at %@" = "הערה ב-%@";
 "Notes" = "סיכום";
 "Notes language" = "שפת הסיכום";
 "Notes ready" = "הסיכום מוכן";
@@ -295,9 +306,11 @@
 "Processing" = "מעבד";
 "Processing…" = "מעבד…";
 "Project" = "פרויקט";
+"Quick note shortcut" = "קיצור מקשים להערה מהירה";
 "Quit" = "יציאה";
 "Read the Conversations folder again, for Conversations added or changed outside Bekitzur (⌘R)" = "קריאה מחדש של תיקיית השיחות, לשיחות שנוספו או השתנו מחוץ לבקיצור (⌘R)";
 "Read the paragraph below aloud for 30 seconds so Bekitzur knows your voice." = "כדאי להקריא בקול את הפסקה שלמטה במשך 30 שניות כדי שבקיצור יכיר את הקול שלך.";
+"Recent" = "אחרונות";
 "Recognized by voice" = "זוהה לפי הקול";
 "Recognizing speakers" = "מזהה דוברים";
 "Record" = "הקלטה";
@@ -346,7 +359,6 @@
 "Settings (⌘,)" = "הגדרות (⌘,)";
 "Settings has something new" = "יש משהו חדש בהגדרות";
 "Settings has something new (⌘,)" = "יש משהו חדש בהגדרות (⌘,)";
-"Settings…" = "הגדרות…";
 "Share" = "שיתוף";
 "Show" = "הצגה";
 "Show everyone's Conversations" = "הצגת השיחות של כולם";
@@ -354,7 +366,8 @@
 "Show in Transcript" = "הצגה בתמלול";
 "Show only Conversations with the people you pick" = "הצגת שיחות רק עם האנשים שנבחרו";
 "Show the Transcript as" = "הצגת התמלול בתור";
-"Show the live Transcript" = "הצגת התמלול החי";
+"Show the floating pill while recording" = "הצגת החלונית הצפה בזמן הקלטה";
+"Show the recording in Bekitzur" = "הצגת ההקלטה בבקיצור";
 "Show this Conversation" = "הצגת השיחה הזו";
 "Some of Bekitzur's data couldn't be moved to the Trash" = "חלק מהנתונים של בקיצור לא הועברו לפח";
 "Someone with Bekitzur can open this file to add the Conversation, with its recording, Transcript, Speakers, and Notes." = "מי שיש לו בקיצור יכול לפתוח את הקובץ הזה כדי להוסיף את השיחה, עם ההקלטה, התמלול, הדוברים והסיכום שלה.";
@@ -419,6 +432,7 @@
 "Try Again" = "ניסיון חוזר";
 "Try again" = "ניסיון חוזר";
 "Type a note. # makes a heading, and [ ] something to do." = "אפשר לכתוב כאן הערה. כותרת מתחילה ב-#, ומשהו לעשות ב-[ ].";
+"Type the shortcut" = "יש להקליד את הקיצור";
 "Type what was said…" = "הקלדת מה שנאמר…";
 "Undo" = "ביטול השינוי";
 "Undone" = "השינוי בוטל";
@@ -436,6 +450,7 @@
 "What was said instead of “%@”?" = "מה נאמר במקום “%@”?";
 "What you type replaces all of them as one phrase, which a click takes back." = "מה שמקלידים מחליף את כולן בביטוי אחד, ולחיצה מבטלת אותו.";
 "What's still open" = "מה עוד פתוח";
+"What's worth remembering" = "מה ששווה לזכור";
 "When Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, Bekitzur offers to record, and once it stops, to stop recording. A call can't be seen while it rings, so the offer comes when you answer or join." = "כש-Slack, Teams, Zoom, FaceTime או הדפדפן מתחילים להשתמש במיקרופון, בקיצור מציע להקליט, וכשהם מפסיקים, להפסיק להקליט. אי אפשר לזהות שיחה בזמן שהיא מצלצלת, ולכן ההצעה מגיעה כשעונים או מצטרפים.";
 "When an AI app can't use MCP servers, its agent can run Bekitzur's tools from its terminal instead, and the skill tells it how." = "כשאפליקציית AI לא יכולה להשתמש בשרתי MCP, הסוכן שלה יכול להריץ את הכלים של בקיצור מהטרמינל שלו במקום זאת, וה-skill מסביר לו איך.";
 "When an English term is spoken in Hebrew, Bekitzur writes it in English letters. It knows %lld common tech terms; add your team's own here. Typing what was said for a word in the Transcript teaches it too." = "כשאומרים מונח באנגלית בתוך עברית, בקיצור כותב אותו באותיות לועזיות. הוא מכיר %lld מונחים טכניים נפוצים; כאן אפשר להוסיף את המונחים של הצוות. גם הקלדה של מה שנאמר במקום מילה בתמלול מלמדת אותו.";
@@ -459,6 +474,7 @@
 "Your notes" = "ההערות שלך";
 "Your voice" = "הקול שלך";
 "about half a minute behind" = "בפיגור של כחצי דקה";
+"esc Close" = "esc סגירה";
 "github.com/GabrielYamin/Bekitzur" = "github.com/GabrielYamin/Bekitzur";
 "the English speech model" = "מודל הדיבור באנגלית";
 "the Hebrew speech model" = "מודל הדיבור בעברית";
@@ -468,3 +484,4 @@
 "· %lld min" = "· %lld דק׳";
 "· separated automatically" = "· הופרד אוטומטית";
 "“%@”" = "“%@”";
+"↩ Add" = "↩ הוספה";
