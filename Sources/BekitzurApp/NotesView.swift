@@ -3,6 +3,8 @@ import SwiftUI
 
 struct NotesView: View {
     let result: ProcessedConversation
+    /// What the user wrote while recording, shown beside what it's about.
+    let yourNotes: [UserNote]
     /// Plays a Source where it's shown.
     let player: SourcePlayer
     /// Saves the user's changes to the Notes.
@@ -67,18 +69,30 @@ struct NotesView: View {
     }
 
     private var notesView: some View {
-        ScrollView {
+        let margins = Margins(yourNotes, notes: notes, turns: result.turns)
+        return ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                Text(notes.summary)
-                    .font(.system(size: 14))
-                    .lineSpacing(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .environment(\.layoutDirection, direction)
+                WithMargin(margin: margins.beside(.summary), player: player) {
+                    Text(notes.summary)
+                        .font(.system(size: 14))
+                        .lineSpacing(4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .environment(\.layoutDirection, direction)
 
                 if !notes.decisions.isEmpty {
                     NotesSection(title: "Decisions", direction: direction) {
                         ForEach(Array(notes.decisions.enumerated()), id: \.offset) { index, decision in
-                            NoteItem(text: decision.text, quote: decision.quote, sources: decision.sourceTurns, turns: turns, player: player, first: index == 0)
+                            NoteItem(
+                                text: decision.text,
+                                quote: decision.quote,
+                                sources: decision.sourceTurns,
+                                turns: turns,
+                                player: player,
+                                first: index == 0,
+                                margin: margins.beside(.decision(index)),
+                                fromYourNote: decision.fromYourNote != nil
+                            )
                         }
                     }
                 }
@@ -95,6 +109,8 @@ struct NotesView: View {
                                 turns: turns,
                                 player: player,
                                 first: index == 0,
+                                margin: margins.beside(.actionItem(index)),
+                                fromYourNote: item.fromYourNote != nil,
                                 done: Binding(get: { item.done == true }, set: { setDone(index, $0) })
                             ) {
                                 HStack(spacing: 14) {
@@ -121,7 +137,16 @@ struct NotesView: View {
                 if !notes.openQuestions.isEmpty {
                     NotesSection(title: "Open Questions", direction: direction) {
                         ForEach(Array(notes.openQuestions.enumerated()), id: \.offset) { index, question in
-                            NoteItem(text: question.text, quote: nil, sources: question.sourceTurns, turns: turns, player: player, first: index == 0)
+                            NoteItem(
+                                text: question.text,
+                                quote: nil,
+                                sources: question.sourceTurns,
+                                turns: turns,
+                                player: player,
+                                first: index == 0,
+                                margin: margins.beside(.openQuestion(index)),
+                                fromYourNote: question.fromYourNote != nil
+                            )
                         }
                     }
                 }
@@ -134,9 +159,105 @@ struct NotesView: View {
             .padding(.horizontal, 24)
             .padding(.top, 12)
             .padding(.bottom, 24)
-            .frame(maxWidth: 780, alignment: .leading)
+            .frame(maxWidth: margins.isShown ? 780 + MarginColumn.width + MarginColumn.spacing : 780, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+    }
+}
+
+/// The user's notes, each beside the part of the Notes it's about, with the turn being said when they wrote it.
+private struct Margins {
+    let isShown: Bool
+    private let entries: [UserNotePlace: [MarginNote.Entry]]
+
+    init(_ yourNotes: [UserNote], notes: Notes, turns: [Turn]) {
+        let written = yourNotes.filter { !$0.words.isEmpty }
+        let places = UserNote.places(of: written, in: notes, turns: turns)
+        var entries: [UserNotePlace: [MarginNote.Entry]] = [:]
+        for note in written {
+            guard let place = places[note.id] else { continue }
+            let heard = turns.last { ($0.start ?? .infinity) <= note.at }
+            entries[place, default: []].append(MarginNote.Entry(note: note, heard: heard))
+        }
+        isShown = !written.isEmpty
+        self.entries = entries
+    }
+
+    /// Nil for a Conversation without notes of the user's, so the Notes take the whole width.
+    func beside(_ place: UserNotePlace) -> [MarginNote.Entry]? {
+        isShown ? entries[place] ?? [] : nil
+    }
+}
+
+private enum MarginColumn {
+    static let width: CGFloat = 176
+    static let spacing: CGFloat = 26
+}
+
+/// What the Notes say, with the user's notes about it in a column beside it, when the Conversation has any.
+private struct WithMargin<Content: View>: View {
+    let margin: [MarginNote.Entry]?
+    let player: SourcePlayer
+    let content: Content
+
+    init(margin: [MarginNote.Entry]?, player: SourcePlayer, @ViewBuilder content: () -> Content) {
+        self.margin = margin
+        self.player = player
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: MarginColumn.spacing) {
+            content
+            if let margin {
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(margin) { MarginNote(entry: $0, player: player) }
+                }
+                .frame(width: MarginColumn.width, alignment: .leading)
+            }
+        }
+    }
+}
+
+/// One of the user's notes beside what it's about, with when they wrote it; it plays what was being said then.
+private struct MarginNote: View {
+    struct Entry: Identifiable {
+        let note: UserNote
+        /// The turn being said when it was written.
+        let heard: Turn?
+        var id: UUID { note.id }
+    }
+
+    let entry: Entry
+    let player: SourcePlayer
+
+    var body: some View {
+        if let turn = entry.heard {
+            SourceButton(speaker: turn.speaker, text: turn.text, player: player) {
+                SourceClip(quote: nil, speaker: turn.speaker, start: turn.start, end: turn.end, in: player.transcript())
+            } label: {
+                label
+            }
+            .help("Listen to what was being said when you wrote this")
+        } else {
+            label
+        }
+    }
+
+    private var label: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(timestamp(entry.note.at), systemImage: "pencil")
+                .font(.system(size: 10.5).monospacedDigit())
+                .foregroundStyle(.tint)
+            DirectionalText(entry.note.words)
+                .font(.system(size: 12.5, weight: entry.note.kind == .heading ? .semibold : .regular))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.leading, 9)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(.tint).frame(width: 2)
+        }
+        .contentShape(Rectangle())
     }
 }
 
@@ -441,6 +562,10 @@ private struct NoteItem<Details: View>: View {
     let player: SourcePlayer
     /// The section's first item, with no hairline above it.
     let first: Bool
+    /// The user's notes about it; nil for a Conversation without any.
+    let margin: [MarginNote.Entry]?
+    /// Whether the Notes have it only because of a note of the user's.
+    let fromYourNote: Bool
     /// An Action Item's check box; nil for a Decision or an Open Question.
     var done: Binding<Bool>?
     @ViewBuilder let details: Details
@@ -452,6 +577,8 @@ private struct NoteItem<Details: View>: View {
         turns: [String: Turn],
         player: SourcePlayer,
         first: Bool,
+        margin: [MarginNote.Entry]? = nil,
+        fromYourNote: Bool = false,
         done: Binding<Bool>? = nil,
         @ViewBuilder details: () -> Details
     ) {
@@ -461,25 +588,29 @@ private struct NoteItem<Details: View>: View {
         self.turns = turns
         self.player = player
         self.first = first
+        self.margin = margin
+        self.fromYourNote = fromYourNote
         self.done = done
         self.details = details()
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            if let done {
-                Button {
-                    done.wrappedValue.toggle()
-                } label: {
-                    Image(systemName: done.wrappedValue ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(done.wrappedValue ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                        .contentShape(Circle())
+        WithMargin(margin: margin, player: player) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                if let done {
+                    Button {
+                        done.wrappedValue.toggle()
+                    } label: {
+                        Image(systemName: done.wrappedValue ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(done.wrappedValue ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(done.wrappedValue ? "Mark as not done" : "Mark as done")
                 }
-                .buttonStyle(.plain)
-                .help(done.wrappedValue ? "Mark as not done" : "Mark as done")
+                content.opacity(done?.wrappedValue == true ? 0.6 : 1)
             }
-            content.opacity(done?.wrappedValue == true ? 0.6 : 1)
         }
         .padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -497,6 +628,12 @@ private struct NoteItem<Details: View>: View {
                 .strikethrough(done?.wrappedValue == true)
             HStack(spacing: 14) {
                 details
+                if fromYourNote {
+                    Label("From your note", systemImage: "pencil")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .help("Bekitzur added this for a note you wrote while recording")
+                }
                 sourceButtons
             }
         }
@@ -528,8 +665,19 @@ private struct NoteItem<Details: View>: View {
 }
 
 extension NoteItem where Details == EmptyView {
-    init(text: String, quote: String?, sources: [String], turns: [String: Turn], player: SourcePlayer, first: Bool) {
-        self.init(text: text, quote: quote, sources: sources, turns: turns, player: player, first: first) { EmptyView() }
+    init(
+        text: String,
+        quote: String?,
+        sources: [String],
+        turns: [String: Turn],
+        player: SourcePlayer,
+        first: Bool,
+        margin: [MarginNote.Entry]? = nil,
+        fromYourNote: Bool = false
+    ) {
+        self.init(text: text, quote: quote, sources: sources, turns: turns, player: player, first: first, margin: margin, fromYourNote: fromYourNote) {
+            EmptyView()
+        }
     }
 }
 

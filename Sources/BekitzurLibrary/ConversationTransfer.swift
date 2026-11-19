@@ -31,6 +31,7 @@ extension ConversationLibrary {
         // A copy on the same volume shares the recording's blocks rather than taking room of its own.
         try fileManager.copyItem(at: folder(for: id), to: copy)
         try? fileManager.removeItem(at: copy.appending(path: Self.chatFile))
+        try? fileManager.removeItem(at: copy.appending(path: Self.yourNotesFile))
         try Self.run("ditto", ["-c", "-k", "--norsrc", "--noextattr", "--noacl", "--keepParent", copy.path, file.path])
     }
 

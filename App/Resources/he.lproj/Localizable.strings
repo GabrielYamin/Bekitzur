@@ -55,6 +55,7 @@
 "Bekitzur %@ is available" = "בקיצור %@ זמין";
 "Bekitzur %@ is available." = "בקיצור %@ זמין.";
 "Bekitzur Settings" = "הגדרות בקיצור";
+"Bekitzur added this for a note you wrote while recording" = "בקיצור הוסיף את זה בגלל הערה שכתבת בזמן ההקלטה";
 "Bekitzur can't replace itself in %@. Install the new version with install.sh instead." = "בקיצור לא יכול להחליף את עצמו ב-%@. במקום זה אפשר להתקין את הגרסה החדשה עם install.sh.";
 "Bekitzur checks for a new version when it opens and every few hours, and asks before installing it." = "בקיצור בודק אם יש גרסה חדשה כשהוא נפתח וכל כמה שעות, ושואל לפני שהוא מתקין אותה.";
 "Bekitzur downloads its models once, from their publishers on Hugging Face." = "בקיצור מוריד את המודלים שלו פעם אחת, מהמפרסמים שלהם ב-Hugging Face.";
@@ -66,6 +67,7 @@
 "Bekitzur is open source, under the MIT License. Its code, releases, and updates are on GitHub." = "בקיצור הוא קוד פתוח, תחת רישיון MIT. הקוד, הגרסאות והעדכונים שלו נמצאים ב-GitHub.";
 "Bekitzur is processing a Conversation" = "בקיצור מעבד שיחה";
 "Bekitzur is provided as is, without warranty of any kind, and its authors aren't liable for anything that comes of using it, like a recording that's lost or incomplete, a mistake in a Transcript, Speakers, or Notes, or a decision made from them. Everything runs on your Mac: recordings, Transcripts, Notes, and voices stay on it unless you let AI apps use your Conversations, and Bekitzur goes online only to download its models and updates. You're responsible for telling the people you record, and for following the law and your organization's rules on recording." = "בקיצור מסופק כמות שהוא, ללא אחריות מכל סוג, ויוצריו אינם אחראים לשום דבר שנובע מהשימוש בו, כמו הקלטה שאבדה או שאינה שלמה, טעות בתמלול, בדוברים או בסיכום, או החלטה שהתקבלה על סמך אלה. הכול רץ על ה-Mac שלך: ההקלטות, התמלולים, הסיכומים והקולות נשארים בו אלא אם מאפשרים לאפליקציות AI להשתמש בשיחות שלך, ובקיצור מתחבר לאינטרנט רק כדי להוריד את המודלים והעדכונים שלו. האחריות ליידע את האנשים שמקליטים, ולפעול לפי החוק ולפי כללי הארגון לגבי הקלטה, היא שלך.";
+"Bekitzur is reading these alongside the Transcript." = "בקיצור קורא אותן לצד התמלול.";
 "Bekitzur is recording" = "בקיצור מקליט";
 "Bekitzur is up to date" = "בקיצור מעודכן";
 "Bekitzur isn't allowed to record computer audio, so calls are recorded without the other side." = "לבקיצור אין הרשאה להקליט שמע מהמחשב, ולכן שיחות מוקלטות בלי הצד השני.";
@@ -163,9 +165,11 @@
 "Downloading the speaker models" = "מוריד את מודלי הדוברים";
 "Due" = "תאריך יעד";
 "Each Conversation shown has all of them." = "בכל שיחה שמוצגת משתתפים כולם.";
+"Each line keeps the moment you wrote it. Bekitzur reads them when it writes the Notes." = "כל שורה שומרת את הרגע שבו כתבת אותה. בקיצור קורא אותן כשהוא כותב את הסיכום.";
 "Edit" = "עריכה";
 "English" = "אנגלית";
 "English speech model" = "מודל דיבור באנגלית";
+"Everything runs on this Mac." = "הכול רץ על ה-Mac הזה.";
 "Everything runs on this Mac. An hour-long Conversation takes a few minutes." = "הכול רץ על ה-Mac הזה. שיחה של שעה לוקחת כמה דקות.";
 "Export" = "ייצוא";
 "Export Conversation" = "ייצוא שיחה";
@@ -176,6 +180,7 @@
 "Finishing the live Transcript" = "מסיים את התמלול החי";
 "Follow" = "מעקב";
 "Forget" = "לשכוח";
+"From your note" = "מההערה שלך";
 "From “%@” · %@" = "מתוך “%@” · %@";
 "Hebrew" = "עברית";
 "Hebrew speech model" = "מודל דיבור בעברית";
@@ -206,8 +211,9 @@
 "Let AI apps use your Conversations" = "לאפשר לאפליקציות AI להשתמש בשיחות שלך";
 "Let Bekitzur decide" = "בקיצור יחליט";
 "Listen" = "האזנה";
+"Listen to what was being said when you wrote this" = "האזנה למה שנאמר כשכתבת את זה";
 "Listen: %@" = "האזנה: %@";
-"Listening" = "מאזין";
+"Live" = "בזמן אמת";
 "Live transcription stopped. The recording goes on, and its Transcript will be made from the recording when you stop." = "התמלול החי נעצר. ההקלטה ממשיכה, והתמלול שלה ייעשה מההקלטה כשתעצרו.";
 "Looking in the Transcript…" = "מחפש בתמלול…";
 "Mac's default" = "ברירת המחדל של ה-Mac";
@@ -251,6 +257,7 @@
 "Not right? Rename" = "לא נכון? שינוי שם";
 "Not said: part of what you typed for the words before it" = "לא נאמר: חלק ממה שהוקלד במקום המילים שלפניו";
 "Not showing? Check System Settings → Notifications → Bekitzur, and that Focus is off." = "לא מופיע? כדאי לבדוק את הגדרות המערכת ← עדכונים ← בקיצור, ושמצב ריכוז כבוי.";
+"Note" = "הערה";
 "Notes" = "סיכום";
 "Notes language" = "שפת הסיכום";
 "Notes ready" = "הסיכום מוכן";
@@ -362,7 +369,6 @@
 "The Notes changed while the chat was replying, so it didn't change them." = "הסיכום השתנה בזמן שהצ׳אט ענה, ולכן הוא לא שינה אותו.";
 "The Notes file is missing" = "קובץ הסיכום חסר";
 "The Recording has no audio." = "אין שמע בהקלטה.";
-"The Transcript follows about half a minute behind. Speakers and English terms are added when you stop." = "התמלול מגיע באיחור של כחצי דקה. הדוברים והמונחים באנגלית מתווספים כשעוצרים.";
 "The app in the download isn't signed as Bekitzur (%@), so it wasn't installed." = "היישום שבהורדה לא חתום בתור בקיצור (%@), ולכן הוא לא הותקן.";
 "The audio couldn't be read, so these Notes come from the live Transcript of the first %lld minutes, without Speakers." = "לא ניתן היה לקרוא את השמע, ולכן הסיכום הזה נכתב מהתמלול החי של %lld הדקות הראשונות, בלי דוברים.";
 "The call ended" = "השיחה הסתיימה";
@@ -401,6 +407,7 @@
 "Transcription failed (whisper.cpp error %d)" = "התמלול נכשל (שגיאת whisper.cpp %d)";
 "Try Again" = "ניסיון חוזר";
 "Try again" = "ניסיון חוזר";
+"Type a note. # makes a heading, and [ ] something to do." = "אפשר לכתוב כאן הערה. כותרת מתחילה ב-#, ומשהו לעשות ב-[ ].";
 "Type what was said…" = "הקלדת מה שנאמר…";
 "Undo" = "ביטול השינוי";
 "Undone" = "השינוי בוטל";
@@ -437,7 +444,9 @@
 "Your microphone recorded only silence. Check the input device in System Settings → Sound." = "המיקרופון הקליט רק שקט. כדאי לבדוק את התקן הקלט בהגדרות המערכת ← צליל.";
 "Your microphone's recording couldn't be read, so these Notes only have the call's sound." = "לא ניתן היה לקרוא את ההקלטה מהמיקרופון, ולכן בסיכום הזה יש רק את הצליל של השיחה.";
 "Your name" = "השם שלך";
+"Your notes" = "ההערות שלך";
 "Your voice" = "הקול שלך";
+"about half a minute behind" = "בפיגור של כחצי דקה";
 "github.com/GabrielYamin/Bekitzur" = "github.com/GabrielYamin/Bekitzur";
 "the English speech model" = "מודל הדיבור באנגלית";
 "the Hebrew speech model" = "מודל הדיבור בעברית";

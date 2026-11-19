@@ -95,6 +95,18 @@ public struct ConversationLibrary: Sendable {
     /// The user's own, so an exported Conversation leaves it out.
     static let chatFile = "chat.json"
 
+    /// What the user wrote while recording, in the order they wrote it.
+    public func yourNotes(for id: String) -> [UserNote] {
+        (try? Self.decoder.decode([UserNote].self, from: Data(contentsOf: folder(for: id).appending(path: Self.yourNotesFile)))) ?? []
+    }
+
+    public func save(_ notes: [UserNote], for id: String) throws {
+        try write(notes, to: folder(for: id).appending(path: Self.yourNotesFile))
+    }
+
+    /// The user's own like the chat, so an exported Conversation leaves it out too.
+    static let yourNotesFile = "your-notes.json"
+
     /// The Recording's audio: the two recorded tracks, or an imported recording.
     public func audioTracks(for id: String) -> [URL] {
         ((try? FileManager.default.contentsOfDirectory(at: folder(for: id), includingPropertiesForKeys: nil)) ?? [])

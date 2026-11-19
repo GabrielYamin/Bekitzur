@@ -28,20 +28,25 @@ public struct NotesWriter {
     /// - Parameters:
     ///   - language: The conversation's.
     ///   - notesLanguage: The Notes', whatever the conversation's is.
+    ///   - yourNotes: What the user wrote while recording, which adds to what was said.
+    ///   - user: The user's name as the transcript has it, for their notes that say "I".
     /// - Returns: The Notes, and the draft they were checked from.
     public func write(
         turns: [Turn],
         date: Date,
         language: ConversationLanguage,
         notesLanguage: ConversationLanguage = .english,
+        yourNotes: [UserNote] = [],
+        user: String? = nil,
         calendar: Calendar = .current
     ) throws -> (notes: Notes, draft: Notes, completion: Completion) {
+        let written = yourNotes.filter { !$0.words.isEmpty }
         let completion = try model.startChat(
             system: Self.instructions(writingIn: notesLanguage),
             user: Self.render(turns, date: date, language: language),
             grammar: Self.grammar,
             maxTokens: 6_000,
-            followUp: Self.reviewTokens
+            followUp: Self.reviewTokens + Self.yourNotesTokens(written.count).room
         )
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -50,12 +55,227 @@ public struct NotesWriter {
         }
         draft.language = notesLanguage
         var notes = reviewed(draft, turns: turns)
+        notes = covering(written, by: user, in: notes, turns: turns, language: notesLanguage).withoutTurnIDsInText
         for i in notes.actionItems.indices {
             let due = notes.actionItems[i].duePhrase.flatMap { DueDateResolver.due($0, from: date, calendar: calendar) }
             notes.actionItems[i].dueDate = due?.date
             notes.actionItems[i].dueTime = due?.time
         }
         return (notes, draft, completion)
+    }
+
+    /// The Notes with what the user's notes add to them, asked in the same chat once they're written and checked: asked
+    /// before the checks, the checks took a note for what was said and dropped a Decision it disagreed with. Given the
+    /// notes with the transcript, the model took them for the outline, leaving out an item the transcript has and the
+    /// owners of others; asked what they add, it copied its Notes into the reply. So it answers note by note: the item
+    /// the note is the same as, and what the note says as an item. They stand as they are where the reply doesn't
+    /// decode.
+    private func covering(_ yourNotes: [UserNote], by user: String?, in notes: Notes, turns: [Turn], language: ConversationLanguage) -> Notes {
+        guard !yourNotes.isEmpty else { return notes }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let reply = try? model.continueChat(
+            user: Self.yourNotesRequest(yourNotes, by: user, draft: notes, turns: turns, in: language),
+            grammar: Self.yourNotesGrammar(for: yourNotes, in: notes),
+            maxTokens: Self.yourNotesTokens(yourNotes.count).reply
+        ),
+            let checked = try? decoder.decode([CheckedNote].self, from: Data(reply.text.utf8))
+        else { return notes }
+        return Self.adding(checked, of: yourNotes, to: notes)
+    }
+
+    /// Room for asking about the user's notes, besides the review's: the request lists them and the Notes' items, and
+    /// the reply has an item for each note.
+    static func yourNotesTokens(_ count: Int) -> (reply: Int, room: Int) {
+        let reply = 200 * count + 100
+        return (reply, count == 0 ? 0 : 1_500 + 50 * count + reply)
+    }
+
+    /// One of the user's notes: the item it's the same as, like "A2", if any, and what it says as an item; a heading
+    /// has only the item.
+    struct CheckedNote: Decodable {
+        let note: Int
+        let sameAs: String?
+        let add: Addition?
+    }
+
+    /// One of these, by what the note is.
+    struct Addition: Decodable {
+        let decision: Decision?
+        let actionItem: ActionItem?
+        let openQuestion: OpenQuestion?
+        /// A sentence for the summary.
+        let summary: String?
+
+        var text: String? {
+            decision?.text ?? actionItem?.text ?? openQuestion?.text ?? summary
+        }
+    }
+
+    /// What was said stands: a note the same as an item gives it an Owner or a due phrase only where an action item has
+    /// none, and changes nothing else; any other note adds what it says. Each item keeps which notes it has.
+    static func adding(_ checked: [CheckedNote], of yourNotes: [UserNote], to draft: Notes) -> Notes {
+        var notes = draft
+        for entry in checked where yourNotes.indices.contains(entry.note - 1) {
+            let note = yourNotes[entry.note - 1].id
+            if isSame(entry, in: notes), let reference = entry.sameAs {
+                link(note, to: reference, in: &notes, giving: entry.add?.actionItem)
+            } else if let addition = entry.add {
+                add(addition, from: note, to: &notes)
+            }
+        }
+        return notes
+    }
+
+    /// Whether a note is the same as the item it names: the Notes have that item, and what the note says, as an item,
+    /// shares two words with it. Called the same as an action item about something else, a to-do was lost. Both are in
+    /// the Notes' language, whatever the note's; a heading says nothing, and goes with the item it names.
+    static func isSame(_ entry: CheckedNote, in notes: Notes) -> Bool {
+        guard let reference = entry.sameAs, let text = text(of: reference, in: notes) else { return false }
+        guard let addition = entry.add else { return true }
+        guard let written = addition.text else { return false }
+        return UserNote.significantWords(written).intersection(UserNote.significantWords(text)).count >= 2
+    }
+
+    private static func text(of reference: String, in notes: Notes) -> String? {
+        guard let number = Int(reference.dropFirst()), number > 0 else { return nil }
+        let index = number - 1
+        return switch reference.first {
+        case "D": notes.decisions.indices.contains(index) ? notes.decisions[index].text : nil
+        case "A": notes.actionItems.indices.contains(index) ? notes.actionItems[index].text : nil
+        case "Q": notes.openQuestions.indices.contains(index) ? notes.openQuestions[index].text : nil
+        default: nil
+        }
+    }
+
+    private static func link(_ note: UUID, to reference: String, in notes: inout Notes, giving written: ActionItem?) {
+        guard let number = Int(reference.dropFirst()), number > 0 else { return }
+        let index = number - 1
+        switch reference.first {
+        case "D" where notes.decisions.indices.contains(index):
+            notes.decisions[index].withYourNotes = (notes.decisions[index].withYourNotes ?? []) + [note]
+        case "A" where notes.actionItems.indices.contains(index):
+            var action = notes.actionItems[index]
+            action.withYourNotes = (action.withYourNotes ?? []) + [note]
+            if action.owner == nil { action.owner = given(written?.owner) }
+            if action.duePhrase == nil, action.dueDate == nil { action.duePhrase = given(written?.duePhrase) }
+            notes.actionItems[index] = action
+        case "Q" where notes.openQuestions.indices.contains(index):
+            notes.openQuestions[index].withYourNotes = (notes.openQuestions[index].withYourNotes ?? []) + [note]
+        default:
+            break
+        }
+    }
+
+    private static func add(_ addition: Addition, from note: UUID, to notes: inout Notes) {
+        if var decision = addition.decision {
+            decision.fromYourNote = note
+            notes.decisions.append(decision)
+        }
+        if var item = addition.actionItem {
+            item.fromYourNote = note
+            notes.actionItems.append(item)
+        }
+        if var question = addition.openQuestion {
+            question.fromYourNote = note
+            notes.openQuestions.append(question)
+        }
+        if let sentence = given(addition.summary) {
+            notes.summary = extended(notes.summary, with: sentence)
+        }
+    }
+
+    /// Text with a sentence after it.
+    static func extended(_ text: String, with sentence: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = trimmed.last else { return sentence }
+        return (".!?".contains(last) ? trimmed : trimmed + ".") + " " + sentence
+    }
+
+    /// Text the model gave, or nil for none, which it can also write as "null".
+    private static func given(_ text: String?) -> String? {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty, text.lowercased() != "null" else { return nil }
+        return text
+    }
+
+    /// The transcript shows turns, not times, so each note says which turn was being said when it was written. Action
+    /// items show their Owner and due phrase, for a note to fill in only what they lack.
+    static func yourNotesRequest(
+        _ yourNotes: [UserNote], by user: String? = nil, draft: Notes, turns: [Turn], in language: ConversationLanguage = .english
+    ) -> String {
+        let notes = yourNotes.enumerated().map { offset, note in
+            let during = turn(at: note.at, in: turns).map { "(during \($0)) " } ?? ""
+            return "\(offset + 1). \(during)\(note.text.trimmingCharacters(in: .whitespaces))"
+        }
+        let decisions = draft.decisions.enumerated().map { "D\($0.offset + 1). \($0.element.text)" }
+        let actionItems = draft.actionItems.enumerated().map { offset, item in
+            "A\(offset + 1). \(item.text) (owner: \(item.owner ?? "none"); due: \(item.duePhrase ?? "none"))"
+        }
+        let questions = draft.openQuestions.enumerated().map { "Q\($0.offset + 1). \($0.element.text)" }
+        let items = decisions + actionItems + questions
+        let listed = items.isEmpty
+            ? "Your Notes have no decisions, action items, or open questions."
+            : "Your Notes have these decisions (D), action items (A), and open questions (Q):\n" + items.joined(separator: "\n")
+        let who = user.map { #" The user is "\#($0)": a note that says "I" means them."# } ?? ""
+        return """
+        During the conversation, the user wrote notes of their own, each with the turn being said when they wrote it:
+        \(notes.joined(separator: "\n"))
+
+        \(listed)
+
+        What was said comes first, and the notes add to it. They're short and written fast, so read each one with the turns around it.\(who) For each note in order, give:
+        - same_as: your decision, action item, or open question about the same decision, task, or question as the note, like "A2", or null if none is. Another task on the same subject isn't the same task.
+        - add: what the note says, the way the transcript has it and without copying the note word for word, citing the turns around the note. A decision, if the participants settled on it; an action item, if someone has to do it, with its owner's name only in the owner; an open question, if it's still unanswered when the conversation ends; otherwise, a sentence for the summary. A note that says to do something, like "[ ] send the deck" or "talk with Avi", is something the user wants done: an action item, owned by whoever the transcript or the note says will do it, \(user == nil ? "or null if nobody took it" : "otherwise by the user").
+        Where a note is the same as one of your items, what was said stands: the item keeps its words and takes only an owner or a due phrase it doesn't have, and a note that says otherwise changes nothing. A heading, starting with "# ", only names what the notes after it are about: give only its same_as.
+
+        Every field is in \(language.name).
+        """
+    }
+
+    /// An entry per note in order: the item it's the same as, if any, and what it says as an item, which it adds unless
+    /// it's the same. The items are the ones the Notes have, and not the summary: allowed any number, the model called a
+    /// note the same as an action item the Notes didn't have, and allowed the summary, a note to talk with someone the
+    /// summary never named; either way the note was lost. A to-do can only be an action item, so one isn't taken for the
+    /// Decision on its subject, and a heading only goes with an item. What a note says has its turns but no quote, which
+    /// greedy decoding can repeat until the reply runs out; and its text has a length, so a text repeating itself ends
+    /// there instead of taking the other notes' room.
+    static func yourNotesGrammar(for yourNotes: [UserNote], in notes: Notes) -> String {
+        let entries = yourNotes.enumerated().map { offset, note in
+            let same = switch note.kind {
+            case .heading: "same-heading"
+            case .task: "same-task"
+            case .point: "same-any"
+            }
+            return #"note\#(offset + 1) ::= "{" ws "\"note\":" ws "\#(offset + 1)" "," ws "\"same_as\":" ws \#(same) ws "}""#
+        }
+        let root = #"root ::= "[" ws "# + yourNotes.indices.map { "note\($0 + 1)" }.joined(separator: #" "," ws "#) + #" ws "]""#
+        let actions = Self.references("A", notes.actionItems.count)
+        let items = actions + Self.references("D", notes.decisions.count) + Self.references("Q", notes.openQuestions.count)
+        let anyItem = "(" + (items + [#""null""#]).joined(separator: " | ") + ")"
+        let anAction = "(" + (actions + [#""null""#]).joined(separator: " | ") + ")"
+        let choices = [
+            "same-any ::= " + anyItem + #" "," ws "\"add\":" ws addition"#,
+            "same-task ::= " + anAction + #" "," ws "\"add\":" ws "{" ws "\"action_item\":" ws noted-action ws "}""#,
+            "same-heading ::= " + anyItem,
+        ]
+        let rules = choices.joined(separator: "\n") + "\n" + #"""
+        addition ::= "{" ws ("\"decision\":" ws noted-decision | "\"action_item\":" ws noted-action | "\"open_question\":" ws noted-question | "\"summary\":" ws text) ws "}"
+        noted-decision ::= "{" ws "\"text\":" ws text "," ws "\"source_turns\":" ws turns "," ws "\"quote\":" ws "\"\"" ws "}"
+        noted-action ::= "{" ws "\"text\":" ws text "," ws "\"owner\":" ws optstr "," ws "\"due_phrase\":" ws optstr "," ws "\"source_turns\":" ws turns "," ws "\"quote\":" ws "\"\"" ws "}"
+        noted-question ::= "{" ws "\"text\":" ws text "," ws "\"source_turns\":" ws turns ws "}"
+        text ::= "\"" char{1,400} "\""
+        """#
+        return ([root] + entries + [rules, itemRules]).joined(separator: "\n")
+    }
+
+    /// The JSON strings that name a kind's items, like "A1" and "A2".
+    private static func references(_ kind: String, _ count: Int) -> [String] {
+        (0..<count).map { #""\"\#(kind)\#($0 + 1)\"""# }
+    }
+
+    /// The turn being said at a moment, the last one to start by then.
+    static func turn(at time: Double, in turns: [Turn]) -> String? {
+        turns.last { ($0.start ?? .infinity) <= time }?.id ?? turns.first { $0.start != nil }?.id
     }
 
     /// Room for the checks after the draft: the decisions and action items, then each open question, whose message shows
@@ -300,6 +520,10 @@ public struct NotesWriter {
     /// GBNF for the Notes JSON, so the output always parses.
     static let grammar = #"""
     root ::= "{" ws "\"title\":" ws str "," ws "\"summary\":" ws str "," ws "\"decisions\":" ws decisions "," ws "\"action_items\":" ws actions "," ws "\"open_questions\":" ws questions ws "}"
+    """# + "\n" + itemRules
+
+    /// The items, for the Notes and for what the user's notes add.
+    private static let itemRules = #"""
     decisions ::= "[" ws "]" | "[" ws decision ("," ws decision)* ws "]"
     decision ::= "{" ws "\"text\":" ws str "," ws "\"source_turns\":" ws turns "," ws "\"quote\":" ws str ws "}"
     actions ::= "[" ws "]" | "[" ws action ("," ws action)* ws "]"

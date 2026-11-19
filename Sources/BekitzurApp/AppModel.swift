@@ -104,6 +104,9 @@ final class AppModel {
     private(set) var liveTranscripts: [String: Transcript] = [:]
     /// Conversations whose live transcription stopped while they were recorded.
     private(set) var liveStopped: Set<String> = []
+    /// What the user wrote while recording, loaded as each Conversation shows, with the line being typed, which is saved
+    /// once it has words.
+    private(set) var yourNotes: [String: [UserNote]] = [:]
     /// Each Conversation's chat, loaded as its Chat tab opens.
     private(set) var exchanges: [String: [ChatExchange]] = [:]
     /// The Conversation whose message the chat is replying to; one message at a time.
@@ -1261,6 +1264,10 @@ final class AppModel {
         let notesLanguage = self.notesLanguage
         AppLog.write("\(id): processing (\(info.language?.name ?? "language to detect")\(info.people.map { ", \($0) people" } ?? ""), \(how), \(flags.fixes.count) fixes, Notes in \(notesLanguage.name))")
         let assistant = self.assistant
+        let library = self.library
+        let yourNotes: @Sendable () -> [UserNote] = { library.yourNotes(for: id) }
+        let name = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let user = name.isEmpty ? nil : name
         Task {
             // The chat's copy of the language model goes first, once a reply it's writing is done: two copies don't fit
             // a 32 GB Mac.
@@ -1272,7 +1279,13 @@ final class AppModel {
                 let measuredDelays: [TrackDelay]?
                 if let notesOnly {
                     result = try await Self.rewrite(
-                        notesOnly, flags: flags, date: info.startedAt, language: notesOnly.transcript.language, notesLanguage: notesLanguage
+                        notesOnly,
+                        flags: flags,
+                        date: info.startedAt,
+                        language: notesOnly.transcript.language,
+                        notesLanguage: notesLanguage,
+                        yourNotes: yourNotes,
+                        user: user
                     ) { step in
                         Task { @MainActor in
                             AppModel.shared.update(id) { if $0.status == .processing { $0.step = step.rawValue } }
@@ -1294,7 +1307,9 @@ final class AppModel {
                         transcript: transcript,
                         givenIsLive: kept == nil && live != nil,
                         salvage: salvage,
-                        flags: flags
+                        flags: flags,
+                        yourNotes: yourNotes,
+                        user: user
                     ) { step in
                         AppLog.write(String(format: "%@: %@ (%.0f s)", id, step.rawValue, Date().timeIntervalSince(started)))
                         Task { @MainActor in
@@ -1352,6 +1367,8 @@ final class AppModel {
         date: Date,
         language: ConversationLanguage,
         notesLanguage: ConversationLanguage,
+        yourNotes: @escaping @Sendable () -> [UserNote],
+        user: String?,
         progress: @escaping @Sendable (ProcessingStep) -> Void
     ) async throws -> ProcessedConversation {
         try ConversationProcessor.rewriteNotes(
@@ -1361,7 +1378,9 @@ final class AppModel {
             date: date,
             language: language,
             notesLanguage: notesLanguage,
-            progress: progress
+            progress: progress,
+            yourNotes: yourNotes,
+            user: user
         )
     }
 
@@ -1390,6 +1409,8 @@ final class AppModel {
         givenIsLive: Bool,
         salvage: Transcript?,
         flags: TranscriptFlags,
+        yourNotes: @escaping @Sendable () -> [UserNote],
+        user: String?,
         progress: @escaping @Sendable (ProcessingStep) -> Void
     ) async throws -> (result: ProcessedConversation, warning: String?, measuredDelay: Double?, measuredDelays: [TrackDelay]?) {
         for track in RecordingFiles.unfinished(in: folder) {
@@ -1414,7 +1435,9 @@ final class AppModel {
                 date: date,
                 language: salvage.language,
                 notesLanguage: notesLanguage,
-                progress: progress
+                progress: progress,
+                yourNotes: yourNotes,
+                user: user
             )
             let minutes = Int(((salvage.segments.last?.end ?? 0) / 60).rounded(.up))
             return (result, NotesWarning.liveTranscriptOnly(minutes: minutes).saved, nil, nil)
@@ -1454,7 +1477,9 @@ final class AppModel {
             transcript: transcript,
             flags: flags,
             vocabulary: VocabularyStore(url: BekitzurPaths.vocabulary).load(),
-            progress: progress
+            progress: progress,
+            yourNotes: yourNotes,
+            user: user
         )
         let silent = Set(audio.silentTracks.map { $0.deletingPathExtension().lastPathComponent })
         var warning: NotesWarning?
@@ -1876,8 +1901,29 @@ final class AppModel {
         flags[id] = nil
         liveTranscripts[id] = nil
         liveStopped.remove(id)
+        yourNotes[id] = nil
         if selection == id { selection = nil }
         conversations = library.all()
+    }
+
+    func loadYourNotes(_ id: String) {
+        guard yourNotes[id] == nil else { return }
+        yourNotes[id] = library.yourNotes(for: id)
+    }
+
+    /// Saved as they change: the Notes are written from what's saved, and take what the user adds until then.
+    func setYourNotes(_ notes: [UserNote], for id: String) {
+        yourNotes[id] = notes
+        do {
+            try library.save(notes.filter { !$0.words.isEmpty }, for: id)
+        } catch {
+            AppLog.write("\(id): your notes not saved: \(error)")
+        }
+    }
+
+    /// Your notes can change until the Notes are being written, which is when they're read.
+    func takesYourNotes(_ info: ConversationInfo) -> Bool {
+        info.status == .recording || info.status == .processing && info.step != ProcessingStep.writingNotes.rawValue
     }
 
     /// Reads the Conversations folder again, for Conversations added, changed, or removed outside the app; one left

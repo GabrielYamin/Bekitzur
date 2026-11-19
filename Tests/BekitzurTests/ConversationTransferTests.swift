@@ -65,6 +65,24 @@ struct ConversationTransferTests {
         #expect(!FileManager.default.fileExists(atPath: other.folder(for: info.id).appending(path: ConversationLibrary.chatFile).path))
     }
 
+    /// What the user wrote while recording is theirs too: kept with the Conversation, private, and left out of an export.
+    @Test func yourNotesStayWithTheirUser() throws {
+        let here = temporary(), there = temporary(), file = temporary(ConversationLibrary.fileExtension)
+        defer { remove(here, there, file) }
+        let library = ConversationLibrary(root: here), other = ConversationLibrary(root: there)
+        let info = try conversation(in: library)
+        let notes = [UserNote(at: 194, text: "Thursday, if the regression is green"), UserNote(at: 256, text: "[ ] who tells support")]
+        try library.save(notes, for: info.id)
+
+        try library.export(info.id, to: file)
+        _ = try other.importConversations(from: file)
+
+        #expect(library.yourNotes(for: info.id) == notes)
+        let saved = library.folder(for: info.id).appending(path: ConversationLibrary.yourNotesFile)
+        #expect(try FileManager.default.attributesOfItem(atPath: saved.path)[.posixPermissions] as? Int == 0o600)
+        #expect(other.yourNotes(for: info.id).isEmpty)
+    }
+
     @Test func aConversationAlreadyHereComesInUnderAnIDOfItsOwn() throws {
         let root = temporary(), file = temporary(ConversationLibrary.fileExtension)
         defer { remove(root, file) }
