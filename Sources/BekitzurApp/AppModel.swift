@@ -1158,10 +1158,16 @@ final class AppModel {
         return (flags[id]?.fixes ?? []) != (result.notesFixes ?? [])
     }
 
-    /// The user has fixed the Transcript since its Notes were written, or separating people who talked at once has
-    /// changed lines they cite.
+    /// The user has changed their notes since the Notes were written with them; not known until the notes are loaded.
+    func changedYourNotesSinceNotes(_ id: String) -> Bool {
+        guard let result = results[id], let notes = yourNotes[id] else { return false }
+        return UserNote.changed(notes, since: result.notesYourNotes ?? [])
+    }
+
+    /// The user has fixed the Transcript or changed their notes since its Notes were written, or separating people who
+    /// talked at once has changed lines they cite.
     func notesAreBehind(_ id: String) -> Bool {
-        fixedSinceNotes(id) || results[id]?.separationChangedNotes == true
+        fixedSinceNotes(id) || changedYourNotesSinceNotes(id) || results[id]?.separationChangedNotes == true
     }
 
     /// Transcribes the Recording again, in `language`, or detecting it when nil. Marks on the old Transcript's words are

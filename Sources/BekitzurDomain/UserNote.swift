@@ -114,6 +114,14 @@ extension UserNote {
         return best?.place
     }
 
+    /// Whether the notes say something other than they did, leaving out lines without words, in whatever order.
+    public static func changed(_ now: [UserNote], since then: [UserNote]) -> Bool {
+        func said(_ notes: [UserNote]) -> Set<String> {
+            Set(notes.filter { !$0.words.isEmpty }.map { "\($0.id) \($0.words)" })
+        }
+        return said(now) != said(then)
+    }
+
     /// The words that say something, in any language: three letters or more, and not one of English's commonest.
     public static func significantWords(_ text: String) -> Set<String> {
         let common: Set<String> = ["the", "and", "for", "with", "about", "that", "this", "from", "into", "will", "who", "what", "when"]

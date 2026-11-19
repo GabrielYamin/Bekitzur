@@ -75,6 +75,25 @@ struct UserNoteTests {
         #expect(places[empty.id] == nil)
     }
 
+    /// The Notes are behind the user's notes once a note's words change, or one is added or removed; not for a line
+    /// without words, or the same notes in another order.
+    @Test func notesChangeByWhatTheySay() {
+        let thursday = UserNote(at: 1, text: "Thursday")
+        let support = UserNote(at: 2, text: "[ ] tell support")
+        var edited = support
+        edited.text = "[ ] tell support today"
+
+        let reordered = UserNote.changed([support, thursday, UserNote(at: 3, text: " ")], since: [thursday, support])
+        let reworded = UserNote.changed([thursday, edited], since: [thursday, support])
+        let removed = UserNote.changed([thursday], since: [thursday, support])
+        let added = UserNote.changed([thursday, support, UserNote(at: 4, text: "lunch")], since: [thursday, support])
+
+        #expect(!reordered)
+        #expect(reworded)
+        #expect(removed)
+        #expect(added)
+    }
+
     /// A note sits beside the item it made or added to, whatever was said around it.
     @Test func aNoteSitsBesideTheItemItShaped() {
         let turns = [Turn(id: "T001", speaker: "Dana", text: "מעלים את 2.4 ביום חמישי", start: 192, end: 199)]
