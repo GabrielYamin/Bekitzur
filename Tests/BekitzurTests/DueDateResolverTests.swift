@@ -37,6 +37,7 @@ struct DueDateResolverTests {
         ("25/10", "2026-10-25"),
         ("1.3", "2027-03-01"),
         ("October 30", "2026-10-30"),
+        ("2026-11-19", "2026-11-19"),
         ("sometime soon", "none"),
     ])
     func resolvesSpokenPhrases(phrase: String, expected: String) {

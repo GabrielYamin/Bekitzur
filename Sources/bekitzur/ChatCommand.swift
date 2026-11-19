@@ -52,6 +52,7 @@ struct ChatCommand: AsyncParsableCommand {
                 exchange.failure = error.localizedDescription
                 earlier.append(exchange)
                 print("> \(message)\n   \(error.localizedDescription)")
+                if raw { print("   reply: \(await assistant.lastReply)") }
                 continue
             }
             attached = nil

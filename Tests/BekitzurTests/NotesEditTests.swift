@@ -80,6 +80,18 @@ struct NotesEditTests {
         #expect(applied.isEmpty)
     }
 
+    /// The chat lists an item's due date by its day, and the model gives the day back in a change about something else:
+    /// the item keeps its due phrase and date, rather than taking the day for a phrase and losing its date.
+    @Test func aDueGivenBackAsListedStays() {
+        let (changed, applied) = applying([
+            .change(item: "A1", text: "Fix the login bug", owner: "Dana", due: "2026-11-05", done: false),
+            .change(item: "A1", text: nil, owner: nil, due: "מחר", done: nil),
+        ])
+
+        #expect(changed == notes)
+        #expect(applied.isEmpty)
+    }
+
     /// An item named past the end of the Notes the chat saw can only be a new one.
     @Test func aChangeToAnItemPastTheEndAddsIt() {
         let (changed, applied) = applying([

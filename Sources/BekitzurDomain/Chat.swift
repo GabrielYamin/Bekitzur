@@ -103,10 +103,13 @@ public struct OtherConversations: Sendable {
 public enum ChatError: LocalizedError, Equatable {
     /// The message was about another Conversation, and none of them fit.
     case conversationNotFound
+    /// The message asked for a change, and twice the chat's changes left the Notes as they were.
+    case changedNothing
 
     public var errorDescription: String? {
         switch self {
         case .conversationNotFound: String(localized: "None of your other Conversations fits that. You can pick it from the menu beside the message box.")
+        case .changedNothing: String(localized: "The Notes are as they were: the chat couldn't make that change. Try saying exactly what the item should say.")
         }
     }
 }

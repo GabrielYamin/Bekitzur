@@ -103,6 +103,14 @@ public final class ConversationChat {
         let theirs = broughtIn?.notes
         let due = { [turns, date] (phrase: String) in Self.due(phrase, saidIn: turns, on: date, today: today) }
         var reply = Self.reply(from: used, turns: turns, notes: notes, other: theirs, due: due)
+        if reply.edits.isEmpty, Self.asksForChange(used) {
+            if let second = try? model.continueChat(user: Self.unchanged(used, in: notes), grammar: Self.grammar, maxTokens: Self.replyTokens) {
+                used = second.text
+                lastReply += "\n\nAsked again:\n" + used
+                reply = Self.reply(from: used, turns: turns, notes: notes, other: theirs, due: due)
+            }
+            if reply.edits.isEmpty, Self.asksForChange(used) { throw ChatError.changedNothing }
+        }
         let again = Self.lookAgain + (reference == nil ? "" : "\n\n" + Self.lookInTheirs)
         if reply.answer.text == nil, reply.edits.isEmpty,
            let second = try? model.continueChat(user: again, grammar: Self.answerGrammar, maxTokens: Self.replyTokens) {
@@ -291,6 +299,36 @@ public final class ConversationChat {
     }
 
     /// The reply says the message is about another conversation.
+    /// The reply says the message asks for a change.
+    static func asksForChange(_ text: String) -> Bool {
+        struct Asked: Decodable { let asks: String }
+        guard let separator = text.range(of: "\nAnswer:") else { return false }
+        return (try? JSONDecoder().decode(Asked.self, from: Data(text[..<separator.lowerBound].utf8)))?.asks == "change"
+    }
+
+    /// After a reply whose changes left the Notes as they were, naming the items it changed as they still read. Asked to
+    /// correct a name in an action item, the model gave the item's text back as it was, and answered that it had.
+    static func unchanged(_ text: String, in notes: Notes) -> String {
+        var still: [String] = []
+        if let separator = text.range(of: "\nAnswer:"),
+           let reply = try? JSONDecoder().decode(ModelReply.self, from: Data(text[..<separator.lowerBound].utf8)) {
+            for case .change(let item, _, _, _, _)? in reply.edits.map(\.edit) {
+                if let said = Self.text(of: item, in: notes) { still.append("\(item) still says \"\(said)\"") }
+            }
+        }
+        let which = still.isEmpty ? "." : ": " + still.joined(separator: "; ") + "."
+        return "That changed nothing in the Notes\(which) Make the change my message asks for, writing each item's new text out in full with the change made in it."
+    }
+
+    private static func text(of item: String, in notes: Notes) -> String? {
+        guard let (section, index) = notes.place(of: item) else { return nil }
+        return switch section {
+        case .decision: notes.decisions[index].text
+        case .actionItem: notes.actionItems[index].text
+        case .openQuestion: notes.openQuestions[index].text
+        }
+    }
+
     static func asksAboutAnother(_ text: String) -> Bool {
         struct Asked: Decodable { let asks: String }
         return (try? JSONDecoder().decode(Asked.self, from: Data(text.utf8)))?.asks == "another conversation"
@@ -479,7 +517,9 @@ public final class ConversationChat {
         the Notes gets its changes.
 
         A message may follow earlier ones, sent before in this chat or listed after the Notes with the answers given. \
-        Use them to tell what it refers to, like who "he" is; they aren't evidence, so quote only the transcript's turns.
+        Use them to tell what it refers to, like who "he" is; they aren't evidence, so quote only the transcript's turns. \
+        A message saying a change didn't happen or came out wrong, like "you didn't change anything", asks for that \
+        change again: make it as the earlier message asked.
 
         A message can be about another of the user's recorded conversations, listed after the Notes, named by who was \
         in it or when it was, like "my meeting with Dana last week": people who weren't in this conversation, or \

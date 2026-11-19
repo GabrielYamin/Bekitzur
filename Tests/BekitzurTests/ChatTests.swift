@@ -22,6 +22,24 @@ struct ChatTests {
         ConversationChat.reply(from: text, turns: turns, notes: notes) { _ in ("2026-11-12", nil) }
     }
 
+    /// Asked to correct a name, the model gave the item back as it was and said it had changed it: a reply that asks for
+    /// a change but changes nothing is asked again, naming the item as it still reads.
+    @Test func aChangeThatChangedNothingIsAskedAgain() {
+        let unchanged = #"{"asks": "change", "edits": [{"change": "A1", "text": "Connect the new flow to Kafka", "owner": null, "due": null, "done": null}], "evidence": []}"#
+            + "\nAnswer: Renamed it."
+        let question = #"{"asks": "question", "edits": [], "evidence": []}"# + "\nAnswer: No."
+
+        let asked = ConversationChat.asksForChange(unchanged)
+        let again = ConversationChat.unchanged(unchanged, in: notes)
+        let changed = reply(unchanged)
+        let answered = ConversationChat.asksForChange(question)
+
+        #expect(asked)
+        #expect(again.contains(#"A1 still says "Connect the new flow to Kafka""#))
+        #expect(changed.edits.isEmpty)
+        #expect(!answered)
+    }
+
     @Test func anAnswerKeepsTheQuotesThatAreInTheirTurns() {
         let reply = reply(#"{"edits": [], "evidence": [{"turn": "T001", "quote": "ה-flow החדש ל-kafka"}]}\#nAnswer: Ron is working on the new flow."#)
 
