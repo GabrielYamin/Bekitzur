@@ -1,78 +1,84 @@
 import BekitzurDomain
 import SwiftUI
 
-/// Above the Conversation list: its title, which a magnifying glass (⌥⌘F; ⌘F is Find in the Transcript) turns into a
-/// search of titles, Notes, and Transcripts, and the People menu, which shows only Conversations with everyone picked.
+/// Above the Conversation list, a search field that's always there, for titles, Notes, and Transcripts (⌥⌘F; ⌘F is Find
+/// in the Transcript), with the People filter inside it, which shows only Conversations with everyone picked, and
+/// Refresh beside it. While people are picked, a line under it says who, since the filter is only an icon.
 struct ConversationListHeader: View {
     @Bindable var model: AppModel
-    @ViewState private var searching = false
     @ViewState private var picking = false
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
-            if searching {
-                HStack(spacing: 4) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Button {
+                        focused = true
+                    } label: {
+                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut("f", modifiers: [.command, .option])
+                    .help("Search Conversations (⌥⌘F)")
                     TextField("Search Conversations", text: $model.filter.query)
                         .textFieldStyle(.plain)
                         .focused($focused)
-                        .onExitCommand(perform: stopSearching)
-                    Button(action: stopSearching) {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        .onExitCommand {
+                            model.filter.query = ""
+                            focused = false
+                        }
+                    if !model.filter.query.isEmpty {
+                        Button {
+                            model.filter.query = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Stop searching")
+                    }
+                    Button {
+                        picking.toggle()
+                    } label: {
+                        Image(systemName: model.filter.people.isEmpty ? "person.2" : "person.2.fill")
+                            .foregroundStyle(model.filter.people.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help("Stop searching")
+                    .help(model.filter.people.isEmpty ? String(localized: "Show only Conversations with the people you pick") : peopleLabel)
+                    .popover(isPresented: $picking, arrowEdge: .bottom) {
+                        PeopleChecklist(model: model).frame(width: 250).padding(12)
+                    }
                 }
-            } else {
-                Text("Conversations").fontWeight(.semibold).foregroundStyle(.secondary)
-                Spacer()
+                .padding(.horizontal, 8)
+                .frame(height: 28)
+                .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 8))
                 Button {
-                    searching = true
-                    focused = true
+                    model.refresh()
                 } label: {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary).contentShape(Rectangle())
+                    Image(systemName: "arrow.clockwise").foregroundStyle(.secondary).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .keyboardShortcut("f", modifiers: [.command, .option])
-                .help("Search Conversations (⌥⌘F)")
+                .keyboardShortcut("r", modifiers: .command)
+                .help("Read the Conversations folder again, for Conversations added or changed outside Bekitzur (⌘R)")
             }
-            Button {
-                picking.toggle()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: model.filter.people.isEmpty ? "person.2" : "person.2.fill")
-                    Text(peopleLabel)
-                    Image(systemName: "chevron.down").font(.caption2.bold())
+            if !model.filter.people.isEmpty {
+                HStack(spacing: 6) {
+                    Label(peopleLabel, systemImage: "person.2.fill").foregroundStyle(.tint)
+                    Spacer(minLength: 4)
+                    Button("Show everyone's Conversations") { model.filter.people = [] }.buttonStyle(.link)
                 }
-                .foregroundStyle(model.filter.people.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
-                .contentShape(Rectangle())
+                .font(.caption)
+                .padding(.horizontal, 4)
             }
-            .buttonStyle(.plain)
-            .fixedSize()
-            .help("Show only Conversations with the people you pick")
-            .popover(isPresented: $picking, arrowEdge: .bottom) {
-                PeopleChecklist(model: model).frame(width: 250).padding(12)
-            }
-        }
-        .font(.subheadline)
-        .onChange(of: searching) { _, now in
-            if now { focused = true }
         }
     }
 
+    /// Who's picked, for the line under the field.
     private var peopleLabel: String {
         let people = model.filter.people
-        return switch people.count {
-        case 0: String(localized: "People")
-        case 1: String(localized: "With \(people[0])")
-        default: String(localized: "With \(people[0]) + \(people.count - 1)")
-        }
-    }
-
-    private func stopSearching() {
-        model.filter.query = ""
-        searching = false
+        if people.count == 1 { return String(localized: "With \(people[0])") }
+        return String(localized: "With \(people[0]) + \(people.count - 1)")
     }
 }
 

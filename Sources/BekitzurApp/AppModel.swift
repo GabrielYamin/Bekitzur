@@ -139,7 +139,13 @@ final class AppModel {
         build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
     )
     @ObservationIgnored private var notifiedUpdate: String?
-    var selection: String?
+    /// The Conversation the window shows. Its Notes are read as it's chosen: read by its page, the page's first moment
+    /// had none, and said the Notes file was missing.
+    var selection: String? {
+        didSet {
+            if let selection { loadResult(selection) }
+        }
+    }
     var alert: String?
     /// The Conversation being renamed, while the Rename dialog shows.
     var renaming: String?

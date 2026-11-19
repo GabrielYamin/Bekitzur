@@ -1,6 +1,5 @@
 /* Bekitzur in Hebrew. Each key is the English the code shows; keys come from the compiler: swift build -Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path -Xswiftc <folder>. */
 
-"%@ %@" = "%@ %@";
 "%@ / %@" = "%@ / %@";
 "%@ in it points outside the Conversation, so nothing was imported." = "%@ שבקובץ מצביע אל מחוץ לשיחה, ולכן שום דבר לא יובא.";
 "%@ is already in People: they become one person, with both voices." = "%@ כבר נמצא באנשים: הם יהפכו לאדם אחד, עם שני הקולות.";
@@ -26,10 +25,8 @@
 "%lld s" = "%lld שנ׳";
 "%lld words selected. Right-click them to say what was said, who said it, or to mark them wrong." = "%lld מילים נבחרו. לחיצה ימנית עליהן מאפשרת לומר מה נאמר, מי אמר, או לסמן אותן כשגויות.";
 "A Conversation shows when everyone picked in People is in it and the search is in its title, Notes, or Transcript." = "שיחה מוצגת כשכל מי שנבחר באנשים משתתף בה, ומה שחיפשתם מופיע בכותרת, בסיכום או בתמלול שלה.";
-"A call or a meeting" = "שיחה או פגישה";
 "A downloaded model didn't match its checksum, so it was deleted." = "מודל שהורד לא עבר את בדיקת התקינות, ולכן הוא נמחק.";
 "A new version of %@ is ready to download (%@)." = "גרסה חדשה של %@ מוכנה להורדה (%@).";
-"A recording or a Conversation" = "הקלטה או שיחה";
 "A recording takes under 100 MB an hour, but if the disk fills up, the rest of it is lost." = "הקלטה תופסת פחות מ-100 MB לשעה, אבל אם הדיסק מתמלא, שאר ההקלטה הולך לאיבוד.";
 "AI apps" = "אפליקציות AI";
 "AI apps like Claude and Cursor can then find your Conversations, read their Notes and Transcripts, and change their Notes, through Bekitzur's MCP server. What an AI app reads goes to its model's provider, like Anthropic or OpenAI. Changes show in the Conversation's Chat tab, where you can undo them." = "אפליקציות AI כמו Claude ו-Cursor יוכלו אז למצוא את השיחות שלך, לקרוא את הסיכומים והתמלולים שלהן ולשנות את הסיכומים, דרך שרת ה-MCP של בקיצור. מה שאפליקציית AI קוראת נשלח לספק המודל שלה, כמו Anthropic או OpenAI. השינויים מופיעים בלשונית הצ׳אט של השיחה, ושם אפשר לבטל אותם.";
@@ -117,11 +114,11 @@
 "Click a word to mark it wrong, or drag across words to select several. Right-click a word or a speaker to say what was said, or who said it. F marks the word just played, and ⌘F finds words." = "לחיצה על מילה מסמנת אותה כשגויה, וגרירה על פני מילים בוחרת כמה. לחיצה ימנית על מילה או על דובר מאפשרת לומר מה נאמר או מי אמר. F מסמן את המילה שנוגנה עכשיו, ו-⌘F מחפש מילים.";
 "Connect an AI app" = "חיבור אפליקציית AI";
 "Conversation" = "שיחה";
-"Conversations" = "שיחות";
 "Conversations with" = "שיחות עם";
 "Copy Notes" = "העתקת הסיכום";
 "Copy Transcript" = "העתקת התמלול";
 "Copy setup" = "העתקת ההגדרה";
+"Copy the Notes or the Transcript, or export the Conversation" = "העתקת הסיכום או התמלול, או ייצוא השיחה";
 "Couldn't add the skill: %@" = "לא ניתן היה להוסיף את ה-skill: %@";
 "Couldn't answer: %@" = "לא ניתן היה לענות: %@";
 "Couldn't check for updates" = "לא ניתן היה לבדוק אם יש עדכונים";
@@ -222,6 +219,7 @@
 "Mark word just played" = "סימון המילה שנוגנה עכשיו";
 "Microphone" = "מיקרופון";
 "Models" = "מודלים";
+"More" = "עוד";
 "Move Everything to the Trash" = "העברת הכול לפח";
 "Move the Models to the Trash" = "העברת המודלים לפח";
 "Move these to the Trash in Finder: %@" = "אפשר להעביר אותם לפח ב-Finder: %@";
@@ -274,6 +272,8 @@
 "Play" = "ניגון";
 "Play from here" = "ניגון מכאן";
 "Play or pause (space bar)" = "ניגון או השהיה (מקש הרווח)";
+"Previous 30 Days" = "30 הימים הקודמים";
+"Previous 7 Days" = "7 הימים הקודמים";
 "Previous match (⇧⌘G)" = "התוצאה הקודמת (⇧⌘G)";
 "Processing" = "מעבד";
 "Processing…" = "מעבד…";
@@ -297,7 +297,6 @@
 "Recording your call" = "מקליט את השיחה שלך";
 "Recording, keep reading…" = "מקליט, אפשר להמשיך לקרוא…";
 "Recording…" = "מקליט…";
-"Refresh" = "רענון";
 "Remove" = "הסרה";
 "Removed a Decision: %@" = "הוסרה החלטה: %@";
 "Removed an Action Item: %@" = "הוסרה משימה: %@";
@@ -331,6 +330,7 @@
 "Settings has something new" = "יש משהו חדש בהגדרות";
 "Settings has something new (⌘,)" = "יש משהו חדש בהגדרות (⌘,)";
 "Settings…" = "הגדרות…";
+"Share" = "שיתוף";
 "Show" = "הצגה";
 "Show everyone's Conversations" = "הצגת השיחות של כולם";
 "Show in Finder" = "הצגה ב-Finder";
@@ -390,6 +390,7 @@
 "This isn't in the Conversation." = "זה לא מופיע בשיחה.";
 "Time" = "שעה";
 "Title" = "כותרת";
+"Today" = "היום";
 "Transcribe again" = "תמלול מחדש";
 "Transcribe again as %@" = "תמלול מחדש ב%@";
 "Transcribed as said by %@" = "בתמלול הדובר היה %@";
@@ -429,6 +430,7 @@
 "Writing Notes" = "כותב סיכום";
 "Wrong speaker" = "דובר שגוי";
 "Yes" = "כן";
+"Yesterday" = "אתמול";
 "You've edited these Notes" = "ערכת את הסיכום הזה";
 "You've edited this Conversation's Notes or checked off its Action Items. Writing the Notes again replaces your changes and unchecks them." = "ערכת את הסיכום של השיחה הזו או סימנת משימות כבוצעו. כתיבת הסיכום מחדש תחליף את השינויים שלך ותבטל את הסימונים.";
 "You've fixed the Transcript since the Notes were written." = "תיקנת את התמלול מאז שהסיכום נכתב.";
