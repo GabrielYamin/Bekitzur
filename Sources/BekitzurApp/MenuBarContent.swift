@@ -146,6 +146,9 @@ private struct RecordingPanel: View {
     var body: some View {
         let id = model.recordingID ?? ""
         let notes = (model.yourNotes[id] ?? []).filter { !$0.words.isEmpty }
+        if let silent = model.silentMicrophone {
+            SilentMicrophoneNote(model: model, name: silent)
+        }
         HStack(spacing: 16) {
             LevelBars(symbol: "mic.fill", levels: model.levels.microphone)
             LevelBars(symbol: "speaker.wave.2.fill", levels: model.levels.systemAudio)
@@ -190,6 +193,22 @@ private struct RecordingPanel: View {
         .tint(.red)
         .controlSize(.large)
         .hoverLight()
+    }
+}
+
+/// The microphone sends nothing, with the others to switch the recording to.
+private struct SilentMicrophoneNote: View {
+    let model: AppModel
+    let name: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("No sound is coming from \(name).", systemImage: "mic.slash.fill")
+                .font(.callout)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            AnotherMicrophone(model: model)
+        }
     }
 }
 

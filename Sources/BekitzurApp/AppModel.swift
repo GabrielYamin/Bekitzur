@@ -73,6 +73,8 @@ final class AppModel {
     private(set) var levels = RecordingLevels()
     /// Whole seconds the recording has gone on, for the menu bar.
     private(set) var recordingSeconds = 0
+    /// The microphone a recording gets no audio from, by name, while it stays that way.
+    private(set) var silentMicrophone: String?
     @ObservationIgnored private var metering: Task<Void, Never>?
     /// A small pill floats over other apps while recording.
     var showsPill: Bool {
@@ -103,6 +105,11 @@ final class AppModel {
                 microphoneName = name
             }
             UserDefaults.standard.set(microphoneName, forKey: "microphoneName")
+            // A recording switches too, as when its microphone sends nothing.
+            if microphoneUID != oldValue, let recorder, let id = recordingID {
+                recorder.useMicrophone(microphoneForRecording())
+                AppLog.write("\(id): switched to \(recordingMicrophone?.name ?? "the Mac's default microphone")")
+            }
         }
     }
     /// The chosen microphone's name, for when it isn't connected.
@@ -325,15 +332,22 @@ final class AppModel {
         watchCalls()
         indexConversations()
         refreshMicrophones()
-        AppLog.write("Microphones: \(microphones.map(\.name).joined(separator: ", ")); the Mac's default is \(defaultMicrophone?.name ?? "none"); recording \(recordingMicrophone?.name ?? "none")")
+        logMicrophones()
         microphonesWatch = AudioInputWatch { Task { @MainActor in AppModel.shared.refreshMicrophones() } }
         trashWatch = TrashWatch(app: Bundle.main.bundleURL) { [weak self] in self?.movedToTrash() }
         quickNoteKey.register(quickNoteShortcut)
     }
 
     func refreshMicrophones() {
+        let before = microphones, defaultBefore = defaultMicrophone
         microphones = AudioInputDevice.all()
         defaultMicrophone = AudioInputDevice.systemDefault
+        // A headset connecting can become the Mac's default, which a recording follows.
+        if microphonesWatch != nil, microphones != before || defaultMicrophone != defaultBefore { logMicrophones() }
+    }
+
+    private func logMicrophones() {
+        AppLog.write("Microphones: \(microphones.map(\.name).joined(separator: ", ")); the Mac's default is \(defaultMicrophone?.name ?? "none"); recording \(recordingMicrophone?.name ?? "none")")
     }
 
     /// The microphone a recording starts with: the chosen one when it's connected, otherwise the Mac's default.
@@ -710,7 +724,10 @@ final class AppModel {
 
     /// What's happening, while recording or processing; otherwise nil, for the app's own bubble.
     var menuBarSymbol: String? {
-        if isRecording { return endedCall == nil ? "record.circle.fill" : "stop.circle" }
+        if isRecording {
+            if silentMicrophone != nil { return "mic.slash" }
+            return endedCall == nil ? "record.circle.fill" : "stop.circle"
+        }
         if callToRecord != nil { return "record.circle" }
         // Confirming the update closes the menu bar's panel, and with it the only sign it's downloading.
         if updateProgress != nil { return "arrow.down.circle" }
@@ -774,7 +791,9 @@ final class AppModel {
             }
             let recorder = ConversationRecorder()
             do {
-                try recorder.start(in: library.folder(for: info.id), microphone: microphoneForRecording(), listener: listener)
+                try recorder.start(in: library.folder(for: info.id), microphone: microphoneForRecording(), listener: listener) { event in
+                    Task { @MainActor in AppModel.shared.microphoneChanged(event, in: id) }
+                }
                 AppLog.write("\(info.id): recording \(recordingMicrophone?.name ?? "the Mac's default microphone")")
             } catch {
                 live?.cancel()
@@ -808,8 +827,9 @@ final class AppModel {
         guard let id = recordingID, let recorder else { return }
         let reports = recorder.stop()
         endRecordingActivity()
-        AppLog.write("\(id): recording stopped after \(Int(Date().timeIntervalSince(recordingStartedAt ?? Date()))) s")
-        log(reports, for: id)
+        let seconds = Date().timeIntervalSince(recordingStartedAt ?? Date())
+        AppLog.write("\(id): recording stopped after \(Int(seconds)) s")
+        log(reports, for: id, recorded: seconds)
         self.recorder = nil
         recordingID = nil
         recordingStartedAt = nil
@@ -835,6 +855,32 @@ final class AppModel {
         recordingActivity = nil
     }
 
+    static let silentMicrophoneNotification = "silent microphone"
+
+    /// What happens to the recording's microphone, logged; while it sends nothing, the pill, the menu bar, the window, and
+    /// a notification say so, for the user to switch microphones while there's still a meeting to record.
+    private func microphoneChanged(_ event: MicrophoneRecorder.Event, in id: String) {
+        guard id == recordingID else { return }
+        let name = recordingMicrophone?.name
+        switch event {
+        case .started(let sampleRate, let channels):
+            AppLog.write(String(format: "%@: the microphone runs on %@, at %.0f Hz, %d channel%@", id, name ?? "the Mac's default", sampleRate, channels, channels == 1 ? "" : "s"))
+        case .gaveUp:
+            AppLog.write("\(id): the microphone didn't settle after a change of device, so it couldn't start over")
+        case .rebuilding(let seconds):
+            AppLog.write(String(format: "%@: no audio from the microphone for %.0f s; starting it again from scratch", id, seconds))
+        case .silent(let seconds):
+            AppLog.write(String(format: "%@: still no audio from %@ after %.0f s", id, name ?? "the Mac's default", seconds))
+            let shown = name ?? String(localized: "the microphone")
+            silentMicrophone = shown
+            notify(Self.silentMicrophoneNotification, title: String(localized: "Bekitzur can't hear your microphone"), body: String(localized: "No sound is coming from \(shown). Click to choose another microphone."))
+        case .hearing(let seconds):
+            AppLog.write(String(format: "%@: audio from the microphone again after %.0f s", id, seconds))
+            silentMicrophone = nil
+            withdrawNotification(Self.silentMicrophoneNotification)
+        }
+    }
+
     /// The levels and the time the pill and the menu bar show, a dozen times a second while recording.
     private func startMetering(_ meter: LevelMeter, since start: Date) {
         metering?.cancel()
@@ -857,6 +903,10 @@ final class AppModel {
         metering = nil
         levels = RecordingLevels()
         recordingSeconds = 0
+        if silentMicrophone != nil {
+            silentMicrophone = nil
+            withdrawNotification(Self.silentMicrophoneNotification)
+        }
         pill.hide()
         quickNote.close()
     }
@@ -896,12 +946,20 @@ final class AppModel {
     }
 
     /// How each track kept time: when its device started, and anything that went wrong on the way.
-    private func log(_ reports: [ConversationRecorder.Track: TrackReport], for id: String) {
-        AppLog.write(String(format: "%@: tracks lined up; system audio started after %.0f ms, the microphone after %.0f ms",
-                            id, (reports[.systemAudio]?.leadingSilence ?? 0) * 1000, (reports[.microphone]?.leadingSilence ?? 0) * 1000))
+    /// - Parameter recorded: Seconds the recording went on, which a track that stopped early falls short of.
+    private func log(_ reports: [ConversationRecorder.Track: TrackReport], for id: String, recorded: Double) {
+        func beginning(of track: ConversationRecorder.Track) -> String {
+            guard let report = reports[track], report.started else { return "never started" }
+            return String(format: "started after %.0f ms", report.leadingSilence * 1000)
+        }
+        AppLog.write("\(id): tracks lined up; system audio \(beginning(of: .systemAudio)), the microphone \(beginning(of: .microphone))")
         for track in ConversationRecorder.Track.allCases {
             guard let report = reports[track] else { continue }
             var problems: [String] = []
+            // A few seconds short is the devices starting and stopping.
+            if report.started, recorded - report.seconds > 5 {
+                problems.append("recorded only \(timestamp(report.seconds)) of \(timestamp(recorded))")
+            }
             if report.gaps > 0 {
                 var gaps = String(format: "lost audio %d times on the way, %.0f ms in all, kept in time with silence", report.gaps, report.gapSeconds * 1000)
                 if report.lostSeconds > 0 { gaps += String(format: " (%.0f ms while writing fell behind)", report.lostSeconds * 1000) }
@@ -1085,7 +1143,7 @@ final class AppModel {
         let reports = recorder?.stop() ?? [:]
         endRecordingActivity()
         AppLog.write("\(id): recording stopped by quitting; it will be processed on the next launch")
-        log(reports, for: id)
+        log(reports, for: id, recorded: Date().timeIntervalSince(recordingStartedAt ?? Date()))
         update(id) {
             $0.endedAt = Date()
             $0.status = .processing

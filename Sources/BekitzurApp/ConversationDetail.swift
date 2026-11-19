@@ -172,7 +172,19 @@ struct ConversationDetail: View {
     private var content: some View {
         switch info.status {
         case .recording:
-            RecordingView(model: model, info: info)
+            VStack(spacing: 0) {
+                if let silent = model.silentMicrophone, info.id == model.recordingID {
+                    QuietNotice(
+                        String(localized: "No sound is coming from \(silent), even after starting it again. Your voice isn't being recorded."),
+                        systemImage: "mic.slash.fill",
+                        tint: .orange
+                    ) {
+                        AnotherMicrophone(model: model)
+                    }
+                    .padding(.bottom, 8)
+                }
+                RecordingView(model: model, info: info)
+            }
         case .processing where model.liveTranscripts[info.id] != nil || model.yourNotes[info.id]?.contains(where: { !$0.words.isEmpty }) == true:
             RecordingView(model: model, info: info)
         case .processing:

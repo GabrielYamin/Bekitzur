@@ -31,7 +31,13 @@ public final class ConversationRecorder {
     /// - Parameters:
     ///   - microphone: The UID of the microphone to record (`AudioInputDevice`); nil for the Mac's default.
     ///   - listener: Gets a mono copy of each track as it's written, on that track's writing thread.
-    public func start(in directory: URL, microphone device: String? = nil, listener: TrackListener? = nil) throws {
+    ///   - onMicrophone: What happens to the microphone while it records (`MicrophoneRecorder.Event`).
+    public func start(
+        in directory: URL,
+        microphone device: String? = nil,
+        listener: TrackListener? = nil,
+        onMicrophone: (@Sendable (MicrophoneRecorder.Event) -> Void)? = nil
+    ) throws {
         let origin = mach_absolute_time()
         try systemAudio.start(
             writingTo: directory.appending(path: Track.systemAudio.recordingFile), origin: origin, listener: Self.listener(listener, for: .systemAudio)
@@ -41,12 +47,18 @@ public final class ConversationRecorder {
                 writingTo: directory.appending(path: Track.microphone.recordingFile),
                 origin: origin,
                 listener: Self.listener(listener, for: .microphone),
-                device: device
+                device: device,
+                onEvent: onMicrophone
             )
         } catch {
             systemAudio.stop()
             throw error
         }
+    }
+
+    /// Records the microphone track from another microphone from now on: its UID, or nil for the Mac's default.
+    public func useMicrophone(_ device: String?) {
+        microphone.use(device: device)
     }
 
     private static func listener(_ listener: TrackListener?, for track: Track) -> AudioListener? {

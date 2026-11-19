@@ -165,6 +165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 Task { await model.startRecording() }
             case AppModel.callEndedNotification, AppModel.recordingCallNotification:
                 if action == Self.stop { model.stopRecording() } else { model.showMainWindow(selecting: model.recordingID) }
+            case AppModel.silentMicrophoneNotification:
+                model.showMainWindow(selecting: model.recordingID)
             default:
                 model.showMainWindow(selecting: id)
             }
