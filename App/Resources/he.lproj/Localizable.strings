@@ -65,6 +65,7 @@
 "Bekitzur %@ is available." = "בקיצור %@ זמין.";
 "Bekitzur Settings" = "הגדרות בקיצור";
 "Bekitzur added this for a note you wrote while recording" = "בקיצור הוסיף את זה בגלל הערה שכתבת בזמן ההקלטה";
+"Bekitzur can't hear your microphone" = "בקיצור לא שומע את המיקרופון שלך";
 "Bekitzur can't replace itself in %@. Install the new version with install.sh instead." = "בקיצור לא יכול להחליף את עצמו ב-%@. במקום זה אפשר להתקין את הגרסה החדשה עם install.sh.";
 "Bekitzur checks for a new version when it opens and every few hours, and asks before installing it." = "בקיצור בודק אם יש גרסה חדשה כשהוא נפתח וכל כמה שעות, ושואל לפני שהוא מתקין אותה.";
 "Bekitzur downloads its models once, from their publishers on Hugging Face." = "בקיצור מוריד את המודלים שלו פעם אחת, מהמפרסמים שלהם ב-Hugging Face.";
@@ -269,6 +270,10 @@
 "No one yet. Name Speakers in a Conversation and they're added here." = "עוד אין אף אחד. כשנותנים שמות לדוברים בשיחה, הם מתווספים לכאן.";
 "No one yet. Name Speakers in a Conversation to find its Conversations by them." = "עוד אין אף אחד. אפשר לתת שמות לדוברים בשיחה כדי למצוא שיחות לפיהם.";
 "No other Conversations yet" = "אין עדיין שיחות אחרות";
+"No sound" = "אין קול";
+"No sound is coming from %@, even after starting it again. Your voice isn't being recorded." = "לא מגיע קול מ-%@, גם אחרי הפעלה מחדש. הקול שלך לא מוקלט.";
+"No sound is coming from %@." = "לא מגיע קול מ-%@.";
+"No sound is coming from %@. Click to choose another microphone." = "לא מגיע קול מ-%@. אפשר ללחוץ כדי לבחור מיקרופון אחר.";
 "No time" = "ללא שעה";
 "None of your other Conversations fits that. You can pick it from the menu beside the message box." = "אף אחת מהשיחות האחרות שלך לא מתאימה. אפשר לבחור את השיחה מהתפריט שליד תיבת ההודעה.";
 "Not downloaded, %@" = "לא הורד, %@";
@@ -442,6 +447,7 @@
 "Undo" = "ביטול השינוי";
 "Undone" = "השינוי בוטל";
 "Update Notes" = "עדכון הסיכום";
+"Use Another Microphone" = "שימוש במיקרופון אחר";
 "Version" = "גרסה";
 "View" = "תצוגה";
 "Vocabulary" = "מונחים";
@@ -486,6 +492,7 @@
 "the English speech model" = "מודל הדיבור באנגלית";
 "the Hebrew speech model" = "מודל הדיבור בעברית";
 "the language model" = "מודל השפה";
+"the microphone" = "המיקרופון";
 "the voice separation model" = "מודל הפרדת הקולות";
 "·" = "·";
 "· %lld min" = "· %lld דק׳";

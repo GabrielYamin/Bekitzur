@@ -187,6 +187,28 @@ struct AudioTests {
         #expect(heard.samples.dropFirst(12_000).allSatisfy { $0 == 0.5 })
     }
 
+    /// A microphone that never sent anything is told apart from one that started at once, and how long a track runs
+    /// shows whether it stopped early.
+    @Test func aTrackSaysHowLongItRunsAndWhetherItStarted() throws {
+        let heardURL = temporaryURL("aac"), silentURL = temporaryURL("aac")
+        defer { [heardURL, silentURL].forEach { try? FileManager.default.removeItem(at: $0) } }
+        let mono = try #require(AVAudioFormat(standardFormatWithSampleRate: Self.rate, channels: 1))
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: 4_800))
+        buffer.frameLength = 4_800
+        let origin = mach_absolute_time()
+
+        let writer = try AudioFileWriter(url: heardURL, format: mono, origin: origin)
+        writer.write(buffer, at: origin + AVAudioTime.hostTime(forSeconds: 0.25))
+        let heard = writer.close()
+        let silent = try AudioFileWriter(url: silentURL, format: mono, origin: origin).close()
+
+        let off = abs(heard.seconds - 0.35)
+        #expect(heard.started)
+        #expect(off < 0.001)
+        #expect(!silent.started)
+        #expect(silent.seconds == 0)
+    }
+
     @Test func tracksAreMixedAndSilentOnesAreReported() throws {
         let speech = temporaryURL("wav"), silence = temporaryURL("wav")
         defer { [speech, silence].forEach { try? FileManager.default.removeItem(at: $0) } }

@@ -22,6 +22,11 @@ public struct TrackReport: Sendable {
     public var restarts = 0
     /// Blocks the file couldn't take.
     public var failedWrites = 0
+    /// Seconds the file runs: its leading silence, what was recorded, and the silence that kept it in time.
+    public var seconds = 0.0
+
+    /// Whether any audio came at all; a file starts only with its first block.
+    public var started: Bool { seconds > 0 }
 }
 
 /// Writes a track to a compressed file, keeping it in time. On the device's thread a block is only copied into a ring;
@@ -187,7 +192,8 @@ final class AudioFileWriter: @unchecked Sendable {
             gapSeconds: Double(timeline.silenceFrames) / format.sampleRate,
             lostSeconds: Double(ring.lost) / format.sampleRate,
             restarts: timeline.restarts,
-            failedWrites: failedWrites
+            failedWrites: failedWrites,
+            seconds: Double(timeline.position) / format.sampleRate
         )
     }
 

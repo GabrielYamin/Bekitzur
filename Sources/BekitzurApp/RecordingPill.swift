@@ -134,7 +134,7 @@ private struct PillView: View {
             }
             .buttonStyle(.plain)
             .help("Show the recording in Bekitzur")
-            LevelBars(symbol: "mic.fill", levels: model.levels.microphone)
+            microphone
             LevelBars(symbol: "speaker.wave.2.fill", levels: model.levels.systemAudio)
             buttons
         }
@@ -152,6 +152,24 @@ private struct PillView: View {
         .help("Drag to move it")
         .padding(1)
         .fixedSize()
+    }
+
+    /// The microphone's levels, or while it sends nothing, a warning that opens the recording to switch microphones.
+    @ViewBuilder
+    private var microphone: some View {
+        if let silent = model.silentMicrophone {
+            Button {
+                model.showMainWindow(selecting: model.recordingID)
+            } label: {
+                Label("No sound", systemImage: "mic.slash.fill")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .help("No sound is coming from \(silent). Click to choose another microphone.")
+        } else {
+            LevelBars(symbol: "mic.fill", levels: model.levels.microphone)
+        }
     }
 
     private var buttons: some View {
