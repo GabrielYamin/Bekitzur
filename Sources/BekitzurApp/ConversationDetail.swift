@@ -24,7 +24,9 @@ struct ConversationDetail: View {
         VStack(spacing: 0) {
             header
             Divider()
-            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The split view keeps the detail at least as tall as its minimum, measured at the narrowest width, where
+            // text wraps word by word and can come out taller than the window, pushing the bottom out of sight.
+            content.frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         }
         .toolbar { toolbar }
         .task(id: "\(info.id)-\(info.status)") {
@@ -224,6 +226,8 @@ struct ConversationDetail: View {
                             model.addToCalendar(item, in: info.id)
                         } setDone: { index, done in
                             model.setActionItem(index, done: done, in: info.id)
+                        } openTranscript: {
+                            tab = .transcript
                         }
                         // A Conversation's draft stays with it when another one is selected.
                         .id(info.id)
@@ -281,39 +285,5 @@ private struct QuietNotice<Actions: View>: View {
 extension QuietNotice where Actions == EmptyView {
     init(_ text: String, systemImage: String, tint: Color = .secondary) {
         self.init(text, systemImage: systemImage, tint: tint) { EmptyView() }
-    }
-}
-
-/// Play and pause (space bar), where playback is, and how fast. Shown with the Transcript.
-struct PlayerBar: View {
-    let playback: PlaybackModel
-    /// Off while a text field is typed in, which the space bar would otherwise play and pause instead of typing a space.
-    var spaceBar = true
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Button {
-                playback.toggle()
-            } label: {
-                Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill").frame(width: 18)
-            }
-            .keyboardShortcut(spaceBar ? KeyboardShortcut(.space, modifiers: []) : nil)
-            .help("Play or pause (space bar)")
-            Text("\(timestamp(playback.time)) / \(timestamp(playback.duration))")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-            Slider(value: Binding(get: { playback.time }, set: { playback.seek(to: $0) }), in: 0...max(playback.duration, 0.1))
-            Picker("Speed", selection: Binding(get: { playback.rate }, set: { playback.rate = $0 })) {
-                ForEach([Float(0.75), 1, 1.25, 1.5, 2], id: \.self) { rate in
-                    Text("\(rate.formatted())×").tag(rate)
-                }
-            }
-            .labelsHidden()
-            .fixedSize()
-        }
-        .disabled(!playback.isLoaded)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.bar)
     }
 }
