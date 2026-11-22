@@ -83,11 +83,11 @@ final class AppModel {
             if showsPill, isRecording { pill.show() } else { pill.hide() }
         }
     }
-    /// Adds a note at this moment from any app.
+    /// Adds a note at this moment from any app, while recording.
     var quickNoteShortcut: KeyShortcut {
         didSet {
             UserDefaults.standard.set(try? JSONEncoder().encode(quickNoteShortcut), forKey: "quickNoteShortcut")
-            quickNoteKey.register(quickNoteShortcut)
+            if isRecording { quickNoteKey.register(quickNoteShortcut) }
         }
     }
     @ObservationIgnored private lazy var pill = RecordingPill(model: self)
@@ -335,7 +335,6 @@ final class AppModel {
         logMicrophones()
         microphonesWatch = AudioInputWatch { Task { @MainActor in AppModel.shared.refreshMicrophones() } }
         trashWatch = TrashWatch(app: Bundle.main.bundleURL) { [weak self] in self?.movedToTrash() }
-        quickNoteKey.register(quickNoteShortcut)
     }
 
     func refreshMicrophones() {
@@ -809,6 +808,8 @@ final class AppModel {
             selection = info.id
             startMetering(meter, since: info.startedAt)
             if showsPill { pill.show() }
+            // A system hot key takes its keys from every other app, so it's Bekitzur's only while there's a note to take.
+            quickNoteKey.register(quickNoteShortcut)
             AppLog.write("\(info.id): recording started")
             if !speechModels {
                 liveStopped.insert(info.id)
@@ -909,6 +910,7 @@ final class AppModel {
         }
         pill.hide()
         quickNote.close()
+        quickNoteKey.unregister()
     }
 
     /// The app of the call being recorded, for the menu bar: the one that started it, or one on a call meanwhile.
