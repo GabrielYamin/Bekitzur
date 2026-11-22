@@ -52,7 +52,6 @@
 "Added an Action Item: %@" = "נוספה משימה: %@";
 "Added an Open Question: %@" = "נוספה שאלה פתוחה: %@";
 "Added to %@, from its next chat." = "נוסף ל-%@, החל מהצ׳אט הבא שלו.";
-"Adds a note at this moment from any app. With the pill off, the note field opens under Bekitzur's icon in the menu bar." = "מוסיף הערה ברגע זה מכל אפליקציה. כשהחלונית הצפה כבויה, שדה ההערה נפתח מתחת לסמל של בקיצור בשורת התפריטים.";
 "All Action Items are done. Delete this Conversation?" = "כל המשימות בוצעו. למחוק את השיחה הזו?";
 "Allow…" = "מתן הרשאה…";
 "App language" = "שפת היישום";
@@ -465,6 +464,7 @@
 "When Slack, Teams, Zoom, FaceTime, or a browser starts using the microphone, Bekitzur offers to record, and once it stops, to stop recording. A call can't be seen while it rings, so the offer comes when you answer or join." = "כש-Slack, Teams, Zoom, FaceTime או הדפדפן מתחילים להשתמש במיקרופון, בקיצור מציע להקליט, וכשהם מפסיקים, להפסיק להקליט. אי אפשר לזהות שיחה בזמן שהיא מצלצלת, ולכן ההצעה מגיעה כשעונים או מצטרפים.";
 "When an AI app can't use MCP servers, its agent can run Bekitzur's tools from its terminal instead, and the skill tells it how." = "כשאפליקציית AI לא יכולה להשתמש בשרתי MCP, הסוכן שלה יכול להריץ את הכלים של בקיצור מהטרמינל שלו במקום זאת, וה-skill מסביר לו איך.";
 "When an English term is spoken in Hebrew, Bekitzur writes it in English letters. It knows %lld common tech terms; add your team's own here. Typing what was said for a word in the Transcript teaches it too." = "כשאומרים מונח באנגלית בתוך עברית, בקיצור כותב אותו באותיות לועזיות. הוא מכיר %lld מונחים טכניים נפוצים; כאן אפשר להוסיף את המונחים של הצוות. גם הקלדה של מה שנאמר במקום מילה בתמלול מלמדת אותו.";
+"While recording, adds a note at this moment from any app; the rest of the time, other apps keep the shortcut. With the pill off, the note field opens under Bekitzur's icon in the menu bar." = "בזמן הקלטה, מוסיף הערה ברגע זה מכל אפליקציה; בשאר הזמן, הקיצור נשאר לאפליקציות אחרות. כשהחלונית הצפה כבויה, שדה ההערה נפתח מתחת לסמל של בקיצור בשורת התפריטים.";
 "Who is this?" = "מי זה?";
 "With %@" = "עם %@";
 "With %@ + %lld" = "עם %@ ועוד %lld";

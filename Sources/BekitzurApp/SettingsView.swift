@@ -158,7 +158,7 @@ private struct RecordingPane: View {
                     if model.newSettingsShown.contains(.quickNoteShortcut) { NewBadge() }
                 }
             }
-            Text("Adds a note at this moment from any app. With the pill off, the note field opens under Bekitzur's icon in the menu bar.")
+            Text("While recording, adds a note at this moment from any app; the rest of the time, other apps keep the shortcut. With the pill off, the note field opens under Bekitzur's icon in the menu bar.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
